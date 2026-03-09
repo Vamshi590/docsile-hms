@@ -774,3 +774,116 @@ model PharmacyBillItem {
   @@index([billId])
   @@index([stockId])
 }
+
+// ─── OPTICAL MODULE ─────────────────────────────────
+
+model OpticalProduct {
+  id             String   @id @default(cuid())
+  name           String
+  brand          String?
+  category       String   // Frame, Lens, Contact Lens, Accessory, Solution, Sunglasses
+  type           String?  // Frame: Full Rim/Half Rim/Rimless; Lens: SV/Bifocal/Progressive; Contact: Daily/Monthly/Yearly
+  material       String?  // Frame: Metal/Plastic/TR90/Titanium; Lens: CR39/Poly/Glass/Trivex
+  color          String?
+  size           String?  // Frame: 50-18-140 (eye-bridge-temple)
+  coating        String?  // Lens: AR/Blue Cut/Photochromic/Hardcoat
+  index          String?  // Lens: 1.5/1.56/1.6/1.67/1.74
+  modelNumber    String?
+  hsnCode        String?
+  gstPercent     Float    @default(12)
+  isActive       Boolean  @default(true)
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  stockEntries   OpticalStock[]
+
+  @@unique([name, brand])
+  @@index([name])
+  @@index([brand])
+  @@index([category])
+  @@index([isActive])
+}
+
+model OpticalStock {
+  id             String   @id @default(cuid())
+  productId      String
+  product        OpticalProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batchNumber    String?
+  quantity       Int      @default(0)
+  mrp            Float    @default(0)
+  costPrice      Float    @default(0)
+  gstPercent     Float    @default(12)
+  power          String?  // For contact lenses: e.g. "-2.00"
+  supplierId     String?
+  isActive       Boolean  @default(true)
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  billItems      OpticalBillItem[]
+
+  @@unique([productId, batchNumber, power])
+  @@index([productId])
+  @@index([supplierId])
+}
+
+model OpticalBill {
+  id              String   @id @default(cuid())
+  billNumber      String   @unique
+  patientId       String?
+  patientName     String
+  patientPhone    String?
+  gender          String?
+  referredDoctor  String?
+  prescriptionId  String?
+
+  // Lens prescription (snapshot at billing time)
+  lensPrescription String? @db.Text // JSON: { re: {sph,cyl,axis,add,va}, le: {sph,cyl,axis,add,va}, pd }
+
+  billDate        DateTime @default(now())
+  subtotal        Float    @default(0)
+  discountPercent Float    @default(0)
+  discountAmount  Float    @default(0)
+  gstAmount       Float    @default(0)
+  netAmount       Float    @default(0)
+  roundOff        Float    @default(0)
+  billAmount      Float    @default(0)
+  paidAmount      Float    @default(0)
+  balanceDue      Float    @default(0)
+  paymentMode     String   @default("CASH")
+  paymentRef      String?
+  deliveryDate    DateTime?
+  orderNotes      String?  @db.Text
+  status          String   @default("COMPLETED") // COMPLETED, ORDERED, READY, DELIVERED, CANCELLED
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items           OpticalBillItem[]
+
+  @@index([patientId])
+  @@index([billDate])
+  @@index([status])
+}
+
+model OpticalBillItem {
+  id              String   @id @default(cuid())
+  billId          String
+  bill            OpticalBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  stockId         String?
+  stock           OpticalStock? @relation(fields: [stockId], references: [id])
+  itemName        String
+  category        String   // Frame, Lens, Contact Lens, Accessory, etc.
+  eye             String?  // RE, LE, BOTH (for lenses)
+  quantity        Int      @default(1)
+  mrp             Float    @default(0)
+  price           Float    @default(0)
+  total           Float    @default(0)
+  discountPercent Float    @default(0)
+  amount          Float    @default(0)
+  gstPercent      Float    @default(0)
+
+  @@index([billId])
+  @@index([stockId])
+}

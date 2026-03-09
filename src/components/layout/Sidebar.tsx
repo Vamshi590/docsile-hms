@@ -20,6 +20,7 @@ import {
   FileBarChart,
   Wallet,
   Pill,
+  Glasses,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/doctor", icon: Stethoscope, label: "Doctor" },
   { href: "/labs", icon: FlaskConical, label: "Labs" },
   { href: "/pharmacy", icon: Pill, label: "Pharmacy" },
+  { href: "/optical", icon: Glasses, label: "Optical" },
   { href: "/inpatients", icon: BedDouble, label: "In-Patients" },
   { href: "/insurance", icon: Shield, label: "Insurance" },
   { href: "/dues-followups", icon: ClipboardList, label: "Dues & Follow-Ups" },

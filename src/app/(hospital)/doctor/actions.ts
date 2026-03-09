@@ -217,3 +217,27 @@ export async function updatePatientToWithDoctor(patientId: string) {
   })
   revalidatePath("/doctor")
 }
+
+export async function getReceiptData(patientId: string) {
+  const [patient, hospital] = await Promise.all([
+    db.patient.findUnique({
+      where: { patientId },
+      include: {
+        eyeReadings: { orderBy: { createdAt: "desc" }, take: 1 },
+        prescriptions: {
+          include: { items: true, payments: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    }),
+    db.hospitalProfile.findFirst(),
+  ])
+
+  return {
+    patient,
+    hospital,
+    prescription: patient?.prescriptions?.[0] ?? null,
+    eyeReading: patient?.eyeReadings?.[0] ?? null,
+  }
+}

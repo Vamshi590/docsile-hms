@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Stethoscope, Search, ChevronLeft, ChevronRight, ArrowLeft, Loader2 } from "lucide-react"
+import { Stethoscope, Search, ChevronLeft, ChevronRight, ArrowLeft, Loader2, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PatientStatusBadge } from "../../patients/components/PatientStatusBadge"
 import { PrescriptionForm, type PrescriptionFormHandle } from "./PrescriptionForm"
+import { PrintReceiptsModal } from "./PrintReceiptsModal"
 import { EyeReadingForm, type EyeReadingFormHandle } from "../../workup/components/EyeReadingForm"
 import { getDoctorQueue, getPatientForConsultation } from "../actions"
 import { formatDate, calculateAge, todayISO } from "@/lib/utils"
@@ -33,6 +34,8 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
   const [selectedPatient, setSelectedPatient] = useState<PatientDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [savingAll, setSavingAll] = useState(false)
+
+  const [printPatient, setPrintPatient] = useState<{ patientId: string; name: string } | null>(null)
 
   const eyeReadingRef = useRef<EyeReadingFormHandle>(null)
   const prescriptionRef = useRef<PrescriptionFormHandle>(null)
@@ -367,13 +370,26 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                         </div>
                       </TableCell>
                       <TableCell className="text-right pr-4">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={e => { e.stopPropagation(); openPatient(patient) }}
-                        >
-                          Consult
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={e => {
+                              e.stopPropagation()
+                              setPrintPatient({ patientId: patient.patientId, name: fullName })
+                            }}
+                          >
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={e => { e.stopPropagation(); openPatient(patient) }}
+                          >
+                            Consult
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )
@@ -382,6 +398,16 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
             </Table>
           </div>
         )
+      )}
+
+      {/* Print Receipts Modal */}
+      {printPatient && (
+        <PrintReceiptsModal
+          open={!!printPatient}
+          onClose={() => setPrintPatient(null)}
+          patientId={printPatient.patientId}
+          patientName={printPatient.name}
+        />
       )}
     </>
   )

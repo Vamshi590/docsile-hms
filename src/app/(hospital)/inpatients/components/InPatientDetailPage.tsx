@@ -350,8 +350,19 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex flex-wrap gap-2">
+            {/* Dues + Actions */}
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Balance Due</p>
+                <p className={`text-lg font-semibold tabular-nums ${inpatient.balanceAmount > 0 ? "text-red-600" : "text-green-600"}`}>
+                  {formatCurrency(inpatient.balanceAmount)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Paid: {formatCurrency(inpatient.totalReceivedAmount)} / {formatCurrency(inpatient.netAmount)}
+                </p>
+              </div>
+              <div className="h-10 w-px bg-border" />
+              <div className="flex flex-wrap gap-2">
               {variant === "info" && (
                 <Button size="sm" variant="outline" onClick={() => setShowPayment(v => !v)}>
                   <Plus className="h-3.5 w-3.5 mr-1" /> Payment
@@ -371,6 +382,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
+              </div>
             </div>
           </div>
         </div>
