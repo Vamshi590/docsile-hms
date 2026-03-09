@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full bleed background for maskable (no rounded corners) -->
+  <rect width="512" height="512" fill="#2563eb"/>
+  <!-- Hospital cross (white) — slightly smaller for maskable safe zone -->
+  <rect x="226" y="140" width="60" height="232" rx="10" fill="white"/>
+  <rect x="140" y="226" width="232" height="60" rx="10" fill="white"/>
+</svg>
