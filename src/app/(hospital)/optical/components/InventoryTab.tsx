@@ -65,8 +65,6 @@ export function InventoryTab({ onStockChanged }: { onStockChanged?: () => void }
   const [savingProduct, setSavingProduct] = useState(false)
   const [savingStock, setSavingStock] = useState(false)
 
-  // Inline edit
-  const [editValues, setEditValues] = useState<Record<string, Record<string, string>>>({})
 
   async function loadData() {
     setLoading(true)
