@@ -592,3 +592,185 @@ model Expense {
   @@index([date])
   @@index([createdAt])
 }
+
+// ─── PHARMACY MODULE ─────────────────────────────────
+
+model PharmacyMedicine {
+  id             String   @id @default(cuid())
+  name           String
+  genericName    String?
+  manufacturer   String?
+  composition    String?
+  category       String?  // Tablet, Capsule, Syrup, Injection, etc.
+  dosageForm     String?
+  strength       String?
+  unitOfMeasure  String   @default("Nos") // Nos, Strip, Bottle, Vial, etc.
+  hsnCode        String?
+  gstPercent     Float    @default(12)
+  scheduleType   String?  // H, H1, X, OTC
+  isActive       Boolean  @default(true)
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  stockEntries      PharmacyStock[]
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@unique([name, manufacturer])
+  @@index([name])
+  @@index([genericName])
+  @@index([category])
+  @@index([isActive])
+}
+
+model PharmacyStock {
+  id             String    @id @default(cuid())
+  medicineId     String
+  medicine       PharmacyMedicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  batchNumber    String
+  quantity       Int       @default(0)
+  mrp            Float     @default(0)
+  costPrice      Float     @default(0)
+  gstPercent     Float     @default(12)
+  unitsPerPack   Int       @default(1)
+  expiryDate     DateTime
+  manufacturingDate DateTime?
+  supplierId     String?
+  supplier       PharmacySupplier? @relation(fields: [supplierId], references: [id])
+  purchaseOrderId String?
+  isActive       Boolean   @default(true)
+  createdBy      String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  billItems      PharmacyBillItem[]
+
+  @@unique([medicineId, batchNumber])
+  @@index([medicineId])
+  @@index([batchNumber])
+  @@index([expiryDate])
+  @@index([supplierId])
+}
+
+model PharmacySupplier {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  contactPerson  String?
+  phone          String?
+  email          String?
+  address        String?  @db.Text
+  gstin          String?
+  drugLicenseNo  String?
+  creditDays     Int      @default(30)
+  isActive       Boolean  @default(true)
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  stockEntries    PharmacyStock[]
+  purchaseOrders  PurchaseOrder[]
+
+  @@index([isActive])
+}
+
+model PurchaseOrder {
+  id              String   @id @default(cuid())
+  orderNumber     String   @unique
+  supplierId      String
+  supplier        PharmacySupplier @relation(fields: [supplierId], references: [id])
+  orderDate       DateTime @default(now())
+  expectedDate    DateTime?
+  invoiceNumber   String?
+  invoiceDate     DateTime?
+  subtotal        Float    @default(0)
+  gstAmount       Float    @default(0)
+  discount        Float    @default(0)
+  totalAmount     Float    @default(0)
+  amountPaid      Float    @default(0)
+  balanceDue      Float    @default(0)
+  paymentMode     String?
+  status          String   @default("DRAFT") // DRAFT, ORDERED, PARTIALLY_RECEIVED, RECEIVED, CANCELLED
+  notes           String?  @db.Text
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items           PurchaseOrderItem[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([orderDate])
+}
+
+model PurchaseOrderItem {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  medicineId      String
+  medicine        PharmacyMedicine @relation(fields: [medicineId], references: [id])
+  batchNumber     String?
+  quantity        Int      @default(0)
+  receivedQty     Int      @default(0)
+  costPrice       Float    @default(0)
+  mrp             Float    @default(0)
+  gstPercent      Float    @default(12)
+  expiryDate      DateTime?
+  amount          Float    @default(0)
+
+  @@index([purchaseOrderId])
+  @@index([medicineId])
+}
+
+model PharmacyBill {
+  id              String   @id @default(cuid())
+  billNumber      String   @unique
+  patientId       String?
+  patientName     String
+  patientPhone    String?
+  gender          String?
+  email           String?
+  referredDoctor  String?
+  prescriptionId  String?
+  billDate        DateTime @default(now())
+  subtotal        Float    @default(0)
+  discountPercent Float    @default(0)
+  discountAmount  Float    @default(0)
+  gstAmount       Float    @default(0)
+  netAmount       Float    @default(0)
+  roundOff        Float    @default(0)
+  billAmount      Float    @default(0)
+  paidAmount      Float    @default(0)
+  balanceDue      Float    @default(0)
+  paymentMode     String   @default("CASH")
+  paymentRef      String?
+  status          String   @default("COMPLETED") // COMPLETED, RETURNED, CANCELLED
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items           PharmacyBillItem[]
+
+  @@index([patientId])
+  @@index([billDate])
+  @@index([status])
+}
+
+model PharmacyBillItem {
+  id              String   @id @default(cuid())
+  billId          String
+  bill            PharmacyBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  stockId         String
+  stock           PharmacyStock @relation(fields: [stockId], references: [id])
+  medicineName    String
+  batchNumber     String
+  quantity        Int      @default(1)
+  mrp             Float    @default(0)
+  price           Float    @default(0)
+  total           Float    @default(0)
+  discountPercent Float    @default(0)
+  amount          Float    @default(0)
+  gstPercent      Float    @default(0)
+
+  @@index([billId])
+  @@index([stockId])
+}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -398,6 +398,7 @@ function ServicesTab() {
         open={addOpen || !!editItem}
         onClose={() => { setAddOpen(false); setEditItem(null) }}
         existing={editItem ?? undefined}
+        allServices={services}
         onSuccess={async () => {
           setAddOpen(false)
           setEditItem(null)
@@ -428,11 +429,13 @@ function ServiceFormDialog({
   open,
   onClose,
   existing,
+  allServices,
   onSuccess,
 }: {
   open: boolean
   onClose: () => void
   existing?: ServiceTemplate
+  allServices: ServiceTemplate[]
   onSuccess: () => void
 }) {
   const [name, setName] = useState(existing?.name ?? "")
@@ -442,6 +445,8 @@ function ServiceFormDialog({
   const [discount, setDiscount] = useState(String(existing?.discount ?? "0"))
   const [sortOrder, setSortOrder] = useState(String(existing?.sortOrder ?? "0"))
   const [loading, setLoading] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const nameInputRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (existing) {
@@ -456,11 +461,34 @@ function ServiceFormDialog({
     }
   }, [existing, open])
 
+  // Close suggestions on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (nameInputRef.current && !nameInputRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const nameTrimmed = name.trim().toUpperCase()
+  const isDuplicate = !existing && allServices.some(
+    s => s.name.toUpperCase() === nameTrimmed && nameTrimmed !== ""
+  )
+  const suggestions = nameTrimmed
+    ? allServices.filter(s =>
+        s.name.toUpperCase().includes(nameTrimmed) &&
+        s.id !== existing?.id
+      )
+    : []
+
   async function handleSave() {
     if (!name.trim()) { toast.error("Name required"); return }
+    if (isDuplicate) { toast.error("A service with this name already exists"); return }
     setLoading(true)
     const data = {
-      name: name.trim(),
+      name: name.trim().toUpperCase(),
       category,
       description: description.trim() || undefined,
       amount: parseFloat(amount) || 0,
@@ -486,9 +514,39 @@ function ServiceFormDialog({
           <DialogTitle>{existing ? "Edit Service" : "Add Service"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <div>
+          <div ref={nameInputRef} className="relative">
             <Label>Service Name *</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} className="mt-1" placeholder="e.g. General Consultation" />
+            <Input
+              value={name}
+              onChange={e => { setName(e.target.value.toUpperCase()); setShowSuggestions(true) }}
+              onFocus={() => { if (name.trim()) setShowSuggestions(true) }}
+              className="mt-1"
+              placeholder="e.g. GENERAL CONSULTATION"
+            />
+            {isDuplicate && (
+              <p className="text-xs text-destructive mt-1">This service already exists</p>
+            )}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                <p className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground border-b">Existing services</p>
+                {suggestions.slice(0, 8).map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between"
+                    onClick={() => {
+                      setName(s.name)
+                      setShowSuggestions(false)
+                    }}
+                  >
+                    <span className={s.name.toUpperCase() === nameTrimmed ? "font-semibold text-destructive" : ""}>
+                      {s.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{s.category}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <Label>Category *</Label>

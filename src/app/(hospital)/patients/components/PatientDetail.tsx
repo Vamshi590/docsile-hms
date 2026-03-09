@@ -183,6 +183,19 @@ export function PatientDetail({ patientId, onBack, onUpdate }: Props) {
             </span>
             {patient.doctorName && <span>{patient.doctorName}</span>}
           </div>
+          {(() => {
+            const totalDue = patient.prescriptions?.reduce((sum, p) => sum + (p.balanceDue ?? 0), 0) ?? 0
+            return totalDue > 0 ? (
+              <div className="flex items-center gap-1.5 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-1.5">
+                <span className="text-xs font-medium text-destructive/70">Due</span>
+                <span className="text-sm font-bold text-destructive">{formatCurrency(totalDue)}</span>
+              </div>
+            ) : patient.prescriptions && patient.prescriptions.some(p => p.total > 0) ? (
+              <div className="flex items-center gap-1.5 rounded-lg bg-green-50 border border-green-200 px-3 py-1.5">
+                <span className="text-xs font-medium text-green-600">No Dues</span>
+              </div>
+            ) : null
+          })()}
           <PatientStatusBadge status={patient.status as PatientStatus} />
         </div>
       </div>

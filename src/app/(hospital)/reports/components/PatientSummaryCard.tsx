@@ -45,7 +45,7 @@ export function PatientSummaryCard({ patient }: Props) {
   return (
     <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
       {/* Top band */}
-      <div className="bg-gradient-to-r from-primary/5 via-primary/3 to-transparent px-6 py-5">
+      <div className=" to-transparent px-6 py-5">
         <div className="flex items-start gap-5">
           {/* Avatar */}
           <Avatar className="h-16 w-16 shrink-0 border-2 border-white shadow-sm">
