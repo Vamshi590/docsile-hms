@@ -187,13 +187,17 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                 <span className="font-bold text-foreground">{queue.length}</span>
                 <span className="font-normal">Total</span>
               </Badge>
+              <Badge variant="destructive" className="px-3 py-1.5 gap-1.5 text-sm">
+                <span className="font-bold">{queue.filter(p => ["REGISTERED", "IN_WORKUP"].includes(p.status)).length}</span>
+                <span className="font-normal">Optometrist</span>
+              </Badge>
               <Badge variant="warning" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold">{queue.filter(p => p.status === "WORKUP_DONE").length}</span>
-                <span className="font-normal">Awaiting</span>
+                <span className="font-bold">{queue.filter(p => ["WORKUP_DONE", "WITH_DOCTOR"].includes(p.status)).length}</span>
+                <span className="font-normal">Doctor</span>
               </Badge>
               <Badge variant="success" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold">{queue.filter(p => p.status === "VISITED").length}</span>
-                <span className="font-normal">Visited</span>
+                <span className="font-bold">{queue.filter(p => p.status === "COMPLETED").length}</span>
+                <span className="font-normal">Completed</span>
               </Badge>
             </div>
           )}
@@ -495,11 +499,7 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                       )}
                       {isColumnVisible("status") && (
                         <TableCell>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <PatientStatusBadge status={patient.status as PatientStatus} />
-                            {hasReading && <Badge variant="success" className="text-xs">Workup done</Badge>}
-                            {hasPrescription && <Badge variant="secondary" className="text-xs">Rx</Badge>}
-                          </div>
+                          <PatientStatusBadge status={patient.status as PatientStatus} />
                         </TableCell>
                       )}
                       {isColumnVisible("print") && (

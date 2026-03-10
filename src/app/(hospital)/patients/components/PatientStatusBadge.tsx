@@ -3,14 +3,16 @@ import { cn } from "@/lib/utils"
 import type { PatientStatus } from "@/lib/types"
 
 const STATUS_CONFIG: Record<PatientStatus, { label: string; variant: "info" | "warning" | "default" | "success" | "destructive" | "secondary" | "muted" }> = {
-  REGISTERED:  { label: "Registered",   variant: "info" },
-  IN_WORKUP:   { label: "In Workup",    variant: "warning" },
-  WORKUP_DONE: { label: "Workup Done",  variant: "default" },
-  WITH_DOCTOR: { label: "With Doctor",  variant: "success" },
-  VISITED:     { label: "Visited",      variant: "muted" },
-  MOVED:       { label: "Moved",        variant: "warning" },
-  CANCELLED:   { label: "Cancelled",    variant: "destructive" },
-  NO_SHOW:     { label: "No Show",      variant: "destructive" },
+  REGISTERED:   { label: "Optometrist",   variant: "destructive" },
+  IN_WORKUP:    { label: "Optometrist",   variant: "destructive" },
+  WORKUP_DONE:  { label: "Doctor",        variant: "warning" },
+  WITH_DOCTOR:  { label: "Doctor",        variant: "warning" },
+  VISITED:      { label: "Visited",       variant: "muted" },
+  COMPLETED:    { label: "Completed",     variant: "success" },
+  MEDICAL_ONLY: { label: "Medical Only",  variant: "info" },
+  MOVED:        { label: "Moved",         variant: "warning" },
+  CANCELLED:    { label: "Cancelled",     variant: "destructive" },
+  NO_SHOW:      { label: "No Show",       variant: "destructive" },
 }
 
 export function PatientStatusBadge({

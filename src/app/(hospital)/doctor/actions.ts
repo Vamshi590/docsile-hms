@@ -14,7 +14,7 @@ export async function getDoctorQueue(date?: string) {
     where: {
       patientType: "OPD",
       appointmentDate: { gte: start, lte: end },
-      status: { in: ["WORKUP_DONE", "WITH_DOCTOR", "REGISTERED"] },
+      status: { in: ["WORKUP_DONE", "WITH_DOCTOR", "REGISTERED", "COMPLETED", "MEDICAL_ONLY"] },
     },
     orderBy: { createdAt: "asc" },
     include: {
@@ -82,9 +82,10 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
   try {
     const patient = await db.patient.findUnique({
       where: { patientId: pd.patientId },
-      select: { id: true, patientId: true },
+      include: { eyeReadings: { take: 1 } },
     })
     if (!patient) return { success: false, error: "Patient not found" }
+    const hasWorkup = patient.eyeReadings.length > 0
 
     // Find today's billing-only prescription to update with medical data
     const todayStart = new Date()
@@ -141,7 +142,7 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
     // Update patient status
     await db.patient.update({
       where: { patientId: pd.patientId },
-      data: { status: "VISITED", updatedBy: user.id },
+      data: { status: hasWorkup ? "COMPLETED" : "MEDICAL_ONLY", updatedBy: user.id },
     })
 
     revalidatePath("/doctor")

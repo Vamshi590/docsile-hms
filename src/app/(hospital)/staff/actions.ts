@@ -22,6 +22,8 @@ const StaffSchema = z.object({
   address: z.string().optional(),
   emergencyContact: z.string().optional(),
   bloodGroup: z.string().optional(),
+  salary: z.number().min(0).optional(),
+  salaryType: z.string().optional(),
 })
 
 export async function getStaffMembers() {
@@ -42,6 +44,8 @@ export async function getStaffMembers() {
       address: true,
       emergencyContact: true,
       bloodGroup: true,
+      salary: true,
+      salaryType: true,
       isActive: true,
       lastLogin: true,
       createdAt: true,
@@ -67,6 +71,8 @@ export async function getStaffMember(id: string) {
       address: true,
       emergencyContact: true,
       bloodGroup: true,
+      salary: true,
+      salaryType: true,
       isActive: true,
       lastLogin: true,
       createdAt: true,
@@ -109,6 +115,8 @@ export async function createStaffMember(data: z.infer<typeof StaffSchema>) {
         address: validated.data.address || null,
         emergencyContact: validated.data.emergencyContact || null,
         bloodGroup: validated.data.bloodGroup || null,
+        salary: validated.data.salary ?? null,
+        salaryType: validated.data.salaryType || null,
         isActive: true,
       },
     })
@@ -138,6 +146,8 @@ export async function updateStaffMember(
     if (data.address !== undefined) updateData.address = data.address || null
     if (data.emergencyContact !== undefined) updateData.emergencyContact = data.emergencyContact || null
     if (data.bloodGroup !== undefined) updateData.bloodGroup = data.bloodGroup || null
+    if (data.salary !== undefined) updateData.salary = data.salary ?? null
+    if (data.salaryType !== undefined) updateData.salaryType = data.salaryType || null
 
     if (data.password) {
       const { hashPassword } = await import("@/lib/auth")

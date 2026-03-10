@@ -24,7 +24,7 @@ import type { PatientStatus } from "@/lib/types"
 
 const STATUSES: PatientStatus[] = [
   "REGISTERED", "IN_WORKUP", "WORKUP_DONE", "WITH_DOCTOR", "VISITED",
-  "MOVED", "CANCELLED", "NO_SHOW",
+  "COMPLETED", "MEDICAL_ONLY", "MOVED", "CANCELLED", "NO_SHOW",
 ]
 
 const PAYMENT_MODES = ["Cash", "UPI", "Card", "Cheque", "Online", "NEFT"]

@@ -83,7 +83,7 @@ export function PatientsPage({ hospitalName }: { hospitalName: string }) {
 
   const registered = patients.filter(p => p.status === "REGISTERED").length
   const inProgress = patients.filter(p => ["IN_WORKUP", "WORKUP_DONE", "WITH_DOCTOR"].includes(p.status)).length
-  const visited = patients.filter(p => p.status === "VISITED").length
+  const visited = patients.filter(p => ["VISITED", "COMPLETED", "MEDICAL_ONLY"].includes(p.status)).length
   const totalRevenue = patients.reduce((sum, p) => {
     const invoices = (p as { invoices?: { amountPaid: number }[] }).invoices ?? []
     return sum + invoices.reduce((s, inv) => s + inv.amountPaid, 0)

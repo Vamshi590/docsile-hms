@@ -44,7 +44,7 @@ import {
   seedSystemRoles,
 } from "../actions"
 import { ALL_PERMISSIONS } from "@/lib/permissions"
-import { formatDate } from "@/lib/utils"
+import { formatDate, formatCurrency } from "@/lib/utils"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +62,8 @@ type StaffMember = {
   address: string | null
   emergencyContact: string | null
   bloodGroup: string | null
+  salary: number | null
+  salaryType: string | null
   isActive: boolean
   lastLogin: Date | null
   createdAt: Date
@@ -156,7 +158,7 @@ export default function StaffPage({ hospitalName }: { hospitalName: string }) {
   const [form, setForm] = useState({
     email: "", password: "", fullName: "", phone: "", role: "RECEPTIONIST",
     department: "", designation: "", employeeId: "", qualifications: "",
-    joiningDate: "", address: "", emergencyContact: "", bloodGroup: "",
+    joiningDate: "", address: "", emergencyContact: "", bloodGroup: "", salary: "", salaryType: "",
   })
 
   const [roleForm, setRoleForm] = useState({
@@ -210,7 +212,7 @@ export default function StaffPage({ hospitalName }: { hospitalName: string }) {
     setForm({
       email: "", password: "", fullName: "", phone: "", role: "RECEPTIONIST",
       department: "", designation: "", employeeId: "", qualifications: "",
-      joiningDate: "", address: "", emergencyContact: "", bloodGroup: "",
+      joiningDate: "", address: "", emergencyContact: "", bloodGroup: "", salary: "", salaryType: "",
     })
     setShowStaffDialog(true)
   }
@@ -223,20 +225,26 @@ export default function StaffPage({ hospitalName }: { hospitalName: string }) {
       employeeId: s.employeeId ?? "", qualifications: s.qualifications ?? "",
       joiningDate: s.joiningDate ? new Date(s.joiningDate).toISOString().split("T")[0] : "",
       address: s.address ?? "", emergencyContact: s.emergencyContact ?? "", bloodGroup: s.bloodGroup ?? "",
+      salary: s.salary != null ? String(s.salary) : "", salaryType: s.salaryType ?? "",
     })
     setShowStaffDialog(true)
   }
 
   async function handleSaveStaff() {
     setSaving(true)
+    const payload = {
+      ...form,
+      salary: form.salary ? parseFloat(form.salary) : undefined,
+      password: form.password || undefined,
+    }
     try {
       if (editingStaff) {
-        const res = await updateStaffMember(editingStaff.id, { ...form, password: form.password || undefined })
+        const res = await updateStaffMember(editingStaff.id, payload)
         if (!res.success) { toast.error(res.error); return }
         toast.success("Staff member updated")
       } else {
         if (!form.password) { toast.error("Password is required"); return }
-        const res = await createStaffMember(form)
+        const res = await createStaffMember(payload)
         if (!res.success) { toast.error(res.error); return }
         toast.success("Staff member added")
       }
@@ -690,6 +698,21 @@ export default function StaffPage({ hospitalName }: { hospitalName: string }) {
               <Label>Emergency Contact</Label>
               <Input value={form.emergencyContact} onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })} />
             </div>
+            <div className="space-y-2">
+              <Label>Salary</Label>
+              <Input type="number" min="0" step="0.01" value={form.salary} onChange={(e) => setForm({ ...form, salary: e.target.value })} placeholder="e.g. 25000" />
+            </div>
+            <div className="space-y-2">
+              <Label>Salary Type</Label>
+              <Select value={form.salaryType} onValueChange={(v) => setForm({ ...form, salaryType: v })}>
+                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MONTHLY">Monthly</SelectItem>
+                  <SelectItem value="DAILY">Daily</SelectItem>
+                  <SelectItem value="PER_VISIT">Per Visit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>Address</Label>
               <Textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={2} />
@@ -775,6 +798,8 @@ export default function StaffPage({ hospitalName }: { hospitalName: string }) {
                 <DetailItem label="Qualifications" value={showStaffDetail.qualifications} />
                 <DetailItem label="Blood Group" value={showStaffDetail.bloodGroup} />
                 <DetailItem label="Emergency Contact" value={showStaffDetail.emergencyContact} />
+                <DetailItem label="Salary" value={showStaffDetail.salary != null ? formatCurrency(showStaffDetail.salary) : null} />
+                <DetailItem label="Salary Type" value={showStaffDetail.salaryType} />
                 <DetailItem label="Date of Joining" value={showStaffDetail.joiningDate ? formatDate(new Date(showStaffDetail.joiningDate)) : null} />
                 <DetailItem label="Last Login" value={showStaffDetail.lastLogin ? formatDate(new Date(showStaffDetail.lastLogin)) : "Never"} />
                 {showStaffDetail.address && (

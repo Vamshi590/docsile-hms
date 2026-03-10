@@ -6,6 +6,8 @@ export type PatientStatus =
   | "WORKUP_DONE"
   | "WITH_DOCTOR"
   | "VISITED"
+  | "COMPLETED"
+  | "MEDICAL_ONLY"
   | "MOVED"
   | "CANCELLED"
   | "NO_SHOW"

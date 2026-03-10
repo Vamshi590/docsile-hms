@@ -30,6 +30,8 @@ model User {
   address          String?   @db.Text
   emergencyContact String?
   bloodGroup       String?
+  salary           Float?
+  salaryType       String?   // MONTHLY, DAILY, PER_VISIT
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

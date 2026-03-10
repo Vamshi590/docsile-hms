@@ -122,10 +122,10 @@ const ADVICE_OPTIONS = [
 ]
 
 type PrescriptionTemplateMed = {
-  prescription: string
+  name: string
   days: string
   timing: string
-  notes: string
+  note: string
 }
 
 type PrescriptionTemplateRow = {
@@ -916,7 +916,7 @@ function PrescriptionsTab() {
                       </div>
                       {meds.slice(0, 2).map((m, i) => (
                         <div key={i} className="text-xs text-muted-foreground truncate max-w-[180px]">
-                          {m.prescription}
+                          {m.name}
                         </div>
                       ))}
                       {meds.length > 2 && (
@@ -1014,7 +1014,7 @@ function PrescriptionFormDialog({
   const [previousHistory, setPreviousHistory] = useState("")
   const [provisionalDiagnosis, setProvisionalDiagnosis] = useState("")
   const [medicines, setMedicines] = useState<PrescriptionTemplateMed[]>([
-    { prescription: "", days: "", timing: "", notes: "" },
+    { name: "", days: "", timing: "", note: "" },
   ])
   const [investigations, setInvestigations] = useState<string[]>([""])
   const [followUpDays, setFollowUpDays] = useState("")
@@ -1031,9 +1031,9 @@ function PrescriptionFormDialog({
       setProvisionalDiagnosis(existing.provisionalDiagnosis ?? "")
       try {
         const meds: PrescriptionTemplateMed[] = JSON.parse(existing.medicines)
-        setMedicines(meds.length > 0 ? meds : [{ prescription: "", days: "", timing: "", notes: "" }])
+        setMedicines(meds.length > 0 ? meds : [{ name: "", days: "", timing: "", note: "" }])
       } catch {
-        setMedicines([{ prescription: "", days: "", timing: "", notes: "" }])
+        setMedicines([{ name: "", days: "", timing: "", note: "" }])
       }
       try {
         const invs: string[] = JSON.parse(existing.investigations)
@@ -1046,7 +1046,7 @@ function PrescriptionFormDialog({
     } else {
       setCode(""); setName(""); setPresentComplaint(""); setPreviousHistory("")
       setProvisionalDiagnosis("")
-      setMedicines([{ prescription: "", days: "", timing: "", notes: "" }])
+      setMedicines([{ name: "", days: "", timing: "", note: "" }])
       setInvestigations([""])
       setFollowUpDays("")
       setAdditionalNotes("")
@@ -1063,7 +1063,7 @@ function PrescriptionFormDialog({
   }
 
   function addMedicine() {
-    setMedicines(prev => [...prev, { prescription: "", days: "", timing: "", notes: "" }])
+    setMedicines(prev => [...prev, { name: "", days: "", timing: "", note: "" }])
   }
 
   function removeMedicine(index: number) {
@@ -1086,7 +1086,7 @@ function PrescriptionFormDialog({
     const e: Record<string, string> = {}
     if (!code.trim()) e.code = "Template code is required"
     if (!name.trim()) e.name = "Template name is required"
-    const hasValidMed = medicines.some(m => m.prescription.trim())
+    const hasValidMed = medicines.some(m => m.name.trim())
     if (!hasValidMed) e.medicines = "At least one medicine is required"
     setErrors(e)
     return Object.keys(e).length === 0
@@ -1095,7 +1095,7 @@ function PrescriptionFormDialog({
   async function handleSave() {
     if (!validate()) return
     setLoading(true)
-    const cleanMeds = medicines.filter(m => m.prescription.trim())
+    const cleanMeds = medicines.filter(m => m.name.trim())
     const cleanInvs = investigations.filter(i => i.trim())
     const payload = {
       code: code.trim(),
@@ -1249,8 +1249,8 @@ function PrescriptionFormDialog({
                   >
                     <EditableCombobox
                       options={MEDICINE_OPTIONS}
-                      value={med.prescription}
-                      onValueChange={v => updateMedicine(index, "prescription", v)}
+                      value={med.name}
+                      onValueChange={v => updateMedicine(index, "name", v)}
                       placeholder="Medicine name"
                     />
                     <Input
@@ -1277,8 +1277,8 @@ function PrescriptionFormDialog({
                     </button>
                   </div>
                   <Input
-                    value={med.notes}
-                    onChange={e => updateMedicine(index, "notes", e.target.value)}
+                    value={med.note}
+                    onChange={e => updateMedicine(index, "note", e.target.value)}
                     placeholder="Notes: After food, shake well..."
                     className="text-sm bg-white text-muted-foreground placeholder:text-muted-foreground/60"
                   />

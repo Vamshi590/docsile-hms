@@ -186,7 +186,11 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
     } catch { /* ignore */ }
     try {
       const invs = JSON.parse(t.investigations)
-      if (invs.length > 0) setInvestigations(invs.map((i: Investigation) => ({ ...i, id: Math.random().toString() })))
+      if (invs.length > 0) setInvestigations(invs.map((i: string | Investigation) => ({
+        id: Math.random().toString(),
+        name: typeof i === "string" ? i : i.name,
+        note: typeof i === "string" ? "" : (i.note ?? ""),
+      })))
     } catch { /* ignore */ }
     if (t.followUpDays) {
       const d = new Date()
@@ -207,7 +211,6 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
     try {
       const result = await savePrescription({
         patientId,
-        doctorName: doctorName.trim() || undefined,
         temperature: temperature ? parseFloat(temperature) : null,
         pulseRate: pulseRate ? parseInt(pulseRate) : null,
         spo2: spo2 ? parseInt(spo2) : null,
@@ -488,12 +491,6 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
             />
           </div>
         </div>
-      </div>
-
-      <div className="flex justify-end gap-2 pt-2">
-        <Button variant="secondary" onClick={handleStartConsultation}>
-          Start Consultation
-        </Button>
       </div>
     </div>
   )
