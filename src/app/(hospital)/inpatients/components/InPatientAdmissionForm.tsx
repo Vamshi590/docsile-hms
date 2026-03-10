@@ -255,6 +255,9 @@ export default function InPatientAdmissionForm({ open, onClose, onSuccess, editI
     setPaymentRecords(prev => {
       const a = [...prev]
       a[i] = { ...a[i], [field]: field === "amount" ? parseFloat(val) || 0 : val }
+      if (field === "amountType" && val === "Insurance") {
+        a[i] = { ...a[i], paymentMode: "Insurance" }
+      }
       return a
     })
   }

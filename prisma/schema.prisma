@@ -22,6 +22,15 @@ model User {
   designation  String?
   isActive     Boolean   @default(true)
   lastLogin    DateTime?
+
+  // Extended staff fields
+  employeeId       String?   @unique
+  qualifications   String?
+  joiningDate      DateTime?
+  address          String?   @db.Text
+  emergencyContact String?
+  bloodGroup       String?
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -30,6 +39,26 @@ model User {
   eyeReadings     EyeReading[]   @relation("CreatedByUser")
   inpatients      InPatient[]    @relation("InPatientCreatedBy")
   insuranceClaims InsuranceClaim[] @relation("InsuranceCreatedBy")
+
+  @@index([role])
+  @@index([department])
+  @@index([isActive])
+}
+
+// ─── ROLES & PERMISSIONS ──────────────────────────────
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique  // e.g. ADMIN, DOCTOR, RECEPTIONIST
+  displayName String
+  description String?
+  permissions String   @default("[]") @db.Text // JSON array of permission strings
+  isSystem    Boolean  @default(false) // System roles can't be deleted
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
 }
 
 // ─── HOSPITAL PROFILE ───────────────────────────────
@@ -773,6 +802,29 @@ model PharmacyBillItem {
 
   @@index([billId])
   @@index([stockId])
+}
+
+// ─── LICENSE TRACKER MODULE ─────────────────────────
+
+model License {
+  id             String    @id @default(cuid())
+  name           String
+  licenseNumber  String?
+  issuingBody    String?
+  category       String?   // Medical, Drug, Fire Safety, Trade, NABH, Bio-Medical Waste, etc.
+  issueDate      DateTime?
+  expiryDate     DateTime
+  reminderDays   Int       @default(30) // Days before expiry to start reminding
+  status         String    @default("ACTIVE") // ACTIVE, EXPIRED, RENEWED
+  notes          String?   @db.Text
+  documentUrl    String?
+  createdBy      String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([expiryDate])
+  @@index([status])
+  @@index([category])
 }
 
 // ─── OPTICAL MODULE ─────────────────────────────────

@@ -19,7 +19,15 @@ export async function getDoctorQueue(date?: string) {
     orderBy: { createdAt: "asc" },
     include: {
       eyeReadings: { orderBy: { createdAt: "desc" }, take: 1 },
-      prescriptions: { orderBy: { createdAt: "desc" }, take: 1 },
+      prescriptions: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        include: { items: true },
+      },
+      labBills: {
+        include: { lab: { select: { name: true } }, items: true },
+        orderBy: { createdAt: "desc" },
+      },
     },
   })
 }

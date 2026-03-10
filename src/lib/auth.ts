@@ -7,6 +7,7 @@ export type SessionUser = {
   email: string
   fullName: string
   role: string
+  permissions: string[]
 }
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -19,7 +20,24 @@ export async function getSession(): Promise<SessionUser | null> {
       where: { id: userId, isActive: true },
       select: { id: true, email: true, fullName: true, role: true },
     })
-    return user ?? null
+    if (!user) return null
+
+    // Load permissions from the Role table
+    let permissions: string[] = []
+    try {
+      const role = await db.role.findUnique({ where: { name: user.role } })
+      if (role) {
+        permissions = JSON.parse(role.permissions)
+      }
+    } catch {
+      // If Role table doesn't exist yet or no role found, admin gets all
+      if (user.role === "ADMIN") {
+        const { getAllPermissionKeys } = await import("./permissions")
+        permissions = getAllPermissionKeys()
+      }
+    }
+
+    return { ...user, permissions }
   } catch {
     return null
   }
@@ -31,6 +49,19 @@ export async function requireAuth(): Promise<SessionUser> {
     redirect("/login")
   }
   return session
+}
+
+export async function requireAdmin(): Promise<SessionUser> {
+  const session = await requireAuth()
+  if (session.role !== "ADMIN") {
+    redirect("/dashboard")
+  }
+  return session
+}
+
+export function requirePermission(user: SessionUser, permission: string): boolean {
+  if (user.role === "ADMIN") return true
+  return user.permissions.includes(permission)
 }
 
 export async function createSession(userId: string) {

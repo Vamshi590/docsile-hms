@@ -1,19 +1,21 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Stethoscope, Search, ChevronLeft, ChevronRight, ArrowLeft, Loader2, Printer } from "lucide-react"
+import { Stethoscope, Search, ChevronLeft, ChevronRight, ArrowLeft, Loader2, Printer, Settings2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Checkbox } from "@/components/ui/checkbox"
 import { PatientStatusBadge } from "../../patients/components/PatientStatusBadge"
 import { PrescriptionForm, type PrescriptionFormHandle } from "./PrescriptionForm"
 import { PrintReceiptsModal } from "./PrintReceiptsModal"
 import { EyeReadingForm, type EyeReadingFormHandle } from "../../workup/components/EyeReadingForm"
 import { getDoctorQueue, getPatientForConsultation } from "../actions"
-import { formatDate, calculateAge, todayISO } from "@/lib/utils"
+import { formatDate, formatCurrency, calculateAge, todayISO } from "@/lib/utils"
 import type { PatientStatus } from "@/lib/types"
 
 type QueueItem = Awaited<ReturnType<typeof getDoctorQueue>>[0]
@@ -24,6 +26,23 @@ const TAB_CLASS =
   "text-muted-foreground hover:text-foreground transition-colors " +
   "data-[state=active]:border-primary data-[state=active]:text-primary " +
   "data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+
+const QUEUE_COLUMNS = [
+  { key: "sno", label: "#", alwaysOn: true },
+  { key: "patient", label: "Patient", alwaysOn: true },
+  { key: "age", label: "Age / Gender" },
+  { key: "phone", label: "Phone" },
+  { key: "referredBy", label: "Referred By" },
+  { key: "service", label: "Service" },
+  { key: "srReading", label: "SR Reading" },
+  { key: "labAmount", label: "Lab Amount" },
+  { key: "status", label: "Status" },
+  { key: "print", label: "Print", alwaysOn: true },
+] as const
+
+type ColumnKey = (typeof QUEUE_COLUMNS)[number]["key"]
+
+const DEFAULT_COLUMNS: ColumnKey[] = ["sno", "patient", "age", "phone", "srReading", "status", "print"]
 
 export function DoctorPage({ hospitalName }: { hospitalName: string }) {
   const [date, setDate] = useState(todayISO())
@@ -36,6 +55,28 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
   const [savingAll, setSavingAll] = useState(false)
 
   const [printPatient, setPrintPatient] = useState<{ patientId: string; name: string } | null>(null)
+
+  const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("doctor-queue-columns")
+        if (saved) return JSON.parse(saved)
+      } catch { /* ignore */ }
+    }
+    return DEFAULT_COLUMNS
+  })
+
+  function toggleColumn(key: ColumnKey) {
+    setVisibleColumns(prev => {
+      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+      try { localStorage.setItem("doctor-queue-columns", JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
+
+  function isColumnVisible(key: ColumnKey) {
+    return visibleColumns.includes(key)
+  }
 
   const eyeReadingRef = useRef<EyeReadingFormHandle>(null)
   const prescriptionRef = useRef<PrescriptionFormHandle>(null)
@@ -198,92 +239,96 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                 <p className="text-sm text-muted-foreground">Loading patient data…</p>
               </div>
             ) : selectedPatient ? (
-              <Tabs defaultValue="workup">
-                {/* Tab header: patient meta strip + underline tabs */}
-                <div className="px-6 pt-4 pb-0 border-b border-border flex justify-between items-center">
+              <div className="flex">
+                {/* ── Left: Tabs (Workup + Prescription) ── */}
+                <div className="flex-1 min-w-0">
+                  <Tabs defaultValue="workup">
+                    {/* Tab header */}
+                    <div className="px-6 pt-4 pb-0 border-b border-border flex justify-between items-center">
+                      <TabsList className="bg-transparent h-auto p-0 rounded-none gap-1 -mb-px">
+                        <TabsTrigger value="workup" className={TAB_CLASS}>Workup Data</TabsTrigger>
+                        <TabsTrigger value="prescription" className={TAB_CLASS}>Prescription</TabsTrigger>
+                      </TabsList>
 
-                  
-                  {/* Underline tab list */}
-                  <TabsList className="bg-transparent h-auto p-0 rounded-none gap-1 -mb-px">
-                    <TabsTrigger value="workup" className={TAB_CLASS}>Workup Data</TabsTrigger>
-                    <TabsTrigger value="prescription" className={TAB_CLASS}>Prescription</TabsTrigger>
-                    <TabsTrigger value="history" className={TAB_CLASS}>History</TabsTrigger>
-                  </TabsList>
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="text-xs text-muted-foreground">
+                          {(() => {
+                            const today = new Date()
+                            today.setHours(0, 0, 0, 0)
+                            const lastVisit = selectedPatient.prescriptions?.find(
+                              rx => new Date(rx.prescriptionDate) < today
+                            )
+                            return lastVisit
+                              ? `Last visit: ${formatDate(lastVisit.prescriptionDate)}`
+                              : "First visit"
+                          })()}
+                        </span>
+                        <Button size="sm" onClick={handleSaveAll} disabled={savingAll}>
+                          {savingAll && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                          Save All
+                        </Button>
+                      </div>
+                    </div>
 
-                  {/* Right side: last visit info + single Save All button */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-xs text-muted-foreground">
-                      {(() => {
-                        const today = new Date()
-                        today.setHours(0, 0, 0, 0)
-                        const lastVisit = selectedPatient.prescriptions?.find(
-                          rx => new Date(rx.prescriptionDate) < today
-                        )
-                        return lastVisit
-                          ? `Last visit: ${formatDate(lastVisit.prescriptionDate)}`
-                          : "First visit"
-                      })()}
-                    </span>
-                    <Button size="sm" onClick={handleSaveAll} disabled={savingAll}>
-                      {savingAll && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
-                      Save All
-                    </Button>
-                  </div>
+                    {/* ── Workup tab ── */}
+                    <TabsContent value="workup" className="mt-0">
+                      <EyeReadingForm
+                        ref={eyeReadingRef}
+                        patientId={selectedPatient.patientId}
+                        compact
+                        existingReading={
+                          selectedPatient.eyeReadings?.[0]
+                            ? JSON.stringify({
+                                autoRefractometer: selectedPatient.eyeReadings[0].autoRefractometer
+                                  ? JSON.parse(selectedPatient.eyeReadings[0].autoRefractometer) : null,
+                                glassesReading: selectedPatient.eyeReadings[0].glassesReading
+                                  ? JSON.parse(selectedPatient.eyeReadings[0].glassesReading) : null,
+                                previousPrescription: selectedPatient.eyeReadings[0].previousPrescription
+                                  ? JSON.parse(selectedPatient.eyeReadings[0].previousPrescription) : null,
+                                presentPrescription: selectedPatient.eyeReadings[0].presentPrescription
+                                  ? JSON.parse(selectedPatient.eyeReadings[0].presentPrescription) : null,
+                                clinicalFindings: selectedPatient.eyeReadings[0].clinicalFindings
+                                  ? JSON.parse(selectedPatient.eyeReadings[0].clinicalFindings) : null,
+                              })
+                            : null
+                        }
+                        onSaved={() => loadQueue()}
+                      />
+                    </TabsContent>
 
+                    {/* ── Prescription tab ── */}
+                    <TabsContent value="prescription" className="px-6 py-5 mt-0">
+                      <PrescriptionForm
+                        ref={prescriptionRef}
+                        patientId={selectedPatient.patientId}
+                        patientName={`${selectedPatient.firstName} ${selectedPatient.lastName ?? ""}`.trim()}
+                        existingPrescription={selectedPatient.prescriptions?.[0] ?? null}
+                        onSaved={() => { closeDetail(); loadQueue() }}
+                      />
+                    </TabsContent>
+                  </Tabs>
                 </div>
 
-                {/* ── Workup tab — editable EyeReadingForm ── */}
-                <TabsContent value="workup" className="mt-0">
-                  <EyeReadingForm
-                    ref={eyeReadingRef}
-                    patientId={selectedPatient.patientId}
-                    compact
-                    existingReading={
-                      selectedPatient.eyeReadings?.[0]
-                        ? JSON.stringify({
-                            autoRefractometer: selectedPatient.eyeReadings[0].autoRefractometer
-                              ? JSON.parse(selectedPatient.eyeReadings[0].autoRefractometer) : null,
-                            glassesReading: selectedPatient.eyeReadings[0].glassesReading
-                              ? JSON.parse(selectedPatient.eyeReadings[0].glassesReading) : null,
-                            previousPrescription: selectedPatient.eyeReadings[0].previousPrescription
-                              ? JSON.parse(selectedPatient.eyeReadings[0].previousPrescription) : null,
-                            presentPrescription: selectedPatient.eyeReadings[0].presentPrescription
-                              ? JSON.parse(selectedPatient.eyeReadings[0].presentPrescription) : null,
-                            clinicalFindings: selectedPatient.eyeReadings[0].clinicalFindings
-                              ? JSON.parse(selectedPatient.eyeReadings[0].clinicalFindings) : null,
-                          })
-                        : null
-                    }
-                    onSaved={() => loadQueue()}
-                  />
-                </TabsContent>
-
-                {/* ── Prescription tab ── */}
-                <TabsContent value="prescription" className="px-6 py-5 mt-0">
-                  <PrescriptionForm
-                    ref={prescriptionRef}
-                    patientId={selectedPatient.patientId}
-                    patientName={`${selectedPatient.firstName} ${selectedPatient.lastName ?? ""}`.trim()}
-                    existingPrescription={selectedPatient.prescriptions?.[0] ?? null}
-                    onSaved={() => { closeDetail(); loadQueue() }}
-                  />
-                </TabsContent>
-
-                {/* ── History tab ── */}
-                <TabsContent value="history" className="px-6 py-5 mt-0">
-                  {selectedPatient.prescriptions && selectedPatient.prescriptions.length > 1 ? (
-                    <div className="space-y-3">
-                      {selectedPatient.prescriptions.slice(1).map(rx => (
-                        <PrescriptionHistoryCard key={rx.id} prescription={rx} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-16 text-muted-foreground text-sm">
-                      <p>No previous prescription history</p>
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
+                {/* ── Right: History (always visible) ── */}
+                <div className="w-80 shrink-0 border-l border-border overflow-y-auto max-h-[calc(100vh-12rem)]">
+                  <div className="px-4 pt-4 pb-2 border-b border-border sticky top-0 bg-white z-10">
+                    <h3 className="text-sm font-semibold text-foreground">History</h3>
+                  </div>
+                  <div className="p-4">
+                    {selectedPatient.prescriptions && selectedPatient.prescriptions.length > 1 ? (
+                      <div className="space-y-3">
+                        {selectedPatient.prescriptions.slice(1).map(rx => (
+                          <PrescriptionHistoryCard key={rx.id} prescription={rx} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-16 text-muted-foreground text-sm">
+                        <p>No previous prescription history</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             ) : null}
           </div>
         </div>
@@ -313,16 +358,48 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-white overflow-hidden">
+            {/* Column customizer */}
+            <div className="flex justify-end px-4 py-2 border-b border-border bg-gray-50">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground gap-1.5">
+                    <Settings2 className="h-3.5 w-3.5" /> Columns
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-48 p-2">
+                  <p className="text-xs font-medium text-muted-foreground px-2 pb-1.5">Toggle columns</p>
+                  {QUEUE_COLUMNS.map(col => {
+                    const locked = "alwaysOn" in col && col.alwaysOn
+                    return (
+                      <label
+                        key={col.key}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer text-sm"
+                      >
+                        <Checkbox
+                          checked={isColumnVisible(col.key)}
+                          onCheckedChange={() => toggleColumn(col.key)}
+                          disabled={!!locked}
+                        />
+                        <span className={locked ? "text-muted-foreground" : ""}>{col.label}</span>
+                      </label>
+                    )
+                  })}
+                </PopoverContent>
+              </Popover>
+            </div>
             <Table>
               <TableHeader>
                 <TableRow className="bg-gray-100 hover:bg-gray-100">
-                  <TableHead className="w-10 text-center">#</TableHead>
-                  <TableHead>Patient</TableHead>
-                  <TableHead className="hidden sm:table-cell">Age / Gender</TableHead>
-                  <TableHead className="hidden md:table-cell">Phone</TableHead>
-                  <TableHead className="hidden lg:table-cell">SR Reading</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right pr-4">Action</TableHead>
+                  {isColumnVisible("sno") && <TableHead className="w-10 text-center">#</TableHead>}
+                  {isColumnVisible("patient") && <TableHead>Patient</TableHead>}
+                  {isColumnVisible("age") && <TableHead>Age / Gender</TableHead>}
+                  {isColumnVisible("phone") && <TableHead>Phone</TableHead>}
+                  {isColumnVisible("referredBy") && <TableHead>Referred By</TableHead>}
+                  {isColumnVisible("service") && <TableHead>Service</TableHead>}
+                  {isColumnVisible("srReading") && <TableHead>SR Reading</TableHead>}
+                  {isColumnVisible("labAmount") && <TableHead className="text-right">Lab Amount</TableHead>}
+                  {isColumnVisible("status") && <TableHead>Status</TableHead>}
+                  {isColumnVisible("print") && <TableHead className="w-10"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -333,44 +410,100 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                   const hasPrescription = patient.prescriptions?.[0]
                   const srSummary = getSRSummary(hasReading)
                   const genderShort = patient.gender === "MALE" ? "M" : patient.gender === "FEMALE" ? "F" : "O"
+                  const serviceNames = hasPrescription?.items?.map((it: { description: string }) => it.description) ?? []
+                  const labBills = patient.labBills ?? []
+                  const labTotal = labBills.reduce((sum: number, lb: { total: number }) => sum + lb.total, 0)
                   return (
                     <TableRow
                       key={patient.id}
                       onClick={() => openPatient(patient)}
                       className="cursor-pointer"
                     >
-                      <TableCell className="text-center text-xs text-muted-foreground font-medium">{i + 1}</TableCell>
-                      <TableCell>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-sm text-foreground truncate">{fullName}</p>
-                          <p className="text-xs font-mono text-primary">{patient.patientId}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-sm text-muted-foreground whitespace-nowrap">
-                        {age ? `${age}y` : "—"} / {genderShort}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                        {patient.phone || "—"}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        {srSummary ? (
-                          <div className="text-xs space-y-0.5">
-                            <p><span className="font-semibold text-foreground w-5 inline-block">RE</span> {srSummary.re}</p>
-                            <p><span className="font-semibold text-foreground w-5 inline-block">LE</span> {srSummary.le}</p>
+                      {isColumnVisible("sno") && (
+                        <TableCell className="text-center text-xs text-muted-foreground font-medium">{i + 1}</TableCell>
+                      )}
+                      {isColumnVisible("patient") && (
+                        <TableCell>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm text-foreground truncate">{fullName}</p>
+                            <p className="text-xs font-mono text-primary">{patient.patientId}</p>
                           </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">No reading</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <PatientStatusBadge status={patient.status as PatientStatus} />
-                          {hasReading && <Badge variant="success" className="text-xs">Workup done</Badge>}
-                          {hasPrescription && <Badge variant="secondary" className="text-xs">Rx</Badge>}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right pr-4">
-                        <div className="flex justify-end gap-1">
+                        </TableCell>
+                      )}
+                      {isColumnVisible("age") && (
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {age ? `${age}y` : "—"} / {genderShort}
+                        </TableCell>
+                      )}
+                      {isColumnVisible("phone") && (
+                        <TableCell className="text-sm text-muted-foreground">
+                          {patient.phone || "—"}
+                        </TableCell>
+                      )}
+                      {isColumnVisible("referredBy") && (
+                        <TableCell className="text-sm text-muted-foreground">
+                          {patient.referredBy || "—"}
+                        </TableCell>
+                      )}
+                      {isColumnVisible("service") && (
+                        <TableCell>
+                          {serviceNames.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 max-w-48">
+                              {serviceNames.map((name: string, idx: number) => (
+                                <Badge key={idx} variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  {name}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      )}
+                      {isColumnVisible("srReading") && (
+                        <TableCell>
+                          {srSummary ? (
+                            <div className="text-xs space-y-0.5">
+                              <p><span className="font-semibold text-foreground w-5 inline-block">RE</span> {srSummary.re}</p>
+                              <p><span className="font-semibold text-foreground w-5 inline-block">LE</span> {srSummary.le}</p>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">No reading</span>
+                          )}
+                        </TableCell>
+                      )}
+                      {isColumnVisible("labAmount") && (
+                        <TableCell className="text-right">
+                          {labBills.length > 0 ? (
+                            <div className="space-y-0.5">
+                              {labBills.map((lb: { id: string; lab: { name: string }; total: number }) => (
+                                <p key={lb.id} className="text-xs">
+                                  <span className="text-muted-foreground">{lb.lab.name}: </span>
+                                  <span className="font-medium tabular-nums">{formatCurrency(lb.total)}</span>
+                                </p>
+                              ))}
+                              {labBills.length > 1 && (
+                                <p className="text-xs font-semibold border-t border-border pt-0.5 tabular-nums">
+                                  {formatCurrency(labTotal)}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      )}
+                      {isColumnVisible("status") && (
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <PatientStatusBadge status={patient.status as PatientStatus} />
+                            {hasReading && <Badge variant="success" className="text-xs">Workup done</Badge>}
+                            {hasPrescription && <Badge variant="secondary" className="text-xs">Rx</Badge>}
+                          </div>
+                        </TableCell>
+                      )}
+                      {isColumnVisible("print") && (
+                        <TableCell>
                           <Button
                             size="icon-sm"
                             variant="ghost"
@@ -382,15 +515,8 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                           >
                             <Printer className="h-4 w-4" />
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={e => { e.stopPropagation(); openPatient(patient) }}
-                          >
-                            Consult
-                          </Button>
-                        </div>
-                      </TableCell>
+                        </TableCell>
+                      )}
                     </TableRow>
                   )
                 })}

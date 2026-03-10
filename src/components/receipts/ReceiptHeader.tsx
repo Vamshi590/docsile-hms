@@ -1,6 +1,8 @@
 "use client"
 
-type HospitalInfo = {
+import { getHeaderComponent } from "./headers/registry"
+
+export type HospitalInfo = {
   name: string
   displayName?: string | null
   address?: string | null
@@ -11,48 +13,19 @@ type HospitalInfo = {
   logoUrl?: string | null
 }
 
-interface ReceiptHeaderProps {
+export interface HospitalHeaderProps {
   hospital: HospitalInfo
 }
 
-export function ReceiptHeader({ hospital }: ReceiptHeaderProps) {
-  const hospitalName = hospital.displayName || hospital.name
-
-  return (
-    <div className="pb-2 mb-2 border-b-2 border-black">
-      {/* Contact info top right */}
-      {hospital.phone && (
-        <div className="flex justify-end">
-          <p className="text-[10px] font-semibold">Ph: {hospital.phone}</p>
-        </div>
-      )}
-
-      {/* Hospital Name Row */}
-      <div className="flex justify-center items-center mb-2">
-        {hospital.logoUrl && (
-          <div className="w-12 h-12 flex items-center justify-center mr-3">
-            <img src={hospital.logoUrl} alt="" className="max-w-full max-h-full object-contain" />
-          </div>
-        )}
-        <div className="text-center flex-1">
-          <h1 className="text-lg font-bold leading-tight uppercase">{hospitalName}</h1>
-          {hospital.address && (
-            <p className="text-[10px] leading-tight mt-0.5">{hospital.address}</p>
-          )}
-        </div>
-        {hospital.logoUrl && (
-          <div className="w-12 h-12 flex items-center justify-center ml-3">
-            <img src={hospital.logoUrl} alt="" className="max-w-full max-h-full object-contain" />
-          </div>
-        )}
-      </div>
-
-      {/* Registration & Contact Details */}
-      <div className="flex justify-center gap-4 text-[9px] text-center">
-        {hospital.registrationNo && <span>Reg. No: {hospital.registrationNo}</span>}
-        {hospital.email && <span>{hospital.email}</span>}
-        {hospital.website && <span>{hospital.website}</span>}
-      </div>
-    </div>
-  )
+/**
+ * Dispatches to a hospital-specific header component if one is registered,
+ * otherwise falls back to the DefaultHeader.
+ *
+ * To add a custom header for a new hospital:
+ *   1. Create a file in src/components/receipts/headers/YourHospital.tsx
+ *   2. Register it in src/components/receipts/headers/registry.ts
+ */
+export function ReceiptHeader({ hospital }: HospitalHeaderProps) {
+  const HeaderComponent = getHeaderComponent(hospital.name)
+  return <HeaderComponent hospital={hospital} />
 }

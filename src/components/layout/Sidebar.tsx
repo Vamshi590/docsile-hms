@@ -21,6 +21,9 @@ import {
   Wallet,
   Pill,
   Glasses,
+  ScrollText,
+  DatabaseZap,
+  UserCog,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -40,6 +43,9 @@ const navItems = [
   { href: "/dues-followups", icon: ClipboardList, label: "Dues & Follow-Ups" },
   { href: "/expenses", icon: Wallet, label: "Expenses" },
   { href: "/reports", icon: FileBarChart, label: "Reports" },
+  { href: "/license-tracker", icon: ScrollText, label: "Licenses" },
+  { href: "/data", icon: DatabaseZap, label: "Data Export" },
+  { href: "/staff", icon: UserCog, label: "Staff", adminOnly: true },
 ]
 
 interface SidebarProps {
@@ -96,8 +102,8 @@ export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
-        {navItems.map((item) => {
+      <nav className={cn("flex-1 overflow-y-auto scrollbar-hide px-2", collapsed ? "py-2 space-y-1" : "py-4 space-y-0.5")}>
+        {navItems.filter((item) => !item.adminOnly || user.role === "ADMIN").map((item) => {
           const active = isActive(item.href, item.exact)
           return (
             <Link
@@ -105,17 +111,27 @@ export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
               href={item.href}
               title={collapsed ? item.label : undefined}
               className={cn(
-                "flex items-center rounded-xl py-2.5 text-[0.9rem] font-semibold transition-all duration-150",
-                collapsed ? "justify-center px-2.5" : "gap-3 px-3.5",
+                "flex items-center rounded-xl transition-all duration-150",
+                collapsed
+                  ? "flex-col justify-center gap-0.5 px-1 py-2"
+                  : "gap-3 px-3.5 py-2.5 text-[0.9rem] font-semibold",
                 active
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-gray-500 hover:text-foreground hover:bg-secondary"
               )}
             >
               <item.icon
-                className={cn("h-[18px] w-[18px] shrink-0", active ? "text-primary" : "text-current")}
+                className={cn(
+                  "shrink-0",
+                  collapsed ? "h-4 w-4" : "h-[18px] w-[18px]",
+                  active ? "text-primary" : "text-current"
+                )}
               />
-              {!collapsed && (
+              {collapsed ? (
+                <span className="text-[0.6rem] font-medium leading-tight text-center truncate w-full">
+                  {item.label}
+                </span>
+              ) : (
                 <>
                   <span className="truncate">{item.label}</span>
                   {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}

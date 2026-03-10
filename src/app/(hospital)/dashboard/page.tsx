@@ -15,6 +15,9 @@ import {
   Wallet,
   FileBarChart,
   Pill,
+  Glasses,
+  ScrollText,
+  DatabaseZap,
 } from "lucide-react"
 import { PageHeader } from "@/components/layout/header"
 import { Card, CardContent } from "@/components/ui/card"
@@ -83,6 +86,14 @@ const modules = [
     iconColor: "text-slate-600",
   },
   {
+    href: "/optical",
+    icon: Glasses,
+    label: "Optical",
+    description: "Frames, lenses & contact lens inventory, billing with AR readings",
+    iconBg: "bg-slate-100",
+    iconColor: "text-slate-600",
+  },
+  {
     href: "/dues-followups",
     icon: ClipboardList,
     label: "Dues & Follow-Ups",
@@ -103,6 +114,22 @@ const modules = [
     icon: FileBarChart,
     label: "Reports",
     description: "Patient history, visit records, prescriptions and billing reports",
+    iconBg: "bg-slate-100",
+    iconColor: "text-slate-600",
+  },
+  {
+    href: "/license-tracker",
+    icon: ScrollText,
+    label: "License Tracker",
+    description: "Track hospital licenses, registrations and renewal dates",
+    iconBg: "bg-slate-100",
+    iconColor: "text-slate-600",
+  },
+  {
+    href: "/data",
+    icon: DatabaseZap,
+    label: "Data Export",
+    description: "Select, filter and export hospital data in CSV or Excel format",
     iconBg: "bg-slate-100",
     iconColor: "text-slate-600",
   },

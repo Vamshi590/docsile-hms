@@ -14,18 +14,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   Search,
   Plus,
   Trash2,
   FileText,
   Printer,
   X,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react"
 import { toast } from "sonner"
 import { formatCurrency, formatDate, todayISO } from "@/lib/utils"
@@ -236,7 +232,11 @@ export function BillingTab() {
   const loadHistory = async () => {
     const data = await getPharmacyBills({ dateFrom: historyDateFrom, dateTo: historyDateTo })
     setBills(data)
-    setShowHistory(true)
+  }
+
+  const toggleHistory = () => {
+    if (!showHistory) loadHistory()
+    setShowHistory(v => !v)
   }
 
   return (
@@ -253,8 +253,9 @@ export function BillingTab() {
           <Button variant="outline" size="sm" onClick={clearBill}>
             <X className="h-3.5 w-3.5 mr-1" /> Clear Bill
           </Button>
-          <Button variant="outline" size="sm" onClick={loadHistory}>
+          <Button variant="outline" size="sm" onClick={toggleHistory}>
             <FileText className="h-3.5 w-3.5 mr-1" /> Bill History
+            {showHistory ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
           </Button>
         </div>
       </div>
@@ -438,30 +439,36 @@ export function BillingTab() {
               </table>
             </div>
           </Card>
+
         </div>
 
         {/* Right: Bill Summary */}
         <div className="col-span-4">
-          <Card className="p-5 sticky top-28 space-y-4">
-            <div className="space-y-3">
+          <Card className="p-4 sticky top-28">
+            <div className="space-y-2.5">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="font-medium tabular-nums">{formatCurrency(subtotal)}</span>
+              </div>
+
               <div className="flex justify-between items-center">
                 <Label className="text-xs">Discount %</Label>
                 <Input
                   type="number"
-                  className="w-24 h-8 text-right text-sm"
+                  className="w-20 h-7 text-right text-xs"
                   value={discountPercent || ""}
                   onChange={(e) => setDiscountPercent(parseFloat(e.target.value) || 0)}
                 />
               </div>
 
-              <div className="flex justify-between items-center py-1">
-                <span className="text-sm text-muted-foreground">GST</span>
-                <span className="text-sm font-medium">{formatCurrency(gstTotal)}</span>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">GST</span>
+                <span className="font-medium tabular-nums">{formatCurrency(gstTotal)}</span>
               </div>
 
-              <div className="flex justify-between items-center py-1">
-                <span className="text-sm text-muted-foreground">Net</span>
-                <span className="text-sm font-medium">{formatCurrency(netAmount)}</span>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Net</span>
+                <span className="font-medium tabular-nums">{formatCurrency(netAmount)}</span>
               </div>
 
               <div className="flex justify-between items-center">
@@ -469,77 +476,76 @@ export function BillingTab() {
                 <Input
                   type="number"
                   step="0.5"
-                  className="w-24 h-8 text-right text-sm"
+                  className="w-20 h-7 text-right text-xs"
                   value={roundOff || ""}
                   onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)}
                 />
               </div>
 
               <div className="flex justify-between items-center pt-2 border-t">
-                <span className="text-base font-semibold">Bill Amount</span>
-                <span className="text-xl font-bold">{formatCurrency(billAmount)}</span>
+                <span className="text-sm font-semibold">Bill Amount</span>
+                <span className="text-lg font-bold tabular-nums">{formatCurrency(billAmount)}</span>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Label className="text-xs shrink-0">Paid Amount</Label>
-                <Select value={paymentMode} onValueChange={setPaymentMode}>
-                  <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CASH">Cash</SelectItem>
-                    <SelectItem value="CARD">Card</SelectItem>
-                    <SelectItem value="UPI">UPI</SelectItem>
-                    <SelectItem value="CREDIT">Credit</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  className="w-24 h-8 text-right text-sm"
-                  value={paidAmount || ""}
-                  onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-
-              <div>
+              <div className="pt-1 space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Select value={paymentMode} onValueChange={setPaymentMode}>
+                    <SelectTrigger className="w-20 h-7 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CASH">Cash</SelectItem>
+                      <SelectItem value="CARD">Card</SelectItem>
+                      <SelectItem value="UPI">UPI</SelectItem>
+                      <SelectItem value="CREDIT">Credit</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    placeholder="Paid"
+                    className="flex-1 h-7 text-right text-xs"
+                    value={paidAmount || ""}
+                    onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
+                  />
+                </div>
                 <Input
                   placeholder="Reference"
-                  className="h-8 text-sm"
+                  className="h-7 text-xs"
                   value={paymentRef}
                   onChange={(e) => setPaymentRef(e.target.value)}
                 />
               </div>
             </div>
 
-            <div className="space-y-2 pt-2">
-              <Button className="w-full" size="sm" onClick={handleSave} disabled={saving}>
+            <div className="flex gap-2 pt-3 mt-3 border-t">
+              <Button className="flex-1" size="sm" onClick={handleSave} disabled={saving}>
                 {saving ? "Saving..." : "Save"}
               </Button>
-              <Button className="w-full bg-indigo-500 hover:bg-indigo-600" size="sm" onClick={handleSave} disabled={saving}>
-                <Printer className="h-4 w-4 mr-1.5" />
-                Save & Print
+              <Button className="flex-1 bg-indigo-500 hover:bg-indigo-600" size="sm" onClick={handleSave} disabled={saving}>
+                <Printer className="h-3.5 w-3.5 mr-1" />
+                Print
               </Button>
             </div>
           </Card>
         </div>
       </div>
 
-      {/* Bill History Dialog */}
-      <Dialog open={showHistory} onOpenChange={setShowHistory}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Pharmacy Bill History</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center gap-3 pt-2">
-            <div>
-              <Label className="text-xs">From</Label>
-              <Input type="date" className="h-8 text-sm" value={historyDateFrom} onChange={(e) => setHistoryDateFrom(e.target.value)} />
+      {/* Bill History — full width below */}
+      {showHistory && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold">Bill History</h4>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs">From</Label>
+                <Input type="date" className="h-7 w-36 text-xs" value={historyDateFrom} onChange={(e) => setHistoryDateFrom(e.target.value)} />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs">To</Label>
+                <Input type="date" className="h-7 w-36 text-xs" value={historyDateTo} onChange={(e) => setHistoryDateTo(e.target.value)} />
+              </div>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={loadHistory}>Search</Button>
             </div>
-            <div>
-              <Label className="text-xs">To</Label>
-              <Input type="date" className="h-8 text-sm" value={historyDateTo} onChange={(e) => setHistoryDateTo(e.target.value)} />
-            </div>
-            <Button size="sm" className="mt-4" onClick={loadHistory}>Search</Button>
           </div>
-          <div className="mt-3">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">
@@ -554,7 +560,7 @@ export function BillingTab() {
               </thead>
               <tbody>
                 {bills.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">No bills found</td></tr>
+                  <tr><td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">No bills found</td></tr>
                 ) : (
                   bills.map((bill) => (
                     <tr key={bill.id} className="border-b hover:bg-muted/20">
@@ -578,8 +584,8 @@ export function BillingTab() {
               </tbody>
             </table>
           </div>
-        </DialogContent>
-      </Dialog>
+        </Card>
+      )}
     </div>
   )
 }
