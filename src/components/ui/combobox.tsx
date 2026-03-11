@@ -272,6 +272,50 @@ export function GridCombobox({
   )
 }
 
+// ── Advanced fuzzy filter & scoring ──────────────────────────────────────────
+
+function normalize(s: string): string {
+  return s.toUpperCase().replace(/\s+/g, " ").trim()
+}
+
+function scoreMatch(option: string, query: string): number {
+  const o = normalize(option)
+  const q = normalize(query)
+  if (!q) return 0
+
+  // Exact match (ignoring case/extra spaces)
+  if (o === q) return 100
+
+  // Starts with query
+  if (o.startsWith(q)) return 80
+
+  // Option words start with query
+  const oWords = o.split(" ")
+  const qWords = q.split(" ")
+
+  // All query words found as word-starts in option
+  const allWordsMatch = qWords.every(qw =>
+    oWords.some(ow => ow.startsWith(qw))
+  )
+  if (allWordsMatch) return 60
+
+  // Contains query as substring
+  if (o.includes(q)) return 40
+
+  // Any query word found as substring
+  const anyWordMatch = qWords.some(qw =>
+    oWords.some(ow => ow.includes(qw))
+  )
+  if (anyWordMatch) return 20
+
+  return 0
+}
+
+function isDuplicate(value: string, options: string[]): boolean {
+  const n = normalize(value)
+  return options.some(o => normalize(o) === n)
+}
+
 // Editable combobox with "Add to database" button for new values
 interface EditableComboboxWithAddProps {
   options: string[]
@@ -283,6 +327,7 @@ interface EditableComboboxWithAddProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  autoUpperCase?: boolean
 }
 
 export function EditableComboboxWithAdd({
@@ -295,6 +340,7 @@ export function EditableComboboxWithAdd({
   placeholder = "Type or select...",
   className,
   disabled = false,
+  autoUpperCase = false,
 }: EditableComboboxWithAddProps) {
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState(value ?? "")
@@ -306,17 +352,22 @@ export function EditableComboboxWithAdd({
 
   const filtered = React.useMemo(() => {
     if (!inputValue) return options.slice(0, 50)
-    const q = inputValue.toLowerCase()
-    return options.filter((o) => o.toLowerCase().includes(q)).slice(0, 50)
+    const scored = options
+      .map(o => ({ option: o, score: scoreMatch(o, inputValue) }))
+      .filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score || a.option.localeCompare(b.option))
+    return scored.map(x => x.option).slice(0, 50)
   }, [options, inputValue])
 
+  // Check if the value is genuinely new (not a near-duplicate)
   const isNewValue =
     inputValue.trim() !== "" &&
-    !options.some((o) => o.toLowerCase() === inputValue.trim().toLowerCase())
+    !isDuplicate(inputValue.trim(), options)
 
   function handleInputChange(v: string) {
-    setInputValue(v)
-    onValueChange?.(v)
+    const val = autoUpperCase ? v.toUpperCase() : v
+    setInputValue(val)
+    onValueChange?.(val)
     setOpen(true)
   }
 
@@ -329,7 +380,8 @@ export function EditableComboboxWithAdd({
   async function handleAdd() {
     if (!isNewValue || !onAddOption) return
     setAdding(true)
-    await onAddOption(inputValue.trim())
+    const val = autoUpperCase ? inputValue.trim().toUpperCase() : inputValue.trim()
+    await onAddOption(val)
     setAdding(false)
     setOpen(false)
   }
@@ -402,7 +454,7 @@ export function EditableComboboxWithAdd({
                 ) : (
                   <Plus className="h-3.5 w-3.5" />
                 )}
-                Add &ldquo;{inputValue.trim()}&rdquo; to list
+                Add &ldquo;{autoUpperCase ? inputValue.trim().toUpperCase() : inputValue.trim()}&rdquo; to list
               </div>
             )}
           </div>

@@ -7,28 +7,17 @@ import { getISTDayBounds, toLocalDateISO } from "@/lib/utils"
 import { z } from "zod"
 
 export async function getDoctorQueue(date?: string) {
-  const todayStr = toLocalDateISO()
-  const targetDate = date ?? todayStr
-  const isToday = targetDate === todayStr
+  const targetDate = date ?? toLocalDateISO()
   const { start, end } = getISTDayBounds(targetDate)
 
-  // Build query: always filter by date (prescriptions OR appointmentDate)
-  // For today: also filter by live workflow statuses
-  // For past dates: show ALL patients who had activity that day (historical view)
-  const where: Record<string, unknown> = {
-    patientType: "OPD",
-    OR: [
-      { prescriptions: { some: { prescriptionDate: { gte: start, lte: end } } } },
-      { appointmentDate: { gte: start, lte: end } },
-    ],
-  }
-
-  if (isToday) {
-    where.status = { in: ["WORKUP_DONE", "WITH_DOCTOR", "REGISTERED", "COMPLETED", "MEDICAL_ONLY"] }
-  }
-
   const patients = await db.patient.findMany({
-    where,
+    where: {
+      patientType: "OPD",
+      OR: [
+        { prescriptions: { some: { prescriptionDate: { gte: start, lte: end } } } },
+        { appointmentDate: { gte: start, lte: end } },
+      ],
+    },
     orderBy: { createdAt: "asc" },
     include: {
       eyeReadings: {
@@ -48,24 +37,6 @@ export async function getDoctorQueue(date?: string) {
       },
     },
   })
-
-  // For past dates, compute the effective visit status for that day
-  if (!isToday) {
-    return patients.map(p => {
-      const rx = p.prescriptions?.[0]
-      const hasEyeReading = (p.eyeReadings?.length ?? 0) > 0
-
-      let effectiveStatus = p.status
-      if (rx) {
-        if (rx.status === "COMPLETED") effectiveStatus = "COMPLETED"
-        else if (rx.status === "MEDICAL_ONLY") effectiveStatus = "MEDICAL_ONLY"
-        else if (hasEyeReading) effectiveStatus = "WORKUP_DONE"
-        else effectiveStatus = "REGISTERED"
-      }
-
-      return { ...p, status: effectiveStatus }
-    })
-  }
 
   return patients
 }
