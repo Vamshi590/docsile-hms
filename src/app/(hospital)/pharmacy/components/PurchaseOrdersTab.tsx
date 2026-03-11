@@ -423,12 +423,12 @@ export function PurchaseOrdersTab() {
                   <tr className="bg-muted/30 border-b">
                     <th className="text-left p-2 text-xs font-medium text-muted-foreground">Medicine</th>
                     <th className="text-left p-2 text-xs font-medium text-muted-foreground w-24">Batch</th>
-                    <th className="text-right p-2 text-xs font-medium text-muted-foreground w-16">Qty</th>
+                    <th className="text-right p-2 text-xs font-medium text-muted-foreground w-20">Qty</th>
                     <th className="text-right p-2 text-xs font-medium text-muted-foreground w-20">Cost</th>
                     <th className="text-right p-2 text-xs font-medium text-muted-foreground w-20">MRP</th>
                     <th className="text-right p-2 text-xs font-medium text-muted-foreground w-16">GST %</th>
-                    <th className="text-left p-2 text-xs font-medium text-muted-foreground w-28">Expiry</th>
-                    <th className="text-right p-2 text-xs font-medium text-muted-foreground w-20">Amount</th>
+                    <th className="text-left p-2 text-xs font-medium text-muted-foreground w-24">Expiry</th>
+                    <th className="text-right p-2 text-xs font-medium text-muted-foreground w-16">Amt</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
@@ -450,19 +450,19 @@ export function PurchaseOrdersTab() {
                         <Input className="h-8 text-xs" value={item.batchNumber} onChange={(e) => updatePOItem(idx, { batchNumber: e.target.value })} />
                       </td>
                       <td className="p-1.5">
-                        <Input type="number" className="h-8 text-xs text-right" value={item.quantity || ""} onChange={(e) => updatePOItem(idx, { quantity: parseInt(e.target.value) || 0 })} />
+                        <Input type="number" className="h-8 text-xs text-right w-full px-2" value={item.quantity || ""} onChange={(e) => updatePOItem(idx, { quantity: parseInt(e.target.value) || 0 })} />
                       </td>
                       <td className="p-1.5">
-                        <Input type="number" step="0.01" className="h-8 text-xs text-right" value={item.costPrice || ""} onChange={(e) => updatePOItem(idx, { costPrice: parseFloat(e.target.value) || 0 })} />
+                        <Input type="number" step="0.01" className="h-8 text-xs text-right w-full px-2" value={item.costPrice || ""} onChange={(e) => updatePOItem(idx, { costPrice: parseFloat(e.target.value) || 0 })} />
                       </td>
                       <td className="p-1.5">
-                        <Input type="number" step="0.01" className="h-8 text-xs text-right" value={item.mrp || ""} onChange={(e) => updatePOItem(idx, { mrp: parseFloat(e.target.value) || 0 })} />
+                        <Input type="number" step="0.01" className="h-8 text-xs text-right w-full px-2" value={item.mrp || ""} onChange={(e) => updatePOItem(idx, { mrp: parseFloat(e.target.value) || 0 })} />
                       </td>
                       <td className="p-1.5">
-                        <Input type="number" className="h-8 text-xs text-right" value={item.gstPercent} onChange={(e) => updatePOItem(idx, { gstPercent: parseFloat(e.target.value) || 0 })} />
+                        <Input type="number" className="h-8 text-xs text-right w-full px-2" value={item.gstPercent} onChange={(e) => updatePOItem(idx, { gstPercent: parseFloat(e.target.value) || 0 })} />
                       </td>
                       <td className="p-1.5">
-                        <Input type="month" className="h-8 text-xs" value={item.expiryDate ? item.expiryDate.substring(0, 7) : ""} onChange={(e) => updatePOItem(idx, { expiryDate: e.target.value ? e.target.value + "-01" : "" })} />
+                        <Input type="month" className="h-8 text-xs w-full px-2" value={item.expiryDate ? item.expiryDate.substring(0, 7) : ""} onChange={(e) => updatePOItem(idx, { expiryDate: e.target.value ? e.target.value + "-01" : "" })} />
                       </td>
                       <td className="p-1.5 text-right text-xs font-medium">
                         {formatCurrency(item.quantity * item.costPrice * (1 + item.gstPercent / 100))}
