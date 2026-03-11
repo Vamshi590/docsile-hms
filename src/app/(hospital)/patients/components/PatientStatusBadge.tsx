@@ -1,18 +1,17 @@
-import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { PatientStatus } from "@/lib/types"
 
-const STATUS_CONFIG: Record<PatientStatus, { label: string; variant: "info" | "warning" | "default" | "success" | "destructive" | "secondary" | "muted" }> = {
-  REGISTERED:   { label: "Optometrist",   variant: "destructive" },
-  IN_WORKUP:    { label: "Optometrist",   variant: "destructive" },
-  WORKUP_DONE:  { label: "Doctor",        variant: "warning" },
-  WITH_DOCTOR:  { label: "Doctor",        variant: "warning" },
-  VISITED:      { label: "Visited",       variant: "muted" },
-  COMPLETED:    { label: "Completed",     variant: "success" },
-  MEDICAL_ONLY: { label: "Medical Only",  variant: "info" },
-  MOVED:        { label: "Moved",         variant: "warning" },
-  CANCELLED:    { label: "Cancelled",     variant: "destructive" },
-  NO_SHOW:      { label: "No Show",       variant: "destructive" },
+const STATUS_CONFIG: Record<PatientStatus, { label: string; color: string }> = {
+  REGISTERED:   { label: "Optometrist",   color: "text-red-600" },
+  IN_WORKUP:    { label: "Optometrist",   color: "text-red-600" },
+  WORKUP_DONE:  { label: "Doctor",        color: "text-amber-600" },
+  WITH_DOCTOR:  { label: "Doctor",        color: "text-amber-600" },
+  VISITED:      { label: "Visited",       color: "text-muted-foreground" },
+  COMPLETED:    { label: "Completed",     color: "text-green-600" },
+  MEDICAL_ONLY: { label: "Medical Only",  color: "text-blue-600" },
+  MOVED:        { label: "Moved",         color: "text-amber-600" },
+  CANCELLED:    { label: "Cancelled",     color: "text-red-600" },
+  NO_SHOW:      { label: "No Show",       color: "text-red-600" },
 }
 
 export function PatientStatusBadge({
@@ -24,12 +23,12 @@ export function PatientStatusBadge({
 }) {
   const config = STATUS_CONFIG[status as PatientStatus] ?? {
     label: status,
-    variant: "secondary" as const,
+    color: "text-muted-foreground",
   }
 
   return (
-    <Badge variant={config.variant} className={className}>
+    <span className={cn("text-xs font-semibold", config.color, className)}>
       {config.label}
-    </Badge>
+    </span>
   )
 }

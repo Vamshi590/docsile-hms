@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
-import { getISTDayBounds, toLocalDateISO } from "@/lib/utils"
+import { getISTDayBounds } from "@/lib/utils"
 import { z } from "zod"
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -85,7 +85,6 @@ export async function getPatients(filters: {
   type?: "OPD" | "IPD"
 }) {
   const { date, search, status, type = "OPD" } = filters
-  const todayStr = toLocalDateISO()
 
   const where: Record<string, unknown> = { patientType: type }
   const andConditions: Record<string, unknown>[] = []
@@ -94,7 +93,6 @@ export async function getPatients(filters: {
 
   if (date) {
     dateBounds = getISTDayBounds(date)
-    // Show patients who have a prescription on this date OR were originally registered on this date
     andConditions.push({
       OR: [
         { prescriptions: { some: { prescriptionDate: { gte: dateBounds.start, lte: dateBounds.end } } } },
@@ -122,7 +120,6 @@ export async function getPatients(filters: {
     where.AND = andConditions
   }
 
-  // Build prescription include: filter to selected date if provided
   const prescriptionInclude: Record<string, unknown> = {
     orderBy: { createdAt: "desc" },
     take: 1,
@@ -132,7 +129,6 @@ export async function getPatients(filters: {
     prescriptionInclude.where = { prescriptionDate: { gte: dateBounds.start, lte: dateBounds.end } }
   }
 
-  // For past dates, also include eye readings to derive effective visit status
   const eyeReadingInclude = dateBounds ? {
     where: { readingDate: { gte: dateBounds.start, lte: dateBounds.end } },
     take: 1,
@@ -146,25 +142,6 @@ export async function getPatients(filters: {
       ...(eyeReadingInclude ? { eyeReadings: eyeReadingInclude } : {}),
     },
   })
-
-  // For past dates, compute the effective visit status for that date
-  // (the global patient.status reflects the CURRENT workflow state, not the historical one)
-  if (date && date !== todayStr) {
-    return patients.map(p => {
-      const rx = (p as unknown as { prescriptions: { status: string }[] }).prescriptions?.[0]
-      const hasEyeReading = ((p as unknown as { eyeReadings?: unknown[] }).eyeReadings?.length ?? 0) > 0
-
-      let effectiveStatus = p.status
-      if (rx) {
-        if (rx.status === "COMPLETED") effectiveStatus = "COMPLETED"
-        else if (rx.status === "MEDICAL_ONLY") effectiveStatus = "MEDICAL_ONLY"
-        else if (hasEyeReading) effectiveStatus = "WORKUP_DONE"
-        else effectiveStatus = "REGISTERED"
-      }
-
-      return { ...p, status: effectiveStatus }
-    })
-  }
 
   return patients
 }
@@ -574,10 +551,19 @@ export async function addServiceToPatient(data: {
 
     // Re-register the patient so they appear in workup & doctor queues
     // NOTE: Do NOT overwrite appointmentDate — it preserves the original registration date
+    // Check if patient already has eye readings today — if so, set WORKUP_DONE instead of REGISTERED
+    const { start: todayStartCheck, end: todayEndCheck } = getISTDayBounds()
+    const existingReading = await db.eyeReading.findFirst({
+      where: {
+        patientId: data.patientId,
+        readingDate: { gte: todayStartCheck, lte: todayEndCheck },
+      },
+    })
+
     await db.patient.update({
       where: { patientId: data.patientId },
       data: {
-        status: "REGISTERED",
+        status: existingReading ? "WORKUP_DONE" : "REGISTERED",
         updatedBy: user.id,
       },
     })

@@ -7,12 +7,9 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { PatientStatusBadge } from "../../patients/components/PatientStatusBadge"
 import { EyeReadingForm } from "./EyeReadingForm"
 import { getWorkupQueue } from "../actions"
-import { formatDate, getInitials, calculateAge, todayISO, toLocalDateISO } from "@/lib/utils"
-import type { PatientStatus } from "@/lib/types"
+import { cn, formatDate, calculateAge, todayISO, toLocalDateISO } from "@/lib/utils"
 
 type QueueItem = Awaited<ReturnType<typeof getWorkupQueue>>[0]
 
@@ -89,17 +86,17 @@ export function WorkupPage({ hospitalName }: { hospitalName: string }) {
                 <span className="font-bold text-foreground">{queue.length}</span>
                 <span className="font-normal">Total</span>
               </Badge>
-              <Badge variant="info" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold">{queue.filter(p => p.status === "REGISTERED").length}</span>
-                <span className="font-normal">Registered</span>
+              <Badge variant="destructive" className="px-3 py-1.5 gap-1.5 text-sm">
+                <span className="font-bold">{queue.filter(p => ["REGISTERED", "IN_WORKUP"].includes(p.status)).length}</span>
+                <span className="font-normal">Optometrist</span>
               </Badge>
               <Badge variant="warning" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold">{queue.filter(p => p.status === "IN_WORKUP").length}</span>
-                <span className="font-normal">In Workup</span>
+                <span className="font-bold">{queue.filter(p => ["WORKUP_DONE", "WITH_DOCTOR"].includes(p.status)).length}</span>
+                <span className="font-normal">Doctor</span>
               </Badge>
-              <Badge variant="success" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold">{queue.filter(p => p.status === "WORKUP_DONE").length}</span>
-                <span className="font-normal">Done</span>
+              <Badge className="px-3 py-1.5 gap-1.5 text-sm bg-green-100 text-green-700 hover:bg-green-100">
+                <span className="font-bold">{queue.filter(p => ["COMPLETED", "MEDICAL_ONLY"].includes(p.status)).length}</span>
+                <span className="font-normal">Completed</span>
               </Badge>
             </div>
           )}
@@ -182,9 +179,7 @@ export function WorkupPage({ hospitalName }: { hospitalName: string }) {
               onSaved={async () => {
                 const data = await getWorkupQueue(date)
                 setQueue(data)
-                // Update selected patient with fresh data so it stays visible
-                const updated = data.find(p => p.patientId === selected.patientId)
-                if (updated) setSelected(updated)
+                setSelected(null)
               }}
             />
           </div>
@@ -253,10 +248,18 @@ export function WorkupPage({ hospitalName }: { hospitalName: string }) {
                         {patient.phone || "—"}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <PatientStatusBadge status={patient.status as PatientStatus} />
-                          {hasReading && <Badge variant="success" className="text-xs">Reading done</Badge>}
-                        </div>
+                        <span className={cn("text-xs font-semibold", {
+                          "text-red-600": ["REGISTERED", "IN_WORKUP"].includes(patient.status),
+                          "text-yellow-600": ["WORKUP_DONE", "WITH_DOCTOR"].includes(patient.status),
+                          "text-green-600": patient.status === "COMPLETED",
+                          "text-blue-600": patient.status === "MEDICAL_ONLY",
+                        })}>
+                          {["REGISTERED", "IN_WORKUP"].includes(patient.status) ? "Optometrist"
+                            : ["WORKUP_DONE", "WITH_DOCTOR"].includes(patient.status) ? "Doctor"
+                            : patient.status === "COMPLETED" ? "Completed"
+                            : patient.status === "MEDICAL_ONLY" ? "Medical Only"
+                            : patient.status}
+                        </span>
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-sm text-muted-foreground whitespace-nowrap">
                         {formatDate(patient.appointmentDate)}
