@@ -194,7 +194,7 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
 
       {/* ── Date nav + Search — hidden when patient open ── */}
       {!selectedRow && (
-        <div className="bg-gray-50 border-b border-border shadow-sm px-6 py-2 -mx-6 mb-5 sticky top-18 z-10">
+        <div className="bg-gray-50 border-b border-border flex justify-between items-center shadow-sm px-6 py-2 -mx-6 mb-5 sticky top-18 z-10">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon-sm" onClick={prevDay}>
               <ChevronLeft className="h-4 w-4" />
@@ -218,6 +218,36 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
               />
             </div>
           </div>
+          {/* Column customizer */}
+            <div className="flex justify-end px-4 py-2 border-b border-border bg-gray-50">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground gap-1.5">
+                    <Settings2 className="h-3.5 w-3.5" /> Columns
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-48 p-2">
+                  <p className="text-xs font-medium text-muted-foreground px-2 pb-1.5">Toggle columns</p>
+                  {QUEUE_COLUMNS.map(col => {
+                    const locked = "alwaysOn" in col && col.alwaysOn
+                    return (
+                      <label
+                        key={col.key}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer text-sm"
+                      >
+                        <Checkbox
+                          checked={isColumnVisible(col.key)}
+                          onCheckedChange={() => toggleColumn(col.key)}
+                          disabled={!!locked}
+                        />
+                        <span className={locked ? "text-muted-foreground" : ""}>{col.label}</span>
+                      </label>
+                    )
+                  })}
+                </PopoverContent>
+              </Popover>
+            </div>
+
         </div>
       )}
 
@@ -365,35 +395,6 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-white overflow-hidden">
-            {/* Column customizer */}
-            <div className="flex justify-end px-4 py-2 border-b border-border bg-gray-50">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground gap-1.5">
-                    <Settings2 className="h-3.5 w-3.5" /> Columns
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-48 p-2">
-                  <p className="text-xs font-medium text-muted-foreground px-2 pb-1.5">Toggle columns</p>
-                  {QUEUE_COLUMNS.map(col => {
-                    const locked = "alwaysOn" in col && col.alwaysOn
-                    return (
-                      <label
-                        key={col.key}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer text-sm"
-                      >
-                        <Checkbox
-                          checked={isColumnVisible(col.key)}
-                          onCheckedChange={() => toggleColumn(col.key)}
-                          disabled={!!locked}
-                        />
-                        <span className={locked ? "text-muted-foreground" : ""}>{col.label}</span>
-                      </label>
-                    )
-                  })}
-                </PopoverContent>
-              </Popover>
-            </div>
             <Table>
               <TableHeader>
                 <TableRow className="bg-gray-100 hover:bg-gray-100">

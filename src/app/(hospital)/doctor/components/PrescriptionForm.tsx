@@ -6,14 +6,14 @@ import { Plus, X, Loader2, Search, ClipboardList } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { EditableCombobox } from "@/components/ui/combobox"
+import { EditableCombobox, EditableComboboxWithAdd } from "@/components/ui/combobox"
 import {
   savePrescription,
   getMedicineMaster,
   getInvestigationMaster,
   getDropdownOptions,
+  addDropdownOption,
   getPredefinedTemplates,
   updatePatientToWithDoctor,
 } from "../actions"
@@ -134,6 +134,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
   const [medicineOptions, setMedicineOptions] = useState<string[]>([])
   const [investigationOptions, setInvestigationOptions] = useState<string[]>([])
   const [complaintOptions, setComplaintOptions] = useState<string[]>([])
+  const [previousHistoryOptions, setPreviousHistoryOptions] = useState<string[]>([])
   const [diagnosisOptions, setDiagnosisOptions] = useState<string[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [templateSearch, setTemplateSearch] = useState("")
@@ -141,10 +142,11 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
 
   useEffect(() => {
     async function loadOptions() {
-      const [meds, invs, complaints, diags, tmplts] = await Promise.all([
+      const [meds, invs, complaints, histories, diags, tmplts] = await Promise.all([
         getMedicineMaster(),
         getInvestigationMaster().then(i => i.map(x => x.name)),
         getDropdownOptions("presentComplaint"),
+        getDropdownOptions("previousHistory"),
         getDropdownOptions("diagnosis"),
         getPredefinedTemplates(),
       ])
@@ -152,6 +154,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
       setMedicineOptions(meds.map(x => x.name))
       setInvestigationOptions(invs)
       setComplaintOptions(complaints)
+      setPreviousHistoryOptions(histories)
       setDiagnosisOptions(diags)
       setTemplates(tmplts as unknown as Template[])
     }
@@ -374,29 +377,47 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label>Present Complaint</Label>
-            <EditableCombobox
+            <EditableComboboxWithAdd
               options={complaintOptions}
               value={presentComplaint}
               onValueChange={setPresentComplaint}
+              onAddOption={async (v) => {
+                await addDropdownOption("presentComplaint", v)
+                setComplaintOptions(prev => [...prev, v])
+                toast.success("Option added")
+              }}
               placeholder="Chief complaint..."
+              autoUpperCase
             />
           </div>
           <div className="space-y-1.5">
             <Label>Previous History</Label>
-            <Textarea
+            <EditableComboboxWithAdd
+              options={previousHistoryOptions}
               value={previousHistory}
-              onChange={e => setPreviousHistory(e.target.value)}
+              onValueChange={setPreviousHistory}
+              onAddOption={async (v) => {
+                await addDropdownOption("previousHistory", v)
+                setPreviousHistoryOptions(prev => [...prev, v])
+                toast.success("Option added")
+              }}
               placeholder="Previous eye conditions, surgeries, medications..."
-              className="h-16"
+              autoUpperCase
             />
           </div>
           <div className="space-y-1.5">
             <Label>Diagnosis</Label>
-            <EditableCombobox
+            <EditableComboboxWithAdd
               options={diagnosisOptions}
               value={diagnosis}
               onValueChange={setDiagnosis}
+              onAddOption={async (v) => {
+                await addDropdownOption("diagnosis", v)
+                setDiagnosisOptions(prev => [...prev, v])
+                toast.success("Option added")
+              }}
               placeholder="Provisional/Final diagnosis..."
+              autoUpperCase
             />
           </div>
         </div>
