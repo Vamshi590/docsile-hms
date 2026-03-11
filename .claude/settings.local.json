@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(find \"c:/Users/navee/OneDrive/Desktop/docsile-hms/src/app/\\(hospital\\)\" -name \"*dialog*\" -o -name \"*form*\")",
+      "Bash(find \"c:\\\\Users\\\\navee\\\\OneDrive\\\\Desktop\\\\docsile-hms\\\\src\\\\app\\\\\\(hospital\\)\\\\data\" -type f -name \"*.tsx\" -o -name \"*.ts\")",
+      "Bash(find \"c:\\\\Users\\\\navee\\\\OneDrive\\\\Desktop\\\\docsile-hms\\\\src\\\\app\\\\\\(hospital\\)\\\\data\" -type f)"
+    ]
+  }
+}

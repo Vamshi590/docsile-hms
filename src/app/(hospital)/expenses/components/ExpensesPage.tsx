@@ -251,21 +251,41 @@ export default function ExpensesPage({ hospitalName }: { hospitalName: string })
                           paddingAngle={2}
                           dataKey="amount"
                           nameKey="name"
+                          isAnimationActive={false}
                         >
                           {expensesByCategory.map((entry, i) => (
                             <Cell key={i} fill={entry.color} stroke="rgba(255,255,255,0.8)" strokeWidth={2} />
                           ))}
                         </Pie>
                         <RechartsTooltip
-                          formatter={(value) => {
-                            const v = Number(value)
-                            return formatCurrency(v) + ` (${((v / totalAmount) * 100).toFixed(1)}%)`
-                          }}
-                          contentStyle={{
-                            fontSize: "0.8rem",
-                            borderRadius: "8px",
-                            border: "1px solid #e5e7eb",
-                            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                          wrapperStyle={{ zIndex: 50, outline: "none" }}
+                          content={({ active, payload }) => {
+                            if (!active || !payload?.length) return null
+                            const item = payload[0]
+                            const v = Number(item.value)
+                            return (
+                              <div style={{
+                                background: "white",
+                                border: "1px solid #e5e7eb",
+                                borderRadius: "8px",
+                                padding: "8px 12px",
+                                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                                fontSize: "0.8rem",
+                                pointerEvents: "none",
+                                minWidth: "140px",
+                              }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                                  <div style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: (item.payload as { color: string }).color, flexShrink: 0 }} />
+                                  <span style={{ color: "#374151", fontWeight: 600 }}>{item.name}</span>
+                                </div>
+                                <div style={{ color: "#6b7280" }}>
+                                  {formatCurrency(v)}
+                                </div>
+                                <div style={{ color: "#9ca3af", fontSize: "0.72rem" }}>
+                                  {((v / totalAmount) * 100).toFixed(1)}% of total
+                                </div>
+                              </div>
+                            )
                           }}
                         />
                         <Legend
