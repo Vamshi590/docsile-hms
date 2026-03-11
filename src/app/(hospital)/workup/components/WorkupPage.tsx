@@ -179,7 +179,13 @@ export function WorkupPage({ hospitalName }: { hospitalName: string }) {
                     })
                   : null
               }
-              onSaved={() => { loadQueue(); setSelected(null) }}
+              onSaved={async () => {
+                const data = await getWorkupQueue(date)
+                setQueue(data)
+                // Update selected patient with fresh data so it stays visible
+                const updated = data.find(p => p.patientId === selected.patientId)
+                if (updated) setSelected(updated)
+              }}
             />
           </div>
         </div>

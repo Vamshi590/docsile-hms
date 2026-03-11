@@ -3,23 +3,32 @@
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
+import { getISTDayBounds, toLocalDateISO } from "@/lib/utils"
 import { z } from "zod"
 
 export async function getDoctorQueue(date?: string) {
-  const targetDate = date ?? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
-  const start = new Date(targetDate + "T00:00:00")
-  const end = new Date(targetDate + "T23:59:59")
+  const todayStr = toLocalDateISO()
+  const targetDate = date ?? todayStr
+  const isToday = targetDate === todayStr
+  const { start, end } = getISTDayBounds(targetDate)
 
-  return db.patient.findMany({
-    where: {
-      patientType: "OPD",
-      status: { in: ["WORKUP_DONE", "WITH_DOCTOR", "REGISTERED", "COMPLETED", "MEDICAL_ONLY"] },
-      // Find patients by prescription date OR original appointmentDate
-      OR: [
-        { prescriptions: { some: { prescriptionDate: { gte: start, lte: end } } } },
-        { appointmentDate: { gte: start, lte: end } },
-      ],
-    },
+  // Build query: always filter by date (prescriptions OR appointmentDate)
+  // For today: also filter by live workflow statuses
+  // For past dates: show ALL patients who had activity that day (historical view)
+  const where: Record<string, unknown> = {
+    patientType: "OPD",
+    OR: [
+      { prescriptions: { some: { prescriptionDate: { gte: start, lte: end } } } },
+      { appointmentDate: { gte: start, lte: end } },
+    ],
+  }
+
+  if (isToday) {
+    where.status = { in: ["WORKUP_DONE", "WITH_DOCTOR", "REGISTERED", "COMPLETED", "MEDICAL_ONLY"] }
+  }
+
+  const patients = await db.patient.findMany({
+    where,
     orderBy: { createdAt: "asc" },
     include: {
       eyeReadings: {
@@ -39,12 +48,30 @@ export async function getDoctorQueue(date?: string) {
       },
     },
   })
+
+  // For past dates, compute the effective visit status for that day
+  if (!isToday) {
+    return patients.map(p => {
+      const rx = p.prescriptions?.[0]
+      const hasEyeReading = (p.eyeReadings?.length ?? 0) > 0
+
+      let effectiveStatus = p.status
+      if (rx) {
+        if (rx.status === "COMPLETED") effectiveStatus = "COMPLETED"
+        else if (rx.status === "MEDICAL_ONLY") effectiveStatus = "MEDICAL_ONLY"
+        else if (hasEyeReading) effectiveStatus = "WORKUP_DONE"
+        else effectiveStatus = "REGISTERED"
+      }
+
+      return { ...p, status: effectiveStatus }
+    })
+  }
+
+  return patients
 }
 
 export async function getPatientForConsultation(patientId: string) {
-  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
-  const start = new Date(todayStr + "T00:00:00")
-  const end = new Date(todayStr + "T23:59:59")
+  const { start, end } = getISTDayBounds()
 
   const patient = await db.patient.findUnique({
     where: { patientId },
@@ -120,10 +147,7 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
     const hasWorkup = patient.eyeReadings.length > 0
 
     // Find today's billing-only prescription to update with medical data
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-    const todayEnd = new Date()
-    todayEnd.setHours(23, 59, 59, 999)
+    const { start: todayStart, end: todayEnd } = getISTDayBounds()
 
     const existing = await db.prescription.findFirst({
       where: {
@@ -146,7 +170,7 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
       additionalNotes: pd.additionalNotes ?? null,
       medicines: JSON.stringify(pd.medicines),
       investigations: JSON.stringify(pd.investigations),
-      followUpDate: pd.followUpDate ? new Date(pd.followUpDate + "T00:00:00") : null,
+      followUpDate: pd.followUpDate ? new Date(pd.followUpDate + "T00:00:00+05:30") : null,
       notes: pd.notes ?? null,
       status: "COMPLETED",
     }
@@ -260,9 +284,7 @@ export async function updatePatientToWithDoctor(patientId: string) {
 }
 
 export async function getReceiptData(patientId: string) {
-  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
-  const start = new Date(todayStr + "T00:00:00")
-  const end = new Date(todayStr + "T23:59:59")
+  const { start, end } = getISTDayBounds()
 
   const [patient, hospital] = await Promise.all([
     db.patient.findUnique({
