@@ -22,7 +22,7 @@ import { ExistingPatientSearch } from "./ExistingPatientSearch"
 import { AddServicesModal } from "./AddServicesModal"
 import { getPatients, searchExistingPatients, getCurrentUserRole, deletePatient } from "../actions"
 import { getInPatients, deleteInPatient } from "@/app/(hospital)/inpatients/actions"
-import { todayISO, formatDateLong } from "@/lib/utils"
+import { todayISO, formatDateLong, toLocalDateISO } from "@/lib/utils"
 import type { InPatient } from "@/lib/types"
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -71,14 +71,14 @@ export function PatientsPage({ hospitalName }: { hospitalName: string }) {
   useEffect(() => { getCurrentUserRole().then(r => setUserRole(r.role)) }, [])
 
   function prevDay() {
-    const d = new Date(selectedDate)
+    const d = new Date(selectedDate + "T00:00:00")
     d.setDate(d.getDate() - 1)
-    setSelectedDate(d.toISOString().split("T")[0])
+    setSelectedDate(toLocalDateISO(d))
   }
   function nextDay() {
-    const d = new Date(selectedDate)
+    const d = new Date(selectedDate + "T00:00:00")
     d.setDate(d.getDate() + 1)
-    setSelectedDate(d.toISOString().split("T")[0])
+    setSelectedDate(toLocalDateISO(d))
   }
 
   const registered = patients.filter(p => p.status === "REGISTERED").length

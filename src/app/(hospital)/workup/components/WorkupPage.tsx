@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { PatientStatusBadge } from "../../patients/components/PatientStatusBadge"
 import { EyeReadingForm } from "./EyeReadingForm"
 import { getWorkupQueue } from "../actions"
-import { formatDate, getInitials, calculateAge, todayISO } from "@/lib/utils"
+import { formatDate, getInitials, calculateAge, todayISO, toLocalDateISO } from "@/lib/utils"
 import type { PatientStatus } from "@/lib/types"
 
 type QueueItem = Awaited<ReturnType<typeof getWorkupQueue>>[0]
@@ -33,15 +33,15 @@ export function WorkupPage({ hospitalName }: { hospitalName: string }) {
   useEffect(() => { loadQueue() }, [date])
 
   function prevDay() {
-    const d = new Date(date)
+    const d = new Date(date + "T00:00:00")
     d.setDate(d.getDate() - 1)
-    setDate(d.toISOString().split("T")[0])
+    setDate(toLocalDateISO(d))
   }
 
   function nextDay() {
-    const d = new Date(date)
+    const d = new Date(date + "T00:00:00")
     d.setDate(d.getDate() + 1)
-    setDate(d.toISOString().split("T")[0])
+    setDate(toLocalDateISO(d))
   }
 
   const filtered = search

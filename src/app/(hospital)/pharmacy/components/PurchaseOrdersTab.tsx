@@ -180,7 +180,7 @@ export function PurchaseOrdersTab() {
         receivedQty: item.receivedQty,
         newReceivedQty: item.quantity - item.receivedQty,
         batchNumber: item.batchNumber ?? "",
-        expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString().split("T")[0] : "",
+        expiryDate: item.expiryDate ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(item.expiryDate)) : "",
         mrp: item.mrp,
         costPrice: item.costPrice,
       }))

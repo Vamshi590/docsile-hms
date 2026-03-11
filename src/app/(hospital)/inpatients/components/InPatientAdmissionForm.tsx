@@ -26,11 +26,18 @@ interface Props {
   editInpatient?: InPatient | null
 }
 
-const NOW = () => new Date().toISOString().slice(0, 16)
+const NOW = () => {
+  const now = new Date()
+  const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(now)
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false }).format(now)
+  return `${date}T${time}`
+}
 const TOMORROW = () => {
   const d = new Date()
   d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 16)
+  const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d)
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false }).format(d)
+  return `${date}T${time}`
 }
 
 const INCLUSION_OPTIONS = [

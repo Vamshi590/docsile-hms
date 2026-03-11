@@ -5,19 +5,24 @@ import { db } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
 
 export async function getWorkupQueue(date?: string) {
-  const targetDate = date ?? new Date().toISOString().split("T")[0]
+  const targetDate = date ?? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
   const start = new Date(targetDate + "T00:00:00")
   const end = new Date(targetDate + "T23:59:59")
 
   return db.patient.findMany({
     where: {
       patientType: "OPD",
-      appointmentDate: { gte: start, lte: end },
       status: { in: ["REGISTERED", "IN_WORKUP", "WORKUP_DONE"] },
+      // Find patients by prescription date OR original appointmentDate (for newly registered with no prescription yet)
+      OR: [
+        { prescriptions: { some: { prescriptionDate: { gte: start, lte: end } } } },
+        { appointmentDate: { gte: start, lte: end } },
+      ],
     },
     orderBy: { createdAt: "asc" },
     include: {
       eyeReadings: {
+        where: { readingDate: { gte: start, lte: end } },
         orderBy: { createdAt: "desc" },
         take: 1,
       },
@@ -26,13 +31,19 @@ export async function getWorkupQueue(date?: string) {
 }
 
 export async function getPatientForWorkup(patientId: string) {
+  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+  const start = new Date(todayStr + "T00:00:00")
+  const end = new Date(todayStr + "T23:59:59")
+
   return db.patient.findUnique({
     where: { patientId },
     include: {
       eyeReadings: {
+        where: { readingDate: { gte: start, lte: end } },
         orderBy: { createdAt: "desc" },
       },
       prescriptions: {
+        where: { prescriptionDate: { gte: start, lte: end } },
         orderBy: { createdAt: "desc" },
         take: 1,
         select: { id: true, prescriptionDate: true },

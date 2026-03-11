@@ -15,7 +15,7 @@ import { PrescriptionForm, type PrescriptionFormHandle } from "./PrescriptionFor
 import { PrintReceiptsModal } from "./PrintReceiptsModal"
 import { EyeReadingForm, type EyeReadingFormHandle } from "../../workup/components/EyeReadingForm"
 import { getDoctorQueue, getPatientForConsultation } from "../actions"
-import { formatDate, formatCurrency, calculateAge, todayISO } from "@/lib/utils"
+import { cn, formatDate, formatCurrency, calculateAge, todayISO, toLocalDateISO } from "@/lib/utils"
 import type { PatientStatus } from "@/lib/types"
 
 type QueueItem = Awaited<ReturnType<typeof getDoctorQueue>>[0]
@@ -119,15 +119,15 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
   }
 
   function prevDay() {
-    const d = new Date(date)
+    const d = new Date(date + "T00:00:00")
     d.setDate(d.getDate() - 1)
-    setDate(d.toISOString().split("T")[0])
+    setDate(toLocalDateISO(d))
   }
 
   function nextDay() {
-    const d = new Date(date)
+    const d = new Date(date + "T00:00:00")
     d.setDate(d.getDate() + 1)
-    setDate(d.toISOString().split("T")[0])
+    setDate(toLocalDateISO(d))
   }
 
   const filtered = search
@@ -187,18 +187,6 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                 <span className="font-bold text-foreground">{queue.length}</span>
                 <span className="font-normal">Total</span>
               </Badge>
-              <Badge variant="destructive" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold">{queue.filter(p => ["REGISTERED", "IN_WORKUP"].includes(p.status)).length}</span>
-                <span className="font-normal">Optometrist</span>
-              </Badge>
-              <Badge variant="warning" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold">{queue.filter(p => ["WORKUP_DONE", "WITH_DOCTOR"].includes(p.status)).length}</span>
-                <span className="font-normal">Doctor</span>
-              </Badge>
-              <Badge variant="success" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold">{queue.filter(p => p.status === "COMPLETED").length}</span>
-                <span className="font-normal">Completed</span>
-              </Badge>
             </div>
           )}
         </div>
@@ -236,105 +224,120 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
       {/* ── Inline detail view ── */}
       {selectedRow ? (
         <div className="mt-5">
-          <div className="bg-white rounded-2xl border border-border overflow-hidden">
-            {loadingDetail ? (
+          {loadingDetail ? (
+            <div className="bg-white rounded-2xl border border-border overflow-hidden">
               <div className="flex flex-col items-center justify-center py-24 gap-3">
                 <Loader2 className="h-7 w-7 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">Loading patient data…</p>
               </div>
-            ) : selectedPatient ? (
-              <div className="flex">
-                {/* ── Left: Tabs (Workup + Prescription) ── */}
-                <div className="flex-1 min-w-0">
-                  <Tabs defaultValue="workup">
-                    {/* Tab header */}
-                    <div className="px-6 pt-4 pb-0 border-b border-border flex justify-between items-center">
-                      <TabsList className="bg-transparent h-auto p-0 rounded-none gap-1 -mb-px">
-                        <TabsTrigger value="workup" className={TAB_CLASS}>Workup Data</TabsTrigger>
-                        <TabsTrigger value="prescription" className={TAB_CLASS}>Prescription</TabsTrigger>
-                      </TabsList>
+            </div>
+          ) : selectedPatient ? (
+            (() => {
+              // Server already split prescriptions — use directly
+              const { todayPrescription, pastPrescriptions } = selectedPatient
 
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className="text-xs text-muted-foreground">
-                          {(() => {
-                            const today = new Date()
-                            today.setHours(0, 0, 0, 0)
-                            const lastVisit = selectedPatient.prescriptions?.find(
-                              rx => new Date(rx.prescriptionDate) < today
-                            )
-                            return lastVisit
-                              ? `Last visit: ${formatDate(lastVisit.prescriptionDate)}`
-                              : "First visit"
-                          })()}
-                        </span>
-                        <Button size="sm" onClick={handleSaveAll} disabled={savingAll}>
-                          {savingAll && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
-                          Save All
-                        </Button>
-                      </div>
+              // Only pass medical data to the form if the doctor has already filled it today
+              const existingForForm = todayPrescription && todayPrescription.status !== "BILLING_ONLY"
+                ? todayPrescription
+                : null
+
+              // eyeReadings are already filtered to today by getPatientForConsultation
+              const todayEyeReading = selectedPatient.eyeReadings?.[0] ?? null
+
+              return (
+            <div className="flex gap-4">
+              {/* ── Left: Prescription Form Card ── */}
+              <div className="flex-1 min-w-0 bg-white rounded-2xl border border-border overflow-hidden">
+                <Tabs defaultValue="workup">
+                  {/* Tab header */}
+                  <div className="px-6 pt-4 pb-0 border-b border-border flex justify-between items-center">
+                    <TabsList className="bg-transparent h-auto p-0 rounded-none gap-1 -mb-px">
+                      <TabsTrigger value="workup" className={TAB_CLASS}>Workup Data</TabsTrigger>
+                      <TabsTrigger value="prescription" className={TAB_CLASS}>Prescription</TabsTrigger>
+                    </TabsList>
+
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-xs text-muted-foreground">
+                        {pastPrescriptions.length > 0
+                          ? `Last visit: ${formatDate(pastPrescriptions[0].prescriptionDate)}`
+                          : "First visit"}
+                      </span>
+                      <Button size="sm" onClick={handleSaveAll} disabled={savingAll}>
+                        {savingAll && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                        Save All
+                      </Button>
                     </div>
-
-                    {/* ── Workup tab ── */}
-                    <TabsContent value="workup" className="mt-0">
-                      <EyeReadingForm
-                        ref={eyeReadingRef}
-                        patientId={selectedPatient.patientId}
-                        compact
-                        existingReading={
-                          selectedPatient.eyeReadings?.[0]
-                            ? JSON.stringify({
-                                autoRefractometer: selectedPatient.eyeReadings[0].autoRefractometer
-                                  ? JSON.parse(selectedPatient.eyeReadings[0].autoRefractometer) : null,
-                                glassesReading: selectedPatient.eyeReadings[0].glassesReading
-                                  ? JSON.parse(selectedPatient.eyeReadings[0].glassesReading) : null,
-                                previousPrescription: selectedPatient.eyeReadings[0].previousPrescription
-                                  ? JSON.parse(selectedPatient.eyeReadings[0].previousPrescription) : null,
-                                presentPrescription: selectedPatient.eyeReadings[0].presentPrescription
-                                  ? JSON.parse(selectedPatient.eyeReadings[0].presentPrescription) : null,
-                                clinicalFindings: selectedPatient.eyeReadings[0].clinicalFindings
-                                  ? JSON.parse(selectedPatient.eyeReadings[0].clinicalFindings) : null,
-                              })
-                            : null
-                        }
-                        onSaved={() => loadQueue()}
-                      />
-                    </TabsContent>
-
-                    {/* ── Prescription tab ── */}
-                    <TabsContent value="prescription" className="px-6 py-5 mt-0">
-                      <PrescriptionForm
-                        ref={prescriptionRef}
-                        patientId={selectedPatient.patientId}
-                        patientName={`${selectedPatient.firstName} ${selectedPatient.lastName ?? ""}`.trim()}
-                        existingPrescription={selectedPatient.prescriptions?.[0] ?? null}
-                        onSaved={() => { closeDetail(); loadQueue() }}
-                      />
-                    </TabsContent>
-                  </Tabs>
-                </div>
-
-                {/* ── Right: History (always visible) ── */}
-                <div className="w-80 shrink-0 border-l border-border overflow-y-auto max-h-[calc(100vh-12rem)]">
-                  <div className="px-4 pt-4 pb-2 border-b border-border sticky top-0 bg-white z-10">
-                    <h3 className="text-sm font-semibold text-foreground">History</h3>
                   </div>
-                  <div className="p-4">
-                    {selectedPatient.prescriptions && selectedPatient.prescriptions.length > 1 ? (
-                      <div className="space-y-3">
-                        {selectedPatient.prescriptions.slice(1).map(rx => (
-                          <PrescriptionHistoryCard key={rx.id} prescription={rx} />
-                        ))}
-                      </div>
-                    ) : (
+
+                  {/* ── Workup tab ── */}
+                  <TabsContent value="workup" className="mt-0">
+                    <EyeReadingForm
+                      ref={eyeReadingRef}
+                      patientId={selectedPatient.patientId}
+                      compact
+                      existingReading={
+                        todayEyeReading
+                          ? JSON.stringify({
+                              autoRefractometer: todayEyeReading.autoRefractometer
+                                ? JSON.parse(todayEyeReading.autoRefractometer) : null,
+                              glassesReading: todayEyeReading.glassesReading
+                                ? JSON.parse(todayEyeReading.glassesReading) : null,
+                              previousPrescription: todayEyeReading.previousPrescription
+                                ? JSON.parse(todayEyeReading.previousPrescription) : null,
+                              presentPrescription: todayEyeReading.presentPrescription
+                                ? JSON.parse(todayEyeReading.presentPrescription) : null,
+                              clinicalFindings: todayEyeReading.clinicalFindings
+                                ? JSON.parse(todayEyeReading.clinicalFindings) : null,
+                            })
+                          : null
+                      }
+                      onSaved={() => loadQueue()}
+                    />
+                  </TabsContent>
+
+                  {/* ── Prescription tab ── */}
+                  <TabsContent value="prescription" className="px-6 py-5 mt-0">
+                    <PrescriptionForm
+                      ref={prescriptionRef}
+                      patientId={selectedPatient.patientId}
+                      patientName={`${selectedPatient.firstName} ${selectedPatient.lastName ?? ""}`.trim()}
+                      existingPrescription={existingForForm}
+                      onSaved={() => { closeDetail(); loadQueue() }}
+                    />
+                  </TabsContent>
+                </Tabs>
+              </div>
+
+              {/* ── Right: History Card (fixed) ── */}
+              <div className="w-80 shrink-0 sticky top-4 self-start bg-white rounded-2xl border border-border overflow-hidden max-h-[calc(100vh-12rem)]">
+                <div className="px-4 pt-4 pb-2 border-b border-border">
+                  <h3 className="text-sm font-semibold text-foreground">History</h3>
+                </div>
+                <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(100vh-16rem)]">
+                  {/* AR Reading from today's workup */}
+                  {todayEyeReading?.autoRefractometer && (
+                    <ARReadingSummary arJson={todayEyeReading.autoRefractometer} />
+                  )}
+
+                  {pastPrescriptions.length > 0 ? (
+                    <div className="space-y-3">
+                      {pastPrescriptions.map(rx => (
+                        <PrescriptionHistoryCard key={rx.id} prescription={rx} />
+                      ))}
+                    </div>
+                  ) : (
+                    !todayEyeReading?.autoRefractometer && (
                       <div className="text-center py-16 text-muted-foreground text-sm">
                         <p>No previous prescription history</p>
                       </div>
-                    )}
-                  </div>
+                    )
+                  )}
                 </div>
               </div>
-            ) : null}
-          </div>
+            </div>
+              )
+            })()
+          ) : null}
         </div>
       ) : (
         /* ── Queue table ── */
@@ -499,7 +502,19 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                       )}
                       {isColumnVisible("status") && (
                         <TableCell>
-                          <PatientStatusBadge status={patient.status as PatientStatus} />
+                          <span className={cn("text-xs font-semibold", {
+                            "text-red-600": ["REGISTERED", "IN_WORKUP"].includes(patient.status),
+                            "text-yellow-600": ["WORKUP_DONE", "WITH_DOCTOR"].includes(patient.status),
+                            "text-green-600": patient.status === "COMPLETED",
+                            "text-blue-600": patient.status === "MEDICAL_ONLY",
+                            "text-muted-foreground": patient.status === "VISITED",
+                          })}>
+                            {patient.status === "REGISTERED" || patient.status === "IN_WORKUP" ? "Optometrist"
+                              : patient.status === "WORKUP_DONE" || patient.status === "WITH_DOCTOR" ? "Doctor"
+                              : patient.status === "COMPLETED" ? "Completed"
+                              : patient.status === "MEDICAL_ONLY" ? "Medical Only"
+                              : patient.status}
+                          </span>
                         </TableCell>
                       )}
                       {isColumnVisible("print") && (
@@ -541,56 +556,181 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
 
 // ─── Prescription History Card ─────────────────────────────────────────────────
 
+function ARReadingCompact({ arJson, label }: { arJson: string; label?: string }) {
+  try {
+    const ar = JSON.parse(arJson) as {
+      re?: { sph?: string; cyl?: string; axis?: string; va?: string }
+      le?: { sph?: string; cyl?: string; axis?: string; va?: string }
+      pd?: string
+    }
+    const hasRE = ar.re && (ar.re.sph || ar.re.cyl || ar.re.axis || ar.re.va)
+    const hasLE = ar.le && (ar.le.sph || ar.le.cyl || ar.le.axis || ar.le.va)
+    if (!hasRE && !hasLE) return null
+
+    return (
+      <div className="text-[11px] leading-relaxed">
+        {label && <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider mb-1">{label}</p>}
+        <table className="w-full">
+          <thead>
+            <tr className="text-muted-foreground/70">
+              <th className="text-left font-medium w-6"></th>
+              <th className="text-center font-medium">SPH</th>
+              <th className="text-center font-medium">CYL</th>
+              <th className="text-center font-medium">Axis</th>
+              <th className="text-center font-medium">VA</th>
+            </tr>
+          </thead>
+          <tbody className="font-medium">
+            {hasRE && (
+              <tr>
+                <td className="font-semibold text-violet-600">RE</td>
+                <td className="text-center tabular-nums">{ar.re?.sph || "-"}</td>
+                <td className="text-center tabular-nums">{ar.re?.cyl || "-"}</td>
+                <td className="text-center tabular-nums">{ar.re?.axis || "-"}</td>
+                <td className="text-center tabular-nums">{ar.re?.va || "-"}</td>
+              </tr>
+            )}
+            {hasLE && (
+              <tr>
+                <td className="font-semibold text-violet-600">LE</td>
+                <td className="text-center tabular-nums">{ar.le?.sph || "-"}</td>
+                <td className="text-center tabular-nums">{ar.le?.cyl || "-"}</td>
+                <td className="text-center tabular-nums">{ar.le?.axis || "-"}</td>
+                <td className="text-center tabular-nums">{ar.le?.va || "-"}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        {ar.pd && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">PD: <span className="font-medium text-foreground">{ar.pd}</span></p>
+        )}
+      </div>
+    )
+  } catch {
+    return null
+  }
+}
+
+function ARReadingSummary({ arJson }: { arJson: string }) {
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-2.5">
+      <ARReadingCompact arJson={arJson} label="AR Reading (Workup)" />
+    </div>
+  )
+}
+
 function PrescriptionHistoryCard({ prescription }: {
   prescription: {
     prescriptionDate: Date
     doctorName: string | null
     diagnosis: string | null
+    presentComplaint: string | null
+    previousHistory: string | null
     medicines: string
+    investigations: string
     prescriptionNumber?: string | null
+    eyeReading?: {
+      autoRefractometer: string | null
+      presentPrescription: string | null
+    } | null
   }
 }) {
   let medicines: { name: string; days: string; timing: string }[] = []
   try { medicines = JSON.parse(prescription.medicines) } catch { /* empty */ }
+  let investigations: { name: string; note?: string }[] = []
+  try { investigations = JSON.parse(prescription.investigations) } catch { /* empty */ }
+  const hasContent = prescription.presentComplaint || prescription.previousHistory || prescription.diagnosis || medicines.length > 0 || investigations.length > 0 || prescription.eyeReading?.autoRefractometer
 
   return (
-    <div className="rounded-xl border border-border bg-white overflow-hidden">
-      <div className="px-4 py-2.5 bg-muted/30 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium">{formatDate(prescription.prescriptionDate)}</span>
+    <div className="rounded-lg border border-border overflow-hidden">
+      {/* Header */}
+      <div className="px-3 py-2 bg-muted/40 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-foreground">{formatDate(prescription.prescriptionDate)}</span>
           {prescription.prescriptionNumber && (
-            <span className="text-xs font-mono text-muted-foreground">{prescription.prescriptionNumber}</span>
+            <span className="text-[10px] font-mono text-muted-foreground/70">{prescription.prescriptionNumber}</span>
           )}
         </div>
         {prescription.doctorName && (
-          <span className="text-xs text-muted-foreground">Dr. {prescription.doctorName}</span>
+          <span className="text-[10px] text-muted-foreground">Dr. {prescription.doctorName}</span>
         )}
       </div>
-      <div className="p-3 space-y-1.5">
-        {prescription.diagnosis && (
-          <p className="text-sm">
-            <span className="text-muted-foreground text-xs font-medium">Dx: </span>
-            <span className="font-medium">{prescription.diagnosis}</span>
-          </p>
-        )}
-        {medicines.length > 0 && (
-          <div className="space-y-1 pt-0.5">
-            {medicines.slice(0, 4).map((m, i) => (
-              <p key={i} className="text-xs text-muted-foreground">
-                {m.name}
-                {m.days && ` — ${m.days} days`}
-                {m.timing && ` — ${m.timing}`}
-              </p>
-            ))}
-            {medicines.length > 4 && (
-              <p className="text-xs text-muted-foreground">+{medicines.length - 4} more</p>
-            )}
-          </div>
-        )}
-        {medicines.length === 0 && !prescription.diagnosis && (
-          <p className="text-xs text-muted-foreground italic">No details recorded</p>
-        )}
-      </div>
+
+      {!hasContent ? (
+        <div className="px-3 py-3">
+          <p className="text-[11px] text-muted-foreground italic">No details recorded</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border/60">
+          {/* AR Reading — compact inline table */}
+          {prescription.eyeReading?.autoRefractometer && (
+            <div className="px-3 py-2 bg-violet-50/30">
+              <ARReadingCompact arJson={prescription.eyeReading.autoRefractometer} label="AR" />
+            </div>
+          )}
+
+          {/* Clinical notes block */}
+          {(prescription.presentComplaint || prescription.previousHistory || prescription.diagnosis) && (
+            <div className="px-3 py-2 space-y-1">
+              {prescription.presentComplaint && (
+                <div className="flex gap-1.5">
+                  <span className="text-[10px] font-semibold text-muted-foreground shrink-0 w-6 pt-px">C/O</span>
+                  <span className="text-[11px] text-foreground leading-snug">{prescription.presentComplaint}</span>
+                </div>
+              )}
+              {prescription.previousHistory && (
+                <div className="flex gap-1.5">
+                  <span className="text-[10px] font-semibold text-muted-foreground shrink-0 w-6 pt-px">Hx</span>
+                  <span className="text-[11px] text-foreground leading-snug">{prescription.previousHistory}</span>
+                </div>
+              )}
+              {prescription.diagnosis && (
+                <div className="flex gap-1.5">
+                  <span className="text-[10px] font-semibold text-amber-600 shrink-0 w-6 pt-px">Dx</span>
+                  <span className="text-[11px] font-semibold text-foreground leading-snug">{prescription.diagnosis}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Medicines */}
+          {medicines.length > 0 && (
+            <div className="px-3 py-2">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Rx</p>
+              <div className="space-y-0.5">
+                {medicines.slice(0, 5).map((m, i) => (
+                  <p key={i} className="text-[11px] leading-snug">
+                    <span className="text-foreground">{m.name}</span>
+                    {(m.timing || m.days) && (
+                      <span className="text-muted-foreground">
+                        {m.timing && ` ${m.timing}`}
+                        {m.days && ` · ${m.days}d`}
+                      </span>
+                    )}
+                  </p>
+                ))}
+                {medicines.length > 5 && (
+                  <p className="text-[10px] text-muted-foreground">+{medicines.length - 5} more</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Investigations */}
+          {investigations.length > 0 && (
+            <div className="px-3 py-2">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Inv</p>
+              <div className="flex flex-wrap gap-1">
+                {investigations.map((inv, i) => (
+                  <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
+                    {inv.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

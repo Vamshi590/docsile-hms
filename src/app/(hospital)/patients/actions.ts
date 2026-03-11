@@ -86,11 +86,18 @@ export async function getPatients(filters: {
   const { date, search, status, type = "OPD" } = filters
 
   const where: Record<string, unknown> = { patientType: type }
+  const andConditions: Record<string, unknown>[] = []
 
   if (date) {
     const start = new Date(date + "T00:00:00")
     const end = new Date(date + "T23:59:59")
-    where.appointmentDate = { gte: start, lte: end }
+    // Show patients who have a prescription on this date OR were originally registered on this date
+    andConditions.push({
+      OR: [
+        { prescriptions: { some: { prescriptionDate: { gte: start, lte: end } } } },
+        { appointmentDate: { gte: start, lte: end } },
+      ],
+    })
   }
 
   if (status) {
@@ -98,23 +105,37 @@ export async function getPatients(filters: {
   }
 
   if (search) {
-    where.OR = [
-      { patientId: { contains: search } },
-      { firstName: { contains: search } },
-      { lastName: { contains: search } },
-      { phone: { contains: search } },
-    ]
+    andConditions.push({
+      OR: [
+        { patientId: { contains: search } },
+        { firstName: { contains: search } },
+        { lastName: { contains: search } },
+        { phone: { contains: search } },
+      ],
+    })
+  }
+
+  if (andConditions.length > 0) {
+    where.AND = andConditions
+  }
+
+  // Build prescription include: filter to selected date if provided
+  const prescriptionInclude: Record<string, unknown> = {
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    include: { items: true, payments: true },
+  }
+  if (date) {
+    const start = new Date(date + "T00:00:00")
+    const end = new Date(date + "T23:59:59")
+    prescriptionInclude.where = { prescriptionDate: { gte: start, lte: end } }
   }
 
   const patients = await db.patient.findMany({
     where,
     orderBy: { createdAt: "asc" },
     include: {
-      prescriptions: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        include: { items: true, payments: true },
-      },
+      prescriptions: prescriptionInclude as never,
     },
   })
 
@@ -242,53 +263,119 @@ export async function createPrescriptionWithBilling(data: {
     })
     if (!patient) return { success: false as const, error: "Patient not found" }
 
-    const prescriptionNumber = await getNextPrescriptionNumber()
-    const subtotal = iv.services.reduce((sum, s) => sum + s.amount, 0)
-    const total = subtotal - iv.discount
-    const balanceDue = total - iv.amountPaid
+    const newSubtotal = iv.services.reduce((sum, s) => sum + s.amount, 0)
 
-    const prescription = await db.prescription.create({
-      data: {
-        prescriptionNumber,
+    // Check if there's already a prescription for today — add to it
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const todayEnd = new Date()
+    todayEnd.setHours(23, 59, 59, 999)
+
+    const existingPrescription = await db.prescription.findFirst({
+      where: {
         patientId: patient.patientId,
-        patientType: patient.patientType,
-        doctorName: null,
-        medicines: "[]",
-        investigations: "[]",
-        subtotal,
-        discount: iv.discount,
-        discountReason: iv.discountReason ?? null,
-        total,
-        amountPaid: iv.amountPaid,
-        balanceDue,
-        paymentMode: iv.paymentMode,
-        paymentDate: new Date(),
-        status: balanceDue <= 0 ? "BILLING_ONLY" : "BILLING_ONLY",
-        prescriptionDate: new Date(),
-        notes: iv.notes ?? null,
-        createdBy: user.id,
-        items: {
-          create: iv.services.map((s, i) => ({
-            description: s.description,
-            category: s.category ?? null,
-            quantity: s.quantity,
-            unitPrice: s.unitPrice,
-            amount: s.amount,
-            sortOrder: i,
-          })),
-        },
+        prescriptionDate: { gte: todayStart, lte: todayEnd },
       },
+      orderBy: { createdAt: "desc" },
+      include: { items: true },
     })
 
-    if (iv.amountPaid > 0) {
-      await db.payment.create({
+    let prescription
+    let prescriptionNumber: string | null = null
+
+    if (existingPrescription) {
+      // Add items to existing today's prescription
+      const updatedSubtotal = existingPrescription.subtotal + newSubtotal
+      const updatedDiscount = existingPrescription.discount + iv.discount
+      const updatedTotal = updatedSubtotal - updatedDiscount
+      const updatedAmountPaid = existingPrescription.amountPaid + iv.amountPaid
+      const updatedBalanceDue = updatedTotal - updatedAmountPaid
+
+      prescription = await db.prescription.update({
+        where: { id: existingPrescription.id },
         data: {
-          prescriptionId: prescription.id,
-          amount: iv.amountPaid,
-          paymentMode: iv.paymentMode,
-          receivedBy: user.id,
+          subtotal: updatedSubtotal,
+          discount: updatedDiscount,
+          discountReason: iv.discountReason ?? existingPrescription.discountReason,
+          total: updatedTotal,
+          amountPaid: updatedAmountPaid,
+          balanceDue: updatedBalanceDue,
+          notes: iv.notes
+            ? [existingPrescription.notes, iv.notes].filter(Boolean).join("; ")
+            : existingPrescription.notes,
+          items: {
+            create: iv.services.map((s, i) => ({
+              description: s.description,
+              category: s.category ?? null,
+              quantity: s.quantity,
+              unitPrice: s.unitPrice,
+              amount: s.amount,
+              sortOrder: existingPrescription.items.length + i,
+            })),
+          },
         },
       })
+      prescriptionNumber = existingPrescription.prescriptionNumber
+
+      if (iv.amountPaid > 0) {
+        await db.payment.create({
+          data: {
+            prescriptionId: existingPrescription.id,
+            amount: iv.amountPaid,
+            paymentMode: iv.paymentMode,
+            receivedBy: user.id,
+          },
+        })
+      }
+    } else {
+      // No prescription today — create a new one
+      prescriptionNumber = await getNextPrescriptionNumber()
+      const total = newSubtotal - iv.discount
+      const balanceDue = total - iv.amountPaid
+
+      prescription = await db.prescription.create({
+        data: {
+          prescriptionNumber,
+          patientId: patient.patientId,
+          patientType: patient.patientType,
+          doctorName: null,
+          medicines: "[]",
+          investigations: "[]",
+          subtotal: newSubtotal,
+          discount: iv.discount,
+          discountReason: iv.discountReason ?? null,
+          total,
+          amountPaid: iv.amountPaid,
+          balanceDue,
+          paymentMode: iv.paymentMode,
+          paymentDate: new Date(),
+          status: "BILLING_ONLY",
+          prescriptionDate: new Date(),
+          notes: iv.notes ?? null,
+          createdBy: user.id,
+          items: {
+            create: iv.services.map((s, i) => ({
+              description: s.description,
+              category: s.category ?? null,
+              quantity: s.quantity,
+              unitPrice: s.unitPrice,
+              amount: s.amount,
+              sortOrder: i,
+            })),
+          },
+        },
+      })
+
+      if (iv.amountPaid > 0) {
+        await db.payment.create({
+          data: {
+            prescriptionId: prescription.id,
+            amount: iv.amountPaid,
+            paymentMode: iv.paymentMode,
+            receivedBy: user.id,
+          },
+        })
+      }
     }
 
     revalidatePath("/patients")
@@ -354,55 +441,129 @@ export async function addServiceToPatient(data: {
     })
     if (!patient) return { success: false as const, error: "Patient not found" }
 
-    const prescriptionNumber = await getNextPrescriptionNumber()
-    const subtotal = data.services.reduce((s, item) => s + item.amount, 0)
-    const total = subtotal - data.discount
-    const balanceDue = total - data.amountPaid
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const todayEnd = new Date()
+    todayEnd.setHours(23, 59, 59, 999)
 
-    const prescription = await db.prescription.create({
-      data: {
-        prescriptionNumber,
+    // Check for existing prescription today — add items to it instead of creating a new one
+    const existingPrescription = await db.prescription.findFirst({
+      where: {
         patientId: patient.patientId,
-        patientType: patient.patientType,
-        doctorName: null,
-        medicines: "[]",
-        investigations: "[]",
-        subtotal,
-        discount: data.discount,
-        total,
-        amountPaid: data.amountPaid,
-        balanceDue,
-        paymentMode: data.paymentMode,
-        paymentDate: new Date(),
-        status: "BILLING_ONLY",
-        prescriptionDate: new Date(),
-        notes: data.notes ?? null,
-        createdBy: user.id,
-        items: {
-          create: data.services.map((s, i) => ({
-            description: s.description,
-            category: s.category ?? null,
-            quantity: s.quantity,
-            unitPrice: s.unitPrice,
-            amount: s.amount,
-            sortOrder: i,
-          })),
+        prescriptionDate: { gte: todayStart, lte: todayEnd },
+      },
+      orderBy: { createdAt: "desc" },
+      include: { items: true },
+    })
+
+    const newSubtotal = data.services.reduce((s, item) => s + item.amount, 0)
+    let prescription
+
+    if (existingPrescription) {
+      // Add new items to the existing prescription and update totals
+      const updatedSubtotal = existingPrescription.subtotal + newSubtotal
+      const updatedDiscount = existingPrescription.discount + data.discount
+      const updatedTotal = updatedSubtotal - updatedDiscount
+      const updatedAmountPaid = existingPrescription.amountPaid + data.amountPaid
+      const updatedBalanceDue = updatedTotal - updatedAmountPaid
+
+      prescription = await db.prescription.update({
+        where: { id: existingPrescription.id },
+        data: {
+          subtotal: updatedSubtotal,
+          discount: updatedDiscount,
+          total: updatedTotal,
+          amountPaid: updatedAmountPaid,
+          balanceDue: updatedBalanceDue,
+          notes: data.notes
+            ? [existingPrescription.notes, data.notes].filter(Boolean).join("; ")
+            : existingPrescription.notes,
+          items: {
+            create: data.services.map((s, i) => ({
+              description: s.description,
+              category: s.category ?? null,
+              quantity: s.quantity,
+              unitPrice: s.unitPrice,
+              amount: s.amount,
+              sortOrder: existingPrescription.items.length + i,
+            })),
+          },
         },
+      })
+
+      if (data.amountPaid > 0) {
+        await db.payment.create({
+          data: {
+            prescriptionId: existingPrescription.id,
+            amount: data.amountPaid,
+            paymentMode: data.paymentMode,
+            receivedBy: user.id,
+          },
+        })
+      }
+    } else {
+      // No prescription today — create a new one for this visit
+      const prescriptionNumber = await getNextPrescriptionNumber()
+      const total = newSubtotal - data.discount
+      const balanceDue = total - data.amountPaid
+
+      prescription = await db.prescription.create({
+        data: {
+          prescriptionNumber,
+          patientId: patient.patientId,
+          patientType: patient.patientType,
+          doctorName: null,
+          medicines: "[]",
+          investigations: "[]",
+          subtotal: newSubtotal,
+          discount: data.discount,
+          total,
+          amountPaid: data.amountPaid,
+          balanceDue,
+          paymentMode: data.paymentMode,
+          paymentDate: new Date(),
+          status: "BILLING_ONLY",
+          prescriptionDate: new Date(),
+          notes: data.notes ?? null,
+          createdBy: user.id,
+          items: {
+            create: data.services.map((s, i) => ({
+              description: s.description,
+              category: s.category ?? null,
+              quantity: s.quantity,
+              unitPrice: s.unitPrice,
+              amount: s.amount,
+              sortOrder: i,
+            })),
+          },
+        },
+      })
+
+      if (data.amountPaid > 0) {
+        await db.payment.create({
+          data: {
+            prescriptionId: prescription.id,
+            amount: data.amountPaid,
+            paymentMode: data.paymentMode,
+            receivedBy: user.id,
+          },
+        })
+      }
+    }
+
+    // Re-register the patient so they appear in workup & doctor queues
+    // NOTE: Do NOT overwrite appointmentDate — it preserves the original registration date
+    await db.patient.update({
+      where: { patientId: data.patientId },
+      data: {
+        status: "REGISTERED",
+        updatedBy: user.id,
       },
     })
 
-    if (data.amountPaid > 0) {
-      await db.payment.create({
-        data: {
-          prescriptionId: prescription.id,
-          amount: data.amountPaid,
-          paymentMode: data.paymentMode,
-          receivedBy: user.id,
-        },
-      })
-    }
-
     revalidatePath("/patients")
+    revalidatePath("/workup")
+    revalidatePath("/doctor")
     return { success: true as const, data: prescription }
   } catch {
     return { success: false as const, error: "Failed to add service" }

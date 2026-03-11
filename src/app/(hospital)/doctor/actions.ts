@@ -6,20 +6,29 @@ import { requireAuth } from "@/lib/auth"
 import { z } from "zod"
 
 export async function getDoctorQueue(date?: string) {
-  const targetDate = date ?? new Date().toISOString().split("T")[0]
+  const targetDate = date ?? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
   const start = new Date(targetDate + "T00:00:00")
   const end = new Date(targetDate + "T23:59:59")
 
   return db.patient.findMany({
     where: {
       patientType: "OPD",
-      appointmentDate: { gte: start, lte: end },
       status: { in: ["WORKUP_DONE", "WITH_DOCTOR", "REGISTERED", "COMPLETED", "MEDICAL_ONLY"] },
+      // Find patients by prescription date OR original appointmentDate
+      OR: [
+        { prescriptions: { some: { prescriptionDate: { gte: start, lte: end } } } },
+        { appointmentDate: { gte: start, lte: end } },
+      ],
     },
     orderBy: { createdAt: "asc" },
     include: {
-      eyeReadings: { orderBy: { createdAt: "desc" }, take: 1 },
+      eyeReadings: {
+        where: { readingDate: { gte: start, lte: end } },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
       prescriptions: {
+        where: { prescriptionDate: { gte: start, lte: end } },
         orderBy: { createdAt: "desc" },
         take: 1,
         include: { items: true },
@@ -33,17 +42,40 @@ export async function getDoctorQueue(date?: string) {
 }
 
 export async function getPatientForConsultation(patientId: string) {
-  return db.patient.findUnique({
+  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+  const start = new Date(todayStr + "T00:00:00")
+  const end = new Date(todayStr + "T23:59:59")
+
+  const patient = await db.patient.findUnique({
     where: { patientId },
     include: {
-      eyeReadings: { orderBy: { createdAt: "desc" } },
+      eyeReadings: {
+        where: { readingDate: { gte: start, lte: end } },
+        orderBy: { createdAt: "desc" },
+      },
       prescriptions: {
         include: { items: true, payments: true, eyeReading: true },
         orderBy: { createdAt: "desc" },
-        take: 3,
       },
     },
   })
+
+  if (!patient) return null
+
+  // Split prescriptions into today vs past on the server (reliable date handling)
+  const todayPrescription = patient.prescriptions.find(
+    rx => rx.prescriptionDate >= start && rx.prescriptionDate <= end
+  ) ?? null
+
+  const pastPrescriptions = patient.prescriptions.filter(
+    rx => !todayPrescription || rx.id !== todayPrescription.id
+  )
+
+  return {
+    ...JSON.parse(JSON.stringify(patient)) as typeof patient,
+    todayPrescription: todayPrescription as typeof patient.prescriptions[0] | null,
+    pastPrescriptions: pastPrescriptions as typeof patient.prescriptions,
+  }
 }
 
 const PrescriptionSchema = z.object({
@@ -228,12 +260,21 @@ export async function updatePatientToWithDoctor(patientId: string) {
 }
 
 export async function getReceiptData(patientId: string) {
+  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date())
+  const start = new Date(todayStr + "T00:00:00")
+  const end = new Date(todayStr + "T23:59:59")
+
   const [patient, hospital] = await Promise.all([
     db.patient.findUnique({
       where: { patientId },
       include: {
-        eyeReadings: { orderBy: { createdAt: "desc" }, take: 1 },
+        eyeReadings: {
+          where: { readingDate: { gte: start, lte: end } },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
         prescriptions: {
+          where: { prescriptionDate: { gte: start, lte: end } },
           include: { items: true, payments: true },
           orderBy: { createdAt: "desc" },
           take: 1,

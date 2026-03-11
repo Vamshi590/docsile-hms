@@ -223,7 +223,7 @@ export default function StaffPage({ hospitalName }: { hospitalName: string }) {
       email: s.email, password: "", fullName: s.fullName, phone: s.phone ?? "",
       role: s.role, department: s.department ?? "", designation: s.designation ?? "",
       employeeId: s.employeeId ?? "", qualifications: s.qualifications ?? "",
-      joiningDate: s.joiningDate ? new Date(s.joiningDate).toISOString().split("T")[0] : "",
+      joiningDate: s.joiningDate ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(s.joiningDate)) : "",
       address: s.address ?? "", emergencyContact: s.emergencyContact ?? "", bloodGroup: s.bloodGroup ?? "",
       salary: s.salary != null ? String(s.salary) : "", salaryType: s.salaryType ?? "",
     })

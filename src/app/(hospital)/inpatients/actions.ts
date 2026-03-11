@@ -298,7 +298,7 @@ export async function addInPatientPayment(data: {
 
     const existing: PaymentRecord[] = ip.paymentRecords ? JSON.parse(ip.paymentRecords) : []
     const newRecord: PaymentRecord = {
-      date: data.date ?? new Date().toISOString().split("T")[0],
+      date: data.date ?? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()),
       amountType: data.amountType,
       paymentMode: data.paymentMode,
       amount: data.amount,

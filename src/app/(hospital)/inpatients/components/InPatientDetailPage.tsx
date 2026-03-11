@@ -118,7 +118,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
   const [savingRx, setSavingRx] = useState(false)
 
   // ── Discharge state (form variant) ──
-  const [dischargeDate, setDischargeDate] = useState(new Date().toISOString().split("T")[0])
+  const [dischargeDate, setDischargeDate] = useState(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()))
   const [dischargeNotes, setDischargeNotes] = useState("")
   const [dischargeDiagnosis, setDischargeDiagnosis] = useState("")
   const [conditionAtDischarge, setConditionAtDischarge] = useState("")
@@ -189,7 +189,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
       setDischargeNotes(dischargeSummary.notes ?? "")
     }
     if (inpatient.dischargeDate) {
-      setDischargeDate(new Date(inpatient.dischargeDate).toISOString().split("T")[0])
+      setDischargeDate(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(inpatient.dischargeDate)))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inpatient.id])

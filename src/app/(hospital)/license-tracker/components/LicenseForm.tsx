@@ -56,12 +56,12 @@ export function LicenseForm({
   const [category, setCategory] = useState(license?.category ?? "")
   const [issueDate, setIssueDate] = useState(
     license?.issueDate
-      ? new Date(license.issueDate).toISOString().split("T")[0]
+      ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(license.issueDate))
       : ""
   )
   const [expiryDate, setExpiryDate] = useState(
     license?.expiryDate
-      ? new Date(license.expiryDate).toISOString().split("T")[0]
+      ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(license.expiryDate))
       : ""
   )
   const [reminderDays, setReminderDays] = useState(license?.reminderDays?.toString() ?? "30")

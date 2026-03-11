@@ -103,7 +103,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
         if (m.length > 0) return m.map((x: Medicine) => ({ ...x, id: x.id ?? Math.random().toString() }))
       } catch { /* fall through */ }
     }
-    return [{ id: Math.random().toString(), name: "", days: "7", timing: "1-1-1", note: "" }]
+    return [{ id: Math.random().toString(), name: "", days: "", timing: "", note: "" }]
   })
 
   const [investigations, setInvestigations] = useState<Investigation[]>(() => {
@@ -119,9 +119,12 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
     ]
   })
 
-  const [followUpDate, setFollowUpDate] = useState(
-    existingPrescription?.followUpDate ? formatDate(existingPrescription.followUpDate) : ""
-  )
+  const [followUpDate, setFollowUpDate] = useState(() => {
+    if (!existingPrescription?.followUpDate) return ""
+    const d = new Date(existingPrescription.followUpDate)
+    return isNaN(d.getTime()) ? "" : new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d)
+  })
+  const [followUpDays, setFollowUpDays] = useState("")
   const [notes, setNotes] = useState(existingPrescription?.notes ?? "")
   const [submitting, setSubmitting] = useState(false)
 
@@ -152,7 +155,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
   }, [])
 
   function addMedicine() {
-    setMedicines(prev => [...prev, { id: Math.random().toString(), name: "", days: "7", timing: "1-1-1", note: "" }])
+    setMedicines(prev => [...prev, { id: Math.random().toString(), name: "", days: "", timing: "", note: "" }])
   }
 
   function removeMedicine(id: string) {
@@ -195,7 +198,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
     if (t.followUpDays) {
       const d = new Date()
       d.setDate(d.getDate() + t.followUpDays)
-      setFollowUpDate(d.toISOString().split("T")[0])
+      setFollowUpDate(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d))
     }
     setTemplateSearch("")
     setShowTemplateList(false)
@@ -476,11 +479,34 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
         <div className="p-4 grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label>Follow-up Date</Label>
-            <Input
-              type="date"
-              value={followUpDate}
-              onChange={e => setFollowUpDate(e.target.value)}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min="1"
+                value={followUpDays}
+                onChange={e => {
+                  const days = e.target.value
+                  setFollowUpDays(days)
+                  if (days && parseInt(days) > 0) {
+                    const d = new Date()
+                    d.setDate(d.getDate() + parseInt(days))
+                    setFollowUpDate(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d))
+                  }
+                }}
+                placeholder="Days"
+                className="w-20 shrink-0"
+              />
+              <span className="text-xs text-muted-foreground shrink-0">days</span>
+              <Input
+                type="date"
+                value={followUpDate}
+                onChange={e => {
+                  setFollowUpDate(e.target.value)
+                  setFollowUpDays("")
+                }}
+                className="flex-1"
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Additional Notes</Label>

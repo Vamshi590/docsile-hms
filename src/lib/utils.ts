@@ -61,9 +61,26 @@ export function formatCurrency(amount: number | string | null | undefined): stri
   }).format(num)
 }
 
-/** Get today's date as ISO string (YYYY-MM-DD) */
+/** Convert a Date to YYYY-MM-DD string in IST (Asia/Kolkata) */
+export function toLocalDateISO(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(date)
+}
+
+/** Convert a Date to YYYY-MM-DDTHH:mm string in IST (Asia/Kolkata) */
+export function toLocalDateTimeISO(date: Date = new Date()): string {
+  const d = toLocalDateISO(date)
+  const t = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date)
+  return `${d}T${t}`
+}
+
+/** Get today's date as YYYY-MM-DD string in IST */
 export function todayISO(): string {
-  return new Date().toISOString().split("T")[0]
+  return toLocalDateISO()
 }
 
 /** Convert YYYY-MM-DD string to Date */

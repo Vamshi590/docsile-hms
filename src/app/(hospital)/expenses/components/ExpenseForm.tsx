@@ -41,7 +41,7 @@ export function ExpenseForm({
   const [categoryId, setCategoryId] = useState(expense?.categoryId ?? (categories[0]?.id ?? ""))
   const [date, setDate] = useState(
     expense?.date
-      ? new Date(expense.date).toISOString().split("T")[0]
+      ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(expense.date))
       : todayISO()
   )
   const [reason, setReason] = useState(expense?.reason ?? "")

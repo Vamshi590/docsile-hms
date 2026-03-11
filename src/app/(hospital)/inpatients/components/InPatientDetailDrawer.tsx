@@ -76,7 +76,7 @@ export function InPatientDetailDrawer({ inpatient, open, onClose, onUpdate }: Pr
   const [paymentMode, setPaymentMode] = useState("Cash")
   const [amountType, setAmountType] = useState("Partial")
   const [paymentNotes, setPaymentNotes] = useState("")
-  const [dischargeDate, setDischargeDate] = useState(new Date().toISOString().split("T")[0])
+  const [dischargeDate, setDischargeDate] = useState(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()))
   const [dischargeNotes, setDischargeNotes] = useState("")
   const [submitting, setSubmitting] = useState(false)
 

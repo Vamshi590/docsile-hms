@@ -89,7 +89,7 @@ export function InsuranceBillPreview({ claimId, billType, onBack }: Props) {
       })
 
       setBillingItems(items.length > 0 ? items : [{ particulars: "", amount: 0 }])
-      setBillDate(c.createdAt.toISOString ? c.createdAt.toISOString().split("T")[0] : String(c.createdAt).split("T")[0])
+      setBillDate(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(c.createdAt)))
       setTotalAmount(c.packageAmount)
       setDiscountAmount(c.discount)
       setNetAmount(c.totalBillAmount)
