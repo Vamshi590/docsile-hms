@@ -143,7 +143,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
   useEffect(() => {
     async function loadOptions() {
       const [meds, invs, complaints, histories, diags, tmplts] = await Promise.all([
-        getMedicineMaster().then(m => m.map(x => x.name)),
+        getMedicineMaster(),
         getInvestigationMaster().then(i => i.map(x => x.name)),
         getDropdownOptions("presentComplaint"),
         getDropdownOptions("previousHistory"),
