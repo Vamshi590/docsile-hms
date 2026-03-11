@@ -1701,7 +1701,7 @@ function PackageDialog({ open, onClose, editPkg, onSaved }: {
               <Label>Discount (₹)</Label>
               <Input
                 type="number"
-                value={discount}
+                value={discount || ""}
                 onChange={e => setDiscount(parseFloat(e.target.value) || 0)}
                 className="mt-1 w-28"
                 min={0}
@@ -1727,7 +1727,7 @@ function PackageDialog({ open, onClose, editPkg, onSaved }: {
                   </Select>
                   <Input
                     type="number"
-                    value={incl.amount}
+                    value={incl.amount || ""}
                     onChange={e => updateInclusion(i, "amount", e.target.value)}
                     placeholder="Amount"
                     className="w-28 bg-white"
@@ -1749,8 +1749,8 @@ function PackageDialog({ open, onClose, editPkg, onSaved }: {
                     {incl.subItems.map((sub, si) => (
                       <div key={si} className="flex items-center gap-2 mb-1">
                         <Input value={sub.itemName} onChange={e => updateSubItem(i, si, "itemName", e.target.value)} placeholder="Item name" className="flex-1 h-8 text-xs bg-white" />
-                        <Input type="number" value={sub.quantity} onChange={e => updateSubItem(i, si, "quantity", e.target.value)} placeholder="Qty" className="w-16 h-8 text-xs bg-white" min={0} onWheel={e => e.currentTarget.blur()} />
-                        <Input type="number" value={sub.rate} onChange={e => updateSubItem(i, si, "rate", e.target.value)} placeholder="Rate" className="w-20 h-8 text-xs bg-white" min={0} onWheel={e => e.currentTarget.blur()} />
+                        <Input type="number" value={sub.quantity || ""} onChange={e => updateSubItem(i, si, "quantity", e.target.value)} placeholder="Qty" className="w-16 h-8 text-xs bg-white" min={0} onWheel={e => e.currentTarget.blur()} />
+                        <Input type="number" value={sub.rate || ""} onChange={e => updateSubItem(i, si, "rate", e.target.value)} placeholder="Rate" className="w-20 h-8 text-xs bg-white" min={0} onWheel={e => e.currentTarget.blur()} />
                         <span className="text-xs w-16 text-right">₹{sub.amount.toLocaleString("en-IN")}</span>
                         <Button type="button" onClick={() => removeSubItem(i, si)} size="icon" variant="ghost" className="shrink-0 w-6 h-6 text-red-500 text-xs">×</Button>
                       </div>
