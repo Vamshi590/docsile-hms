@@ -171,7 +171,7 @@ export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
                   <Settings className="h-[18px] w-[18px] shrink-0" />
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="right">Settings</TooltipContent>
+              <TooltipContent side="right">Configurations</TooltipContent>
             </Tooltip>
           ) : (
             <Link
@@ -184,7 +184,7 @@ export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
               )}
             >
               <Settings className="h-[18px] w-[18px] shrink-0" />
-              <span>Settings</span>
+              <span>Configurations</span>
             </Link>
           )}
 

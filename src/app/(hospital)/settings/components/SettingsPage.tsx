@@ -41,6 +41,10 @@ import {
   createPredefinedPackage,
   updatePredefinedPackage,
   deletePredefinedPackage,
+  getMedicineMasterList,
+  createMedicineMaster,
+  updateMedicineMaster,
+  deleteMedicineMaster,
 } from "../actions"
 import type { ServiceTemplate, PackageInclusion } from "@/lib/types"
 import { EditableCombobox } from "@/components/ui/combobox"
@@ -145,6 +149,20 @@ type PrescriptionTemplateRow = {
   updatedAt: Date
 }
 
+type MedicineMasterRow = {
+  id: string
+  name: string
+  category: string | null
+  defaultTiming: string | null
+  defaultDays: string | null
+  note: string | null
+  isActive: boolean
+  sortOrder: number
+  createdBy: string
+  createdAt: Date
+  updatedAt: Date
+}
+
 type HospitalProfile = {
   id: string
   name: string
@@ -181,7 +199,7 @@ export default function SettingsPage({ hospitalName }: { hospitalName: string })
   return (
     <div className="space-y-0">
       <PageHeader
-        title="Settings"
+        title="Configurations"
         description={hospitalName}
       />
 
@@ -193,6 +211,7 @@ export default function SettingsPage({ hospitalName }: { hospitalName: string })
                 [
                   { value: "services",      label: "Service Templates" },
                   { value: "prescriptions", label: "Prescription Templates" },
+                  { value: "medicines",     label: "Medicine Templates" },
                   { value: "packages",      label: "IPD Packages" },
                   { value: "hospital",      label: "Hospital Profile" },
                   { value: "users",         label: "Users" },
@@ -210,6 +229,7 @@ export default function SettingsPage({ hospitalName }: { hospitalName: string })
           </div>
           <TabsContent value="services"><ServicesTab /></TabsContent>
           <TabsContent value="prescriptions"><PrescriptionsTab /></TabsContent>
+          <TabsContent value="medicines"><MedicinesTab /></TabsContent>
           <TabsContent value="packages"><PackagesTab /></TabsContent>
           <TabsContent value="hospital"><HospitalTab /></TabsContent>
           <TabsContent value="users"><UsersTab /></TabsContent>
@@ -267,37 +287,35 @@ function ServicesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex gap-2 items-center flex-wrap">
-          <Input
-            placeholder="Search services..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-56"
+      <div className="flex items-center gap-3">
+        <Input
+          placeholder="Search services..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-56 h-9"
+        />
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-40 h-9 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {["All", ...SERVICE_CATEGORIES].map(cat => (
+              <SelectItem key={cat} value={cat}>{cat === "All" ? "All Categories" : cat}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1.5">
+          <Checkbox
+            id="show-inactive"
+            checked={showInactive}
+            onCheckedChange={checked => setShowInactive(checked as boolean)}
           />
-          {["All", ...SERVICE_CATEGORIES].map(cat => (
-            <Button
-              key={cat}
-              size="sm"
-              variant={categoryFilter === cat ? "default" : "ghost"}
-              className="rounded-full text-xs h-8 px-3"
-              onClick={() => setCategoryFilter(cat)}
-            >
-              {cat}
-            </Button>
-          ))}
-          <div className="flex items-center gap-1.5 ml-2">
-            <Checkbox
-              id="show-inactive"
-              checked={showInactive}
-              onCheckedChange={checked => setShowInactive(checked as boolean)}
-            />
-            <Label htmlFor="show-inactive" className="text-sm text-muted-foreground cursor-pointer font-normal">
-              Show inactive
-            </Label>
-          </div>
+          <Label htmlFor="show-inactive" className="text-sm text-muted-foreground cursor-pointer font-normal">
+            Show inactive
+          </Label>
         </div>
-        <Button onClick={() => setAddOpen(true)}>+ Add Service</Button>
+        <div className="flex-1" />
+        <Button size="sm" className="h-9" onClick={() => setAddOpen(true)}>+ Add Service</Button>
       </div>
 
       <div className="rounded-xl border border-border bg-white overflow-hidden">
@@ -639,41 +657,47 @@ function HospitalTab() {
   if (loading) return <div className="space-y-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
 
   return (
-    <div className="max-w-xl space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
-          <Label>Hospital Name *</Label>
-          <Input value={name} onChange={e => setName(e.target.value)} className="mt-1" placeholder="Full hospital name" />
+    <div className="max-w-xl">
+      <div className="rounded-xl border border-border bg-white p-6 space-y-5">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Hospital Name <span className="text-destructive">*</span></Label>
+            <Input value={name} onChange={e => setName(e.target.value)} className="mt-1.5" placeholder="Full hospital name" />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Display Name</Label>
+            <Input value={displayName} onChange={e => setDisplayName(e.target.value)} className="mt-1.5" placeholder="Shorter name shown in app" />
+          </div>
         </div>
-        <div className="col-span-2">
-          <Label>Display Name</Label>
-          <Input value={displayName} onChange={e => setDisplayName(e.target.value)} className="mt-1" placeholder="Shorter name shown in app" />
+
+        <div className="border-t border-border pt-4 grid grid-cols-2 gap-4">
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Phone</Label>
+            <Input value={phone} onChange={e => setPhone(e.target.value)} className="mt-1.5" placeholder="Contact number" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Email</Label>
+            <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1.5" placeholder="contact@hospital.com" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Website</Label>
+            <Input value={website} onChange={e => setWebsite(e.target.value)} className="mt-1.5" placeholder="www.hospital.com" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Registration No.</Label>
+            <Input value={registrationNo} onChange={e => setRegistrationNo(e.target.value)} className="mt-1.5" placeholder="MCI registration number" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">GSTIN</Label>
+            <Input value={gstin} onChange={e => setGstin(e.target.value)} className="mt-1.5" placeholder="GST identification number" />
+          </div>
         </div>
-        <div>
-          <Label>Phone</Label>
-          <Input value={phone} onChange={e => setPhone(e.target.value)} className="mt-1" placeholder="Contact number" />
+
+        <div className="border-t border-border pt-4 flex justify-end">
+          <Button onClick={handleSave} disabled={saving} size="sm" className="h-9">
+            {saving ? "Saving..." : "Save Profile"}
+          </Button>
         </div>
-        <div>
-          <Label>Email</Label>
-          <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1" placeholder="contact@hospital.com" />
-        </div>
-        <div>
-          <Label>Website</Label>
-          <Input value={website} onChange={e => setWebsite(e.target.value)} className="mt-1" placeholder="www.hospital.com" />
-        </div>
-        <div>
-          <Label>Registration No.</Label>
-          <Input value={registrationNo} onChange={e => setRegistrationNo(e.target.value)} className="mt-1" placeholder="MCI registration number" />
-        </div>
-        <div>
-          <Label>GSTIN</Label>
-          <Input value={gstin} onChange={e => setGstin(e.target.value)} className="mt-1" placeholder="GST identification number" />
-        </div>
-      </div>
-      <div className="flex justify-end pt-2">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save Profile"}
-        </Button>
       </div>
     </div>
   )
@@ -702,8 +726,9 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={() => setAddOpen(true)}>+ Add User</Button>
+      <div className="flex items-center gap-3">
+        <div className="flex-1" />
+        <Button size="sm" className="h-9" onClick={() => setAddOpen(true)}>+ Add User</Button>
       </div>
       <div className="rounded-xl border border-border bg-white overflow-hidden">
         <Table>
@@ -834,26 +859,25 @@ function PrescriptionsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex gap-2 items-center flex-wrap">
-          <Input
-            placeholder="Search by code, name or diagnosis..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-72"
+      <div className="flex items-center gap-3">
+        <Input
+          placeholder="Search by code, name or diagnosis..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-72 h-9"
+        />
+        <div className="flex items-center gap-1.5">
+          <Checkbox
+            id="show-inactive-rx"
+            checked={showInactive}
+            onCheckedChange={checked => setShowInactive(checked as boolean)}
           />
-          <div className="flex items-center gap-1.5 ml-1">
-            <Checkbox
-              id="show-inactive-rx"
-              checked={showInactive}
-              onCheckedChange={checked => setShowInactive(checked as boolean)}
-            />
-            <Label htmlFor="show-inactive-rx" className="text-sm text-muted-foreground cursor-pointer font-normal">
-              Show inactive
-            </Label>
-          </div>
+          <Label htmlFor="show-inactive-rx" className="text-sm text-muted-foreground cursor-pointer font-normal">
+            Show inactive
+          </Label>
         </div>
-        <Button onClick={() => setAddOpen(true)}>+ Add Template</Button>
+        <div className="flex-1" />
+        <Button size="sm" className="h-9" onClick={() => setAddOpen(true)}>+ Add Template</Button>
       </div>
 
       <div className="rounded-xl border border-border bg-white overflow-hidden">
@@ -1021,6 +1045,11 @@ function PrescriptionFormDialog({
   const [additionalNotes, setAdditionalNotes] = useState("")
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const [medicineMasterNames, setMedicineMasterNames] = useState<string[]>([])
+  useEffect(() => {
+    getMedicineMasterList(false).then(data => setMedicineMasterNames(data.map(m => m.name)))
+  }, [])
 
   useEffect(() => {
     if (existing) {
@@ -1248,19 +1277,19 @@ function PrescriptionFormDialog({
                     style={{ gridTemplateColumns: "2fr 1fr 1fr 32px" }}
                   >
                     <EditableCombobox
-                      options={MEDICINE_OPTIONS}
+                      options={medicineMasterNames}
                       value={med.name}
                       onValueChange={v => updateMedicine(index, "name", v)}
                       placeholder="Medicine name"
                     />
-                    <Input
+                    <EditableCombobox
+                      options={PRESCRIPTION_DAYS}
                       value={med.days}
-                      onChange={e => updateMedicine(index, "days", e.target.value)}
-                      placeholder="5"
-                      className="text-sm bg-white"
+                      onValueChange={v => updateMedicine(index, "days", v)}
+                      placeholder="Days"
                     />
                     <EditableCombobox
-                      options={TIMING_OPTIONS}
+                      options={PRESCRIPTION_TIMINGS}
                       value={med.timing}
                       onValueChange={v => updateMedicine(index, "timing", v)}
                       placeholder="Timing"
@@ -1511,67 +1540,69 @@ function PackagesTab() {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">IPD Packages</h2>
-        <Button size="sm" onClick={() => { setEditPkg(null); setDialogOpen(true) }}>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="flex-1" />
+        <Button size="sm" className="h-9" onClick={() => { setEditPkg(null); setDialogOpen(true) }}>
           + Add Package
         </Button>
       </div>
 
-      {loading ? (
-        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
-      ) : packages.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No packages created yet.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Package Name</TableHead>
-              <TableHead>Inclusions</TableHead>
-              <TableHead className="text-right">Total (₹)</TableHead>
-              <TableHead className="text-right">Discount (₹)</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {packages.map(pkg => {
-              let inclusions: PackageInclusion[] = []
-              try { inclusions = JSON.parse(pkg.inclusions) } catch {}
-              return (
-                <TableRow key={pkg.id}>
-                  <TableCell className="font-medium">{pkg.name}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {inclusions.map((inc, j) => (
-                        <Badge key={j} variant="secondary" className="text-xs">
-                          {inc.name}: ₹{inc.amount.toLocaleString("en-IN")}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">₹{pkg.totalAmount.toLocaleString("en-IN")}</TableCell>
-                  <TableCell className="text-right">₹{pkg.discount.toLocaleString("en-IN")}</TableCell>
-                  <TableCell>
-                    <Badge variant={pkg.isActive ? "default" : "secondary"} className="cursor-pointer" onClick={() => handleToggle(pkg)}>
-                      {pkg.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button size="sm" variant="outline" onClick={() => { setEditPkg(pkg); setDialogOpen(true) }}>
-                      Edit
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={() => handleDelete(pkg.id)}>
-                      Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      )}
+      <div className="rounded-xl border border-border bg-white overflow-hidden">
+        {loading ? (
+          <div className="space-y-2 p-4">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+        ) : packages.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground text-sm">No packages created yet.</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-100 hover:bg-gray-100">
+                <TableHead>Package Name</TableHead>
+                <TableHead>Inclusions</TableHead>
+                <TableHead className="text-right">Total (₹)</TableHead>
+                <TableHead className="text-right">Discount (₹)</TableHead>
+                <TableHead className="text-center">Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {packages.map(pkg => {
+                let inclusions: PackageInclusion[] = []
+                try { inclusions = JSON.parse(pkg.inclusions) } catch {}
+                return (
+                  <TableRow key={pkg.id}>
+                    <TableCell className="font-medium">{pkg.name}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {inclusions.map((inc, j) => (
+                          <Badge key={j} variant="secondary" className="text-xs">
+                            {inc.name}: ₹{inc.amount.toLocaleString("en-IN")}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">₹{pkg.totalAmount.toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {pkg.discount > 0 ? `₹${pkg.discount.toLocaleString("en-IN")}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={pkg.isActive ? "default" : "muted"} className="cursor-pointer" onClick={() => handleToggle(pkg)}>
+                        {pkg.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => { setEditPkg(pkg); setDialogOpen(true) }}>Edit</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(pkg.id)}>Delete</Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </div>
 
       <PackageDialog
         open={dialogOpen}
@@ -1766,6 +1797,403 @@ function PackageDialog({ open, onClose, editPkg, onSaved }: {
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={loading}>
             {loading ? "Saving..." : editPkg ? "Save Changes" : "Create Package"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Medicine Templates Tab ────────────────────────────────────────────────────
+
+const MEDICINE_CATEGORIES_LIST = ["Eye Drop", "Tablet", "Capsule", "Ointment", "Injection", "Syrup", "Other"]
+
+const PRESCRIPTION_TIMINGS = [
+  "1-1-1", "1-1-1-1", "1-0-1", "1-0-0", "0-0-1", "0-1-0",
+  "1-1-0", "0-1-1", "SOS", "BD", "TDS", "QID", "OD",
+  "Tapering", "Weekly", "Monthly",
+]
+
+const PRESCRIPTION_DAYS = [
+  "1", "3", "5", "7", "10", "14", "21", "28", "30", "45", "60", "90", "Continuous",
+]
+
+function MedicinesTab() {
+  const [medicines, setMedicines] = useState<MedicineMasterRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("All")
+  const [showInactive, setShowInactive] = useState(false)
+  const [editItem, setEditItem] = useState<MedicineMasterRow | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleteName, setDeleteName] = useState("")
+
+  const fetchMedicines = useCallback(async () => {
+    setLoading(true)
+    const data = await getMedicineMasterList(showInactive)
+    setMedicines(data as MedicineMasterRow[])
+    setLoading(false)
+  }, [showInactive])
+
+  useEffect(() => { fetchMedicines() }, [fetchMedicines])
+
+  const filtered = medicines.filter(m => {
+    if (categoryFilter !== "All" && m.category !== categoryFilter) return false
+    if (search && !m.name.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+
+  async function handleToggleActive(med: MedicineMasterRow) {
+    await updateMedicineMaster(med.id, { isActive: !med.isActive })
+    await fetchMedicines()
+    toast.success(`Medicine ${med.isActive ? "deactivated" : "activated"}`)
+  }
+
+  async function handleDelete() {
+    if (!deleteId) return
+    const result = await deleteMedicineMaster(deleteId)
+    if (result.success) {
+      toast.success("Medicine deleted")
+      setDeleteId(null)
+      setDeleteName("")
+      await fetchMedicines()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3">
+        <Input
+          placeholder="Search medicines..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-56 h-9"
+        />
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-40 h-9 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {["All", ...MEDICINE_CATEGORIES_LIST].map(cat => (
+              <SelectItem key={cat} value={cat}>{cat === "All" ? "All Categories" : cat}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1.5">
+          <Checkbox
+            id="med-show-inactive"
+            checked={showInactive}
+            onCheckedChange={v => setShowInactive(v as boolean)}
+          />
+          <Label htmlFor="med-show-inactive" className="text-sm text-muted-foreground cursor-pointer font-normal">
+            Show inactive
+          </Label>
+        </div>
+        <div className="flex-1" />
+        <Button size="sm" className="h-9" onClick={() => setAddOpen(true)}>+ Add Medicine</Button>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-xl border border-border bg-white overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-gray-100 hover:bg-gray-100">
+              <TableHead>Medicine Name</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Default Timing</TableHead>
+              <TableHead>Default Days</TableHead>
+              <TableHead>Default Note</TableHead>
+              <TableHead className="text-center">Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i}>
+                  {Array.from({ length: 7 }).map((_, j) => (
+                    <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : filtered.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                  {search || categoryFilter !== "All"
+                    ? "No medicines match your filters"
+                    : "No medicines added yet. Click \"+ Add Medicine\" to get started."}
+                </TableCell>
+              </TableRow>
+            ) : (
+              filtered.map(med => (
+                <TableRow key={med.id}>
+                  <TableCell>
+                    <div className="font-medium">{med.name}</div>
+                  </TableCell>
+                  <TableCell>
+                    {med.category ? (
+                      <Badge variant="secondary">{med.category}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {med.defaultTiming ? (
+                      <span className="text-sm font-mono bg-gray-100 px-1.5 py-0.5 rounded">{med.defaultTiming}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {med.defaultDays ? (
+                      <span className="text-sm">{med.defaultDays === "Continuous" ? "Continuous" : `${med.defaultDays} days`}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="max-w-[200px]">
+                    {med.note ? (
+                      <span className="text-sm text-muted-foreground truncate block">{med.note}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Badge variant={med.isActive ? "default" : "muted"}>
+                      {med.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => setEditItem(med)}>Edit</Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground"
+                        onClick={() => handleToggleActive(med)}
+                      >
+                        {med.isActive ? "Deactivate" : "Activate"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:bg-destructive/10"
+                        onClick={() => { setDeleteId(med.id); setDeleteName(med.name) }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+        {!loading && filtered.length > 0 && (
+          <div className="px-4 py-2 border-t border-border bg-muted/20">
+            <span className="text-xs text-muted-foreground">{filtered.length} medicine{filtered.length !== 1 ? "s" : ""}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Add / Edit Dialog */}
+      <MedicineFormDialog
+        open={addOpen || !!editItem}
+        onClose={() => { setAddOpen(false); setEditItem(null) }}
+        existing={editItem ?? undefined}
+        onSuccess={async () => {
+          setAddOpen(false)
+          setEditItem(null)
+          await fetchMedicines()
+        }}
+      />
+
+      {/* Delete confirm */}
+      <Dialog open={!!deleteId} onOpenChange={() => { setDeleteId(null); setDeleteName("") }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Medicine</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete{" "}
+            <span className="font-semibold text-foreground">{deleteName}</span>? This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeleteId(null); setDeleteName("") }}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+// ─── Medicine Form Dialog ──────────────────────────────────────────────────────
+
+function MedicineFormDialog({
+  open,
+  onClose,
+  existing,
+  onSuccess,
+}: {
+  open: boolean
+  onClose: () => void
+  existing?: MedicineMasterRow
+  onSuccess: () => void
+}) {
+  const [name, setName] = useState("")
+  const [category, setCategory] = useState("")
+  const [defaultTiming, setDefaultTiming] = useState("")
+  const [defaultDays, setDefaultDays] = useState("")
+  const [note, setNote] = useState("")
+  const [sortOrder, setSortOrder] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (open) {
+      setName(existing?.name ?? "")
+      setCategory(existing?.category ?? "")
+      setDefaultTiming(existing?.defaultTiming ?? "")
+      setDefaultDays(existing?.defaultDays ?? "")
+      setNote(existing?.note ?? "")
+      setSortOrder(existing?.sortOrder ?? 0)
+      setErrors({})
+    }
+  }, [open, existing])
+
+  async function handleSubmit() {
+    const errs: Record<string, string> = {}
+    if (!name.trim()) errs.name = "Medicine name is required"
+    if (Object.keys(errs).length) { setErrors(errs); return }
+
+    setLoading(true)
+    try {
+      const payload = {
+        name: name.trim(),
+        category: category.trim() || undefined,
+        defaultTiming: defaultTiming.trim() || undefined,
+        defaultDays: defaultDays.trim() || undefined,
+        note: note.trim() || undefined,
+        sortOrder,
+      }
+      const result = existing
+        ? await updateMedicineMaster(existing.id, payload)
+        : await createMedicineMaster(payload)
+
+      if (result.success) {
+        toast.success(existing ? "Medicine updated" : "Medicine added")
+        onSuccess()
+      } else {
+        toast.error(result.error)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{existing ? "Edit Medicine" : "Add Medicine Template"}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          {/* Name */}
+          <div className="space-y-1.5">
+            <Label>Medicine Name <span className="text-destructive">*</span></Label>
+            <Input
+              value={name}
+              onChange={e => { setName(e.target.value); setErrors(p => ({ ...p, name: "" })) }}
+              placeholder="e.g. Moxifloxacin 0.5% Eye Drops"
+              className={errors.name ? "border-destructive" : ""}
+            />
+            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
+          </div>
+
+          {/* Category */}
+          <div className="space-y-1.5">
+            <Label>Category</Label>
+            <Select value={category || "__none__"} onValueChange={v => setCategory(v === "__none__" ? "" : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No category</SelectItem>
+                {MEDICINE_CATEGORIES_LIST.map(cat => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Default Timing + Default Days */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Default Timing</Label>
+              <Select value={defaultTiming || "__none__"} onValueChange={v => setDefaultTiming(v === "__none__" ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select timing..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No default</SelectItem>
+                  {PRESCRIPTION_TIMINGS.map(t => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Default Days</Label>
+              <Select value={defaultDays || "__none__"} onValueChange={v => setDefaultDays(v === "__none__" ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select days..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No default</SelectItem>
+                  {PRESCRIPTION_DAYS.map(d => (
+                    <SelectItem key={d} value={d}>{d === "Continuous" ? "Continuous" : `${d} days`}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Default Note */}
+          <div className="space-y-1.5">
+            <Label>Default Note</Label>
+            <Input
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="e.g. After food, shake well before use"
+            />
+            <p className="text-xs text-muted-foreground">This note will auto-fill when this medicine is added in a prescription.</p>
+          </div>
+
+          {/* Sort Order */}
+          <div className="space-y-1.5">
+            <Label>Sort Order</Label>
+            <Input
+              type="number"
+              value={sortOrder || ""}
+              onChange={e => setSortOrder(parseInt(e.target.value) || 0)}
+              placeholder="0"
+              className="w-28"
+            />
+            <p className="text-xs text-muted-foreground">Lower number appears first in the medicine dropdown.</p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading}>
+            {loading ? "Saving..." : existing ? "Save Changes" : "Add Medicine"}
           </Button>
         </DialogFooter>
       </DialogContent>

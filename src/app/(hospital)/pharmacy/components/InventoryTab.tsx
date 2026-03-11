@@ -20,13 +20,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   getStock,
   getMedicines,
   createMedicine,
+  updateMedicine,
+  deleteMedicine,
   addStock,
   updateStock,
   getStockSummary,
@@ -104,6 +112,19 @@ export function InventoryTab({
 
   const [medForm, setMedForm] = useState(EMPTY_MED_FORM);
   const [stockForm, setStockForm] = useState(EMPTY_STOCK_FORM);
+
+  // Edit state
+  const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
+  const [editMedForm, setEditMedForm] = useState(EMPTY_MED_FORM);
+  const [editingStock, setEditingStock] = useState<StockItem | null>(null);
+  const [editStockForm, setEditStockForm] = useState({
+    batchNumber: "",
+    quantity: 0,
+    mrp: 0,
+    costPrice: 0,
+    gstPercent: 12,
+    expiryMonth: "",
+  });
 
   // Track inline edit values per row
   const [editValues, setEditValues] = useState<
@@ -253,6 +274,68 @@ export function InventoryTab({
       );
       setShowAddStock(false);
       setStockForm(EMPTY_STOCK_FORM);
+      refresh();
+      onStockChanged?.();
+    } else {
+      toast.error(res.error);
+    }
+  };
+
+  const handleUpdateMedicine = async () => {
+    if (!editingMedicine) return;
+    if (!editMedForm.name) return toast.error("Medicine name is required");
+    setLoading(true);
+    const res = await updateMedicine(editingMedicine.id, {
+      name: editMedForm.name,
+      genericName: editMedForm.genericName || undefined,
+      manufacturer: editMedForm.manufacturer || undefined,
+      category: editMedForm.category || undefined,
+      dosageForm: editMedForm.dosageForm || undefined,
+      strength: editMedForm.strength || undefined,
+      unitOfMeasure: editMedForm.unitOfMeasure || "Nos",
+      hsnCode: editMedForm.hsnCode || undefined,
+      gstPercent: editMedForm.gstPercent,
+      scheduleType: editMedForm.scheduleType || undefined,
+    });
+    setLoading(false);
+    if (res.success) {
+      toast.success("Medicine updated");
+      setEditingMedicine(null);
+      refreshMedicines();
+    } else {
+      toast.error(res.error);
+    }
+  };
+
+  const handleDeleteMedicine = async (m: Medicine) => {
+    if (!window.confirm(`Delete "${m.name}"? This cannot be undone.`)) return;
+    const res = await deleteMedicine(m.id);
+    if (res.success) {
+      toast.success("Medicine deleted");
+      refreshMedicines();
+    } else {
+      toast.error(res.error);
+    }
+  };
+
+  const handleUpdateStock = async () => {
+    if (!editingStock) return;
+    if (!editStockForm.batchNumber) return toast.error("Batch number is required");
+    if (editStockForm.quantity < 0) return toast.error("Quantity cannot be negative");
+    if (editStockForm.mrp <= 0) return toast.error("MRP must be > 0");
+    setLoading(true);
+    const res = await updateStock(editingStock.id, {
+      batchNumber: editStockForm.batchNumber,
+      quantity: editStockForm.quantity,
+      mrp: editStockForm.mrp,
+      costPrice: editStockForm.costPrice,
+      gstPercent: editStockForm.gstPercent,
+      expiryDate: editStockForm.expiryMonth ? editStockForm.expiryMonth + "-01" : undefined,
+    });
+    setLoading(false);
+    if (res.success) {
+      toast.success("Stock updated");
+      setEditingStock(null);
       refresh();
       onStockChanged?.();
     } else {
@@ -832,13 +915,14 @@ export function InventoryTab({
                   <th className="text-right p-3 font-medium text-muted-foreground">
                     Value
                   </th>
+                  <th className="p-3" />
                 </tr>
               </thead>
               <tbody>
                 {stock.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="text-center py-12 text-muted-foreground"
                     >
                       No stock items found. Add medicines and stock to get
@@ -932,6 +1016,35 @@ export function InventoryTab({
                         <td className="p-3 text-right font-medium text-xs">
                           {formatCurrency(item.quantity * item.mrp)}
                         </td>
+                        <td className="p-3 text-center">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditingStock(item);
+                                  const expiry = new Date(item.expiryDate);
+                                  const yyyy = expiry.getFullYear();
+                                  const mm = String(expiry.getMonth() + 1).padStart(2, "0");
+                                  setEditStockForm({
+                                    batchNumber: item.batchNumber,
+                                    quantity: item.quantity,
+                                    mrp: item.mrp,
+                                    costPrice: item.costPrice,
+                                    gstPercent: item.gstPercent,
+                                    expiryMonth: `${yyyy}-${mm}`,
+                                  });
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
                       </tr>
                     );
                   })
@@ -973,13 +1086,14 @@ export function InventoryTab({
                   <th className="text-left p-3 font-medium text-muted-foreground">
                     Schedule
                   </th>
+                  <th className="p-3" />
                 </tr>
               </thead>
               <tbody>
                 {filteredMedicines.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="text-center py-12 text-muted-foreground"
                     >
                       No medicines found. Use &quot;Add Medicine&quot; to add to
@@ -1026,6 +1140,42 @@ export function InventoryTab({
                           "—"
                         )}
                       </td>
+                      <td className="p-3 text-center">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditingMedicine(m);
+                                setEditMedForm({
+                                  name: m.name,
+                                  genericName: m.genericName ?? "",
+                                  manufacturer: m.manufacturer ?? "",
+                                  category: m.category ?? "",
+                                  dosageForm: m.dosageForm ?? "",
+                                  strength: m.strength ?? "",
+                                  unitOfMeasure: m.unitOfMeasure,
+                                  hsnCode: m.hsnCode ?? "",
+                                  gstPercent: m.gstPercent,
+                                  scheduleType: m.scheduleType ?? "",
+                                });
+                              }}
+                            >
+                              <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => handleDeleteMedicine(m)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -1034,6 +1184,190 @@ export function InventoryTab({
           </div>
         </Card>
       )}
+
+      {/* Edit Medicine Dialog */}
+      <Dialog
+        open={!!editingMedicine}
+        onOpenChange={(open) => { if (!open) setEditingMedicine(null); }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Medicine</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <div className="col-span-2">
+              <Label className="text-xs">Medicine Name *</Label>
+              <Input
+                value={editMedForm.name}
+                onChange={(e) => setEditMedForm({ ...editMedForm, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Generic Name</Label>
+              <Input
+                value={editMedForm.genericName}
+                onChange={(e) => setEditMedForm({ ...editMedForm, genericName: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Manufacturer</Label>
+              <Input
+                value={editMedForm.manufacturer}
+                onChange={(e) => setEditMedForm({ ...editMedForm, manufacturer: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Category</Label>
+              <Select
+                value={editMedForm.category || undefined}
+                onValueChange={(v) => setEditMedForm({ ...editMedForm, category: v })}
+              >
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent side="bottom" position="popper" avoidCollisions={false}>
+                  {CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Strength</Label>
+              <Input
+                value={editMedForm.strength}
+                onChange={(e) => setEditMedForm({ ...editMedForm, strength: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">HSN Code</Label>
+              <Input
+                value={editMedForm.hsnCode}
+                onChange={(e) => setEditMedForm({ ...editMedForm, hsnCode: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">GST %</Label>
+              <Input
+                type="number"
+                value={editMedForm.gstPercent}
+                onChange={(e) => setEditMedForm({ ...editMedForm, gstPercent: parseFloat(e.target.value) || 0 })}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Unit</Label>
+              <Select
+                value={editMedForm.unitOfMeasure}
+                onValueChange={(v) => setEditMedForm({ ...editMedForm, unitOfMeasure: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["Nos", "Strip", "Bottle", "Box", "Vial", "Tube", "Sachet"].map((u) => (
+                    <SelectItem key={u} value={u}>{u}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Schedule</Label>
+              <Select
+                value={editMedForm.scheduleType || undefined}
+                onValueChange={(v) => setEditMedForm({ ...editMedForm, scheduleType: v })}
+              >
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  {["OTC", "H", "H1", "X"].map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setEditingMedicine(null)}>Cancel</Button>
+            <Button onClick={handleUpdateMedicine} disabled={loading}>
+              {loading ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Stock Dialog */}
+      <Dialog
+        open={!!editingStock}
+        onOpenChange={(open) => { if (!open) setEditingStock(null); }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Stock — {editingStock?.medicine.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-gray-700">Batch Number</Label>
+                <Input
+                  className="h-10"
+                  value={editStockForm.batchNumber}
+                  onChange={(e) => setEditStockForm({ ...editStockForm, batchNumber: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-gray-700">Expiry Date</Label>
+                <Input
+                  type="month"
+                  className="h-10"
+                  value={editStockForm.expiryMonth}
+                  onChange={(e) => setEditStockForm({ ...editStockForm, expiryMonth: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-gray-700">Qty (units)</Label>
+                <Input
+                  type="number"
+                  className="h-10"
+                  value={editStockForm.quantity}
+                  onChange={(e) => setEditStockForm({ ...editStockForm, quantity: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-gray-700">MRP / Unit</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  className="h-10"
+                  value={editStockForm.mrp}
+                  onChange={(e) => setEditStockForm({ ...editStockForm, mrp: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-gray-700">Cost / Unit</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  className="h-10"
+                  value={editStockForm.costPrice}
+                  onChange={(e) => setEditStockForm({ ...editStockForm, costPrice: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium text-gray-700">GST %</Label>
+              <Input
+                type="number"
+                className="h-10 max-w-[120px]"
+                value={editStockForm.gstPercent}
+                onChange={(e) => setEditStockForm({ ...editStockForm, gstPercent: parseFloat(e.target.value) || 0 })}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setEditingStock(null)}>Cancel</Button>
+            <Button onClick={handleUpdateStock} disabled={loading}>
+              {loading ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

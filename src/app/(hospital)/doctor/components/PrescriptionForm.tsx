@@ -128,6 +128,9 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
   const [notes, setNotes] = useState(existingPrescription?.notes ?? "")
   const [submitting, setSubmitting] = useState(false)
 
+  type MedicineMasterEntry = { name: string; defaultTiming: string | null; defaultDays: string | null; note: string | null }
+
+  const [medicineMasterFull, setMedicineMasterFull] = useState<MedicineMasterEntry[]>([])
   const [medicineOptions, setMedicineOptions] = useState<string[]>([])
   const [investigationOptions, setInvestigationOptions] = useState<string[]>([])
   const [complaintOptions, setComplaintOptions] = useState<string[]>([])
@@ -147,7 +150,8 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
         getDropdownOptions("diagnosis"),
         getPredefinedTemplates(),
       ])
-      setMedicineOptions(meds)
+      setMedicineMasterFull(meds)
+      setMedicineOptions(meds.map(x => x.name))
       setInvestigationOptions(invs)
       setComplaintOptions(complaints)
       setPreviousHistoryOptions(histories)
@@ -166,7 +170,21 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
   }
 
   function updateMedicine(id: string, field: keyof Medicine, value: string) {
-    setMedicines(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m))
+    setMedicines(prev => prev.map(m => {
+      if (m.id !== id) return m
+      if (field === "name") {
+        // Auto-fill timing, days, note from medicine master (only if the field is currently empty)
+        const master = medicineMasterFull.find(x => x.name === value)
+        return {
+          ...m,
+          name: value,
+          timing: m.timing || (master?.defaultTiming ?? ""),
+          days: m.days || (master?.defaultDays ?? ""),
+          note: m.note || (master?.note ?? ""),
+        }
+      }
+      return { ...m, [field]: value }
+    }))
   }
 
   function addInvestigation() {

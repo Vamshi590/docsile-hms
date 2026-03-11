@@ -364,3 +364,87 @@ export async function deletePredefinedPackage(id: string) {
     return { success: false, error: "Failed to delete package" }
   }
 }
+
+// ─── Medicine Master ──────────────────────────────────────────────────────────
+
+export async function getMedicineMasterList(includeInactive = false) {
+  return db.medicineMaster.findMany({
+    where: includeInactive ? {} : { isActive: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  })
+}
+
+export async function createMedicineMaster(data: {
+  name: string
+  category?: string
+  defaultTiming?: string
+  defaultDays?: string
+  note?: string
+  sortOrder?: number
+}) {
+  const user = await requireAuth()
+  try {
+    const existing = await db.medicineMaster.findUnique({ where: { name: data.name.trim() } })
+    if (existing) return { success: false, error: "Medicine name already exists" }
+    const med = await db.medicineMaster.create({
+      data: {
+        name: data.name.trim(),
+        category: data.category?.trim() || null,
+        defaultTiming: data.defaultTiming?.trim() || null,
+        defaultDays: data.defaultDays?.trim() || null,
+        note: data.note?.trim() || null,
+        sortOrder: data.sortOrder ?? 0,
+        isActive: true,
+        createdBy: user.id,
+      },
+    })
+    revalidatePath("/settings")
+    return { success: true, data: med }
+  } catch {
+    return { success: false, error: "Failed to create medicine" }
+  }
+}
+
+export async function updateMedicineMaster(
+  id: string,
+  data: {
+    name?: string
+    category?: string
+    defaultTiming?: string
+    defaultDays?: string
+    note?: string
+    sortOrder?: number
+    isActive?: boolean
+  }
+) {
+  await requireAuth()
+  try {
+    const med = await db.medicineMaster.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined && { name: data.name.trim() }),
+        ...(data.category !== undefined && { category: data.category.trim() || null }),
+        ...(data.defaultTiming !== undefined && { defaultTiming: data.defaultTiming.trim() || null }),
+        ...(data.defaultDays !== undefined && { defaultDays: data.defaultDays.trim() || null }),
+        ...(data.note !== undefined && { note: data.note.trim() || null }),
+        ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
+        ...(data.isActive !== undefined && { isActive: data.isActive }),
+      },
+    })
+    revalidatePath("/settings")
+    return { success: true, data: med }
+  } catch {
+    return { success: false, error: "Failed to update medicine" }
+  }
+}
+
+export async function deleteMedicineMaster(id: string) {
+  await requireAuth()
+  try {
+    await db.medicineMaster.delete({ where: { id } })
+    revalidatePath("/settings")
+    return { success: true }
+  } catch {
+    return { success: false, error: "Failed to delete medicine" }
+  }
+}
