@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -98,6 +98,11 @@ export function BillingTab() {
   const taxableAmount = afterDiscount - gstTotal
   const netAmount = afterDiscount
   const billAmount = Math.round(netAmount + roundOff)
+
+  // Default paid amount to bill total
+  useEffect(() => {
+    setPaidAmount(billAmount)
+  }, [billAmount])
 
   // Search patient by ID
   const handlePatientSearch = async () => {
@@ -411,7 +416,6 @@ export function BillingTab() {
                         <td className="p-2">
                           <Input
                             type="number"
-                            step="0.01"
                             className="h-7 w-20 text-xs text-right ml-auto border-transparent hover:border-input bg-transparent focus:bg-white"
                             value={item.price}
                             onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}

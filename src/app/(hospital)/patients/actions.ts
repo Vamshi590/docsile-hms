@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
-import { getISTDayBounds } from "@/lib/utils"
+import { getISTDayBounds, computePatientStatus } from "@/lib/utils"
 import { z } from "zod"
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -139,15 +139,27 @@ export async function getPatients(filters: {
     orderBy: { createdAt: "asc" },
     include: {
       prescriptions: prescriptionInclude as never,
-      ...(eyeReadingInclude ? { eyeReadings: eyeReadingInclude } : {}),
+      ...(eyeReadingInclude ? { eyeReadings: eyeReadingInclude } : { eyeReadings: { take: 1 } }),
     },
   })
 
-  return patients
+  // Compute status from actual data instead of using the stored DB value
+  return patients.map(p => {
+    const eyeReadings = (p as unknown as { eyeReadings?: { id: string }[] }).eyeReadings ?? []
+    const prescriptions = (p as unknown as { prescriptions?: { status: string; doctorName: string | null }[] }).prescriptions ?? []
+    const hasWorkup = eyeReadings.length > 0
+    const hasDoctorPrescription = prescriptions.some(
+      rx => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
+    )
+    return {
+      ...p,
+      status: computePatientStatus(hasWorkup, hasDoctorPrescription, p.status),
+    }
+  })
 }
 
 export async function getPatientById(patientId: string) {
-  return db.patient.findUnique({
+  const patient = await db.patient.findUnique({
     where: { patientId },
     include: {
       prescriptions: {
@@ -157,6 +169,16 @@ export async function getPatientById(patientId: string) {
       eyeReadings: { orderBy: { createdAt: "desc" }, take: 1 },
     },
   })
+  if (!patient) return null
+
+  const hasWorkup = patient.eyeReadings.length > 0
+  const hasDoctorPrescription = patient.prescriptions.some(
+    rx => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
+  )
+  return {
+    ...patient,
+    status: computePatientStatus(hasWorkup, hasDoctorPrescription, patient.status),
+  }
 }
 
 // ─── Step 1: Create Patient ───────────────────────────────────────────────────
@@ -549,24 +571,8 @@ export async function addServiceToPatient(data: {
       }
     }
 
-    // Re-register the patient so they appear in workup & doctor queues
-    // NOTE: Do NOT overwrite appointmentDate — it preserves the original registration date
-    // Check if patient already has eye readings today — if so, set WORKUP_DONE instead of REGISTERED
-    const { start: todayStartCheck, end: todayEndCheck } = getISTDayBounds()
-    const existingReading = await db.eyeReading.findFirst({
-      where: {
-        patientId: data.patientId,
-        readingDate: { gte: todayStartCheck, lte: todayEndCheck },
-      },
-    })
-
-    await db.patient.update({
-      where: { patientId: data.patientId },
-      data: {
-        status: existingReading ? "WORKUP_DONE" : "REGISTERED",
-        updatedBy: user.id,
-      },
-    })
+    // Status is computed from data (eyeReadings + prescriptions), not stored in DB.
+    // No status update needed here.
 
     revalidatePath("/patients")
     revalidatePath("/workup")

@@ -115,6 +115,31 @@ export function calculateAge(dob: Date | string | null | undefined): number | nu
   return age
 }
 
+/**
+ * Compute patient status from actual data — never store/fetch this from DB.
+ * Rules:
+ *   - No workup + no doctor prescription → REGISTERED (Optometrist)
+ *   - Workup exists, no doctor prescription → WORKUP_DONE (Doctor)
+ *   - Both workup + doctor prescription → COMPLETED
+ *   - Only doctor prescription, no workup → MEDICAL_ONLY
+ *   - Manual statuses (MOVED, CANCELLED, NO_SHOW, VISITED) override computed status.
+ */
+export function computePatientStatus(
+  hasWorkup: boolean,
+  hasDoctorPrescription: boolean,
+  dbStatus?: string,
+): string {
+  // Manual overrides take precedence — these are intentional admin/user actions
+  if (dbStatus && ["MOVED", "CANCELLED", "NO_SHOW", "VISITED"].includes(dbStatus)) {
+    return dbStatus
+  }
+
+  if (hasWorkup && hasDoctorPrescription) return "COMPLETED"
+  if (hasWorkup) return "WORKUP_DONE"
+  if (hasDoctorPrescription) return "MEDICAL_ONLY"
+  return "REGISTERED"
+}
+
 /** Generate a sequential ID string e.g. "0001" */
 export function padId(num: number, length = 4): string {
   return String(num).padStart(length, "0")

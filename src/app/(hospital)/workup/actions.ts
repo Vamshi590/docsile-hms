@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
-import { getISTDayBounds, toLocalDateISO } from "@/lib/utils"
+import { getISTDayBounds, toLocalDateISO, computePatientStatus } from "@/lib/utils"
 
 export async function getWorkupQueue(date?: string) {
   const targetDate = date ?? toLocalDateISO()
@@ -28,12 +28,22 @@ export async function getWorkupQueue(date?: string) {
         where: { prescriptionDate: { gte: start, lte: end } },
         orderBy: { createdAt: "desc" },
         take: 1,
-        select: { id: true, status: true, prescriptionDate: true },
+        select: { id: true, status: true, prescriptionDate: true, doctorName: true },
       },
     },
   })
 
-  return patients
+  // Compute status from actual data
+  return patients.map(p => {
+    const hasWorkup = p.eyeReadings.length > 0
+    const hasDoctorPrescription = p.prescriptions.some(
+      rx => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
+    )
+    return {
+      ...p,
+      status: computePatientStatus(hasWorkup, hasDoctorPrescription, p.status),
+    }
+  })
 }
 
 export async function getPatientForWorkup(patientId: string) {
@@ -57,13 +67,11 @@ export async function getPatientForWorkup(patientId: string) {
 }
 
 export async function startWorkup(patientId: string) {
-  const user = await requireAuth()
-  const result = await db.patient.update({
-    where: { patientId },
-    data: { status: "IN_WORKUP", updatedBy: user.id },
-  })
+  // Status is computed from data (eyeReadings + prescriptions), not stored.
+  // This function is kept for compatibility but no longer updates status.
+  await requireAuth()
   revalidatePath("/workup")
-  return { success: true, data: result }
+  return { success: true }
 }
 
 export async function saveEyeReading(data: {
@@ -132,11 +140,7 @@ export async function saveEyeReading(data: {
       })
     }
 
-    // Update patient status to WORKUP_DONE
-    await db.patient.update({
-      where: { patientId: data.patientId },
-      data: { status: "WORKUP_DONE", updatedBy: user.id },
-    })
+    // Status is computed from data — no DB status update needed.
 
     revalidatePath("/workup")
     revalidatePath("/patients")

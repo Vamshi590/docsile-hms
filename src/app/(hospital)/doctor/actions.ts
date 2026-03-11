@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
-import { getISTDayBounds, toLocalDateISO } from "@/lib/utils"
+import { getISTDayBounds, toLocalDateISO, computePatientStatus } from "@/lib/utils"
 import { z } from "zod"
 
 export async function getDoctorQueue(date?: string) {
@@ -38,7 +38,17 @@ export async function getDoctorQueue(date?: string) {
     },
   })
 
-  return patients
+  // Compute status from actual data
+  return patients.map(p => {
+    const hasWorkup = p.eyeReadings.length > 0
+    const hasDoctorPrescription = p.prescriptions.some(
+      rx => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
+    )
+    return {
+      ...p,
+      status: computePatientStatus(hasWorkup, hasDoctorPrescription, p.status),
+    }
+  })
 }
 
 export async function getPatientForConsultation(patientId: string) {
@@ -60,6 +70,13 @@ export async function getPatientForConsultation(patientId: string) {
 
   if (!patient) return null
 
+  // Compute status from actual data
+  const hasWorkup = patient.eyeReadings.length > 0
+  const hasDoctorPrescription = patient.prescriptions.some(
+    rx => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
+  )
+  const computedStatus = computePatientStatus(hasWorkup, hasDoctorPrescription, patient.status)
+
   // Split prescriptions into today vs past on the server (reliable date handling)
   const todayPrescription = patient.prescriptions.find(
     rx => rx.prescriptionDate >= start && rx.prescriptionDate <= end
@@ -71,6 +88,7 @@ export async function getPatientForConsultation(patientId: string) {
 
   return {
     ...JSON.parse(JSON.stringify(patient)) as typeof patient,
+    status: computedStatus,
     todayPrescription: todayPrescription as typeof patient.prescriptions[0] | null,
     pastPrescriptions: pastPrescriptions as typeof patient.prescriptions,
   }
@@ -112,10 +130,8 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
   try {
     const patient = await db.patient.findUnique({
       where: { patientId: pd.patientId },
-      include: { eyeReadings: { take: 1 } },
     })
     if (!patient) return { success: false, error: "Patient not found" }
-    const hasWorkup = patient.eyeReadings.length > 0
 
     // Find today's billing-only prescription to update with medical data
     const { start: todayStart, end: todayEnd } = getISTDayBounds()
@@ -166,11 +182,7 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
       })
     }
 
-    // Update patient status
-    await db.patient.update({
-      where: { patientId: pd.patientId },
-      data: { status: hasWorkup ? "COMPLETED" : "MEDICAL_ONLY", updatedBy: user.id },
-    })
+    // Status is computed from data — no DB status update needed.
 
     revalidatePath("/doctor")
     revalidatePath("/patients")
@@ -246,11 +258,9 @@ export async function createMedicine(data: {
 }
 
 export async function updatePatientToWithDoctor(patientId: string) {
-  const user = await requireAuth()
-  await db.patient.update({
-    where: { patientId },
-    data: { status: "WITH_DOCTOR", updatedBy: user.id },
-  })
+  // Status is computed from data — no DB status update needed.
+  // Kept for compatibility but is now a no-op.
+  await requireAuth()
   revalidatePath("/doctor")
 }
 
