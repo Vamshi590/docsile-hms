@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { GridCombobox } from "@/components/ui/combobox"
 import { cn, todayISO } from "@/lib/utils"
 import {
-  SPH_OPTIONS, CYL_OPTIONS, AXIS_OPTIONS, VA_OPTIONS,
+  SPH_OPTIONS, CYL_OPTIONS, AXIS_OPTIONS, VA_OPTIONS, NEAR_SPH_OPTIONS, SIGHT_TYPE_OPTIONS,
   IOP_METHOD_OPTIONS, LIDS_OPTIONS, CONJUNCTIVA_OPTIONS, CORNEA_OPTIONS,
   AC_OPTIONS, IRIS_OPTIONS, PUPIL_OPTIONS, LENS_OPTIONS, VITREOUS_OPTIONS,
   FUNDUS_OPTIONS, CDR_OPTIONS,
@@ -133,6 +133,7 @@ function EyeReadingForm({ patientId, onSaved, existingReading, compact = false }
   const [gr,  setGr]  = useState<DNSection>(() => parseDN(raw?.glassesReading))
   const [pgp, setPgp] = useState<DNSection>(() => parseDN(raw?.previousPrescription))
   const [sr,  setSr]  = useState<DNSection>(() => parseDN(raw?.presentPrescription))
+  const [sightType, setSightType] = useState<string>(() => (raw?.presentPrescription?.sightType as string) ?? "")
   const [cf,  setCf]  = useState<CFSection>(() => parseCF(raw?.clinicalFindings))
   const [submitting,  setSubmitting]  = useState(false)
   const [activeSection, setActiveSection] = useState<SectionId>("ar")
@@ -206,7 +207,7 @@ function EyeReadingForm({ patientId, onSaved, existingReading, compact = false }
       autoRefractometer:    ar  as unknown as Record<string, unknown>,
       glassesReading:       gr  as unknown as Record<string, unknown>,
       previousPrescription: pgp as unknown as Record<string, unknown>,
-      presentPrescription:  sr  as unknown as Record<string, unknown>,
+      presentPrescription:  { ...sr, sightType } as unknown as Record<string, unknown>,
       clinicalFindings:     cf  as unknown as Record<string, unknown>,
       readingDate: todayISO(),
     })
@@ -291,6 +292,108 @@ function EyeReadingForm({ patientId, onSaved, existingReading, compact = false }
         <div>
           <h4 className="text-sm font-medium text-foreground mb-2">Near :</h4>
           <EyeRow4 row={section.le.n} onChange={s("le", "n")} />
+        </div>
+      </SectionCard>
+    )
+  }
+
+  function computeNearSph(distanceSph: string, addValue: string): string {
+    // addValue is like "add 1", "add 1.25", etc.
+    const addMatch = addValue.match(/^add\s+([\d.]+)$/i)
+    if (!addMatch) return addValue // not an add value, return as-is
+    const addNum = parseFloat(addMatch[1])
+    if (isNaN(addNum)) return addValue
+
+    // Parse distance SPH: "PL" = 0, "+2.00" = 2, "-1.50" = -1.5
+    let distNum = 0
+    if (distanceSph && distanceSph !== "PL") {
+      distNum = parseFloat(distanceSph)
+      if (isNaN(distNum)) distNum = 0
+    }
+
+    const result = distNum + addNum
+    const sign = result >= 0 ? "+" : ""
+    // Format to 2 decimal places, but show clean values
+    const formatted = result % 1 === 0 ? `${sign}${result}.00` : result % 0.5 === 0 && result % 0.25 !== 0 ? `${sign}${result.toFixed(1)}0` : `${sign}${result.toFixed(2)}`
+    return formatted
+  }
+
+  function NearEyeRow({ row, onChange, distanceSph, showLabels = false }: { row: EyeRow; onChange: (f: keyof EyeRow, v: string) => void; distanceSph: string; showLabels?: boolean }) {
+    const NEAR_FIELDS = [
+      { key: "cyl" as const, label: "CYL", options: CYL_OPTIONS },
+      { key: "axis" as const, label: "AXIS", options: AXIS_OPTIONS },
+      { key: "va" as const, label: "VA", options: VA_OPTIONS },
+    ]
+    return (
+      <div className="grid grid-cols-4 gap-2">
+        <div>
+          {showLabels && <p className="text-xs font-medium text-muted-foreground mb-1">SPH</p>}
+          <GridCombobox
+            options={NEAR_SPH_OPTIONS}
+            value={row.sph}
+            onValueChange={v => onChange("sph", computeNearSph(distanceSph, v))}
+          />
+        </div>
+        {NEAR_FIELDS.map(({ key, label, options }) => (
+          <div key={key}>
+            {showLabels && <p className="text-xs font-medium text-muted-foreground mb-1">{label}</p>}
+            <GridCombobox options={options} value={row[key]} onValueChange={v => onChange(key, v)} />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  function renderSR() {
+    const s = (eye: "re" | "le", dn: "d" | "n") =>
+      (f: keyof EyeRow, v: string) => setDN(setSr, eye, dn, f, v)
+    return (
+      <SectionCard title="Present Glass Prescription (SR)">
+        <div className="mb-4">
+          <h4 className="text-sm font-medium text-foreground mb-2">Right Eye - Distance :</h4>
+          <EyeRow4 row={sr.re.d} onChange={s("re", "d")} showLabels />
+        </div>
+        <div className="mb-5">
+          <h4 className="text-sm font-medium text-foreground mb-2">Near :</h4>
+          <NearEyeRow row={sr.re.n} onChange={s("re", "n")} distanceSph={sr.re.d.sph} />
+        </div>
+        <div className="mb-4 pt-4 border-t border-border">
+          <h4 className="text-sm font-medium text-foreground mb-2">Left Eye - Distance :</h4>
+          <EyeRow4 row={sr.le.d} onChange={s("le", "d")} showLabels />
+        </div>
+        <div className="mb-5">
+          <h4 className="text-sm font-medium text-foreground mb-2">Near :</h4>
+          <NearEyeRow row={sr.le.n} onChange={s("le", "n")} distanceSph={sr.le.d.sph} />
+        </div>
+
+        {/* Sight Type */}
+        <div className="pt-3 border-t border-border">
+          <h4 className="text-sm font-medium text-foreground mb-2">Sight Type:</h4>
+          <div className="flex flex-wrap gap-4">
+            {SIGHT_TYPE_OPTIONS.map((option) => {
+              const currentValues = sightType ? sightType.split("/").filter(Boolean) : []
+              const checked = currentValues.includes(option.label)
+              return (
+                <label key={option.id} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      let newValues: string[]
+                      if (e.target.checked) {
+                        newValues = checked ? currentValues : [...currentValues, option.label]
+                      } else {
+                        newValues = currentValues.filter(v => v !== option.label)
+                      }
+                      setSightType(newValues.join("/"))
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm text-muted-foreground">{option.label}</span>
+                </label>
+              )
+            })}
+          </div>
         </div>
       </SectionCard>
     )
@@ -407,7 +510,7 @@ function EyeReadingForm({ patientId, onSaved, existingReading, compact = false }
           </div>
 
           <div ref={srRef} data-section="sr">
-            {renderDN(sr, setSr, "Present Glass Prescription (SR)")}
+            {renderSR()}
           </div>
 
           <div ref={cfRef} data-section="cf">

@@ -36,6 +36,20 @@ export const VA_OPTIONS = [
   "N5", "N6", "N8", "N10", "N12", "N14", "N18",
 ]
 
+export const NEAR_SPH_OPTIONS = [
+  "add 1", "add 1.25", "add 1.50", "add 1.75",
+  "add 2", "add 2.25", "add 2.50", "add 2.75", "add 3",
+]
+
+export const SIGHT_TYPE_OPTIONS = [
+  { id: "distant", label: "Distant" },
+  { id: "near", label: "Near" },
+  { id: "bifocal", label: "Bifocal" },
+  { id: "progressive", label: "Progressive" },
+  { id: "photochromatic", label: "Photochromatic" },
+  { id: "brc-hmc", label: "BRC HMC" },
+]
+
 export const ADD_OPTIONS = [
   "+0.75", "+1.00", "+1.25", "+1.50", "+1.75",
   "+2.00", "+2.25", "+2.50", "+2.75", "+3.00", "+3.25", "+3.50",

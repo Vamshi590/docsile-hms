@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
+import { getISTDayBounds, toLocalDateISO } from "@/lib/utils"
 import { z } from "zod"
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -84,18 +85,20 @@ export async function getPatients(filters: {
   type?: "OPD" | "IPD"
 }) {
   const { date, search, status, type = "OPD" } = filters
+  const todayStr = toLocalDateISO()
 
   const where: Record<string, unknown> = { patientType: type }
   const andConditions: Record<string, unknown>[] = []
 
+  let dateBounds: { start: Date; end: Date } | null = null
+
   if (date) {
-    const start = new Date(date + "T00:00:00")
-    const end = new Date(date + "T23:59:59")
+    dateBounds = getISTDayBounds(date)
     // Show patients who have a prescription on this date OR were originally registered on this date
     andConditions.push({
       OR: [
-        { prescriptions: { some: { prescriptionDate: { gte: start, lte: end } } } },
-        { appointmentDate: { gte: start, lte: end } },
+        { prescriptions: { some: { prescriptionDate: { gte: dateBounds.start, lte: dateBounds.end } } } },
+        { appointmentDate: { gte: dateBounds.start, lte: dateBounds.end } },
       ],
     })
   }
@@ -125,19 +128,43 @@ export async function getPatients(filters: {
     take: 1,
     include: { items: true, payments: true },
   }
-  if (date) {
-    const start = new Date(date + "T00:00:00")
-    const end = new Date(date + "T23:59:59")
-    prescriptionInclude.where = { prescriptionDate: { gte: start, lte: end } }
+  if (dateBounds) {
+    prescriptionInclude.where = { prescriptionDate: { gte: dateBounds.start, lte: dateBounds.end } }
   }
+
+  // For past dates, also include eye readings to derive effective visit status
+  const eyeReadingInclude = dateBounds ? {
+    where: { readingDate: { gte: dateBounds.start, lte: dateBounds.end } },
+    take: 1,
+  } : undefined
 
   const patients = await db.patient.findMany({
     where,
     orderBy: { createdAt: "asc" },
     include: {
       prescriptions: prescriptionInclude as never,
+      ...(eyeReadingInclude ? { eyeReadings: eyeReadingInclude } : {}),
     },
   })
+
+  // For past dates, compute the effective visit status for that date
+  // (the global patient.status reflects the CURRENT workflow state, not the historical one)
+  if (date && date !== todayStr) {
+    return patients.map(p => {
+      const rx = (p as unknown as { prescriptions: { status: string }[] }).prescriptions?.[0]
+      const hasEyeReading = ((p as unknown as { eyeReadings?: unknown[] }).eyeReadings?.length ?? 0) > 0
+
+      let effectiveStatus = p.status
+      if (rx) {
+        if (rx.status === "COMPLETED") effectiveStatus = "COMPLETED"
+        else if (rx.status === "MEDICAL_ONLY") effectiveStatus = "MEDICAL_ONLY"
+        else if (hasEyeReading) effectiveStatus = "WORKUP_DONE"
+        else effectiveStatus = "REGISTERED"
+      }
+
+      return { ...p, status: effectiveStatus }
+    })
+  }
 
   return patients
 }
@@ -174,7 +201,7 @@ export async function createPatient(data: z.infer<typeof PatientSchema>) {
         patientId,
         firstName: pd.firstName,
         lastName: pd.lastName ?? null,
-        dateOfBirth: pd.dateOfBirth ? new Date(pd.dateOfBirth + "T00:00:00") : null,
+        dateOfBirth: pd.dateOfBirth ? new Date(pd.dateOfBirth + "T00:00:00+05:30") : null,
         age: pd.age ?? null,
         gender: pd.gender,
         phone: pd.phone,
@@ -187,7 +214,7 @@ export async function createPatient(data: z.infer<typeof PatientSchema>) {
         department: pd.department ?? null,
         patientType: pd.patientType,
         status: "REGISTERED",
-        appointmentDate: new Date(pd.appointmentDate + "T00:00:00"),
+        appointmentDate: new Date(pd.appointmentDate + "T00:00:00+05:30"),
         notes: pd.notes ?? null,
         createdById: user.id,
       },
@@ -217,7 +244,7 @@ export async function updatePatientInfo(patientId: string, data: z.infer<typeof 
       data: {
         firstName: pd.firstName,
         lastName: pd.lastName ?? null,
-        dateOfBirth: pd.dateOfBirth ? new Date(pd.dateOfBirth + "T00:00:00") : null,
+        dateOfBirth: pd.dateOfBirth ? new Date(pd.dateOfBirth + "T00:00:00+05:30") : null,
         age: pd.age ?? null,
         gender: pd.gender,
         phone: pd.phone,
@@ -228,7 +255,7 @@ export async function updatePatientInfo(patientId: string, data: z.infer<typeof 
         referredBy: pd.referredBy ?? null,
         doctorName: pd.doctorName ?? null,
         department: pd.department ?? null,
-        appointmentDate: new Date(pd.appointmentDate + "T00:00:00"),
+        appointmentDate: new Date(pd.appointmentDate + "T00:00:00+05:30"),
         notes: pd.notes ?? null,
         updatedBy: user.id,
       },
@@ -266,10 +293,7 @@ export async function createPrescriptionWithBilling(data: {
     const newSubtotal = iv.services.reduce((sum, s) => sum + s.amount, 0)
 
     // Check if there's already a prescription for today — add to it
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-    const todayEnd = new Date()
-    todayEnd.setHours(23, 59, 59, 999)
+    const { start: todayStart, end: todayEnd } = getISTDayBounds()
 
     const existingPrescription = await db.prescription.findFirst({
       where: {
@@ -409,9 +433,9 @@ export async function movePatientToDate(patientId: string, newDate: string, reas
     await db.patient.update({
       where: { patientId },
       data: {
-        appointmentDate: new Date(newDate + "T00:00:00"),
+        appointmentDate: new Date(newDate + "T00:00:00+05:30"),
         movedFromDate: patient.appointmentDate,
-        movedToDate: new Date(newDate + "T00:00:00"),
+        movedToDate: new Date(newDate + "T00:00:00+05:30"),
         moveReason: reason ?? null,
         status: "MOVED",
         updatedBy: user.id,
@@ -441,10 +465,7 @@ export async function addServiceToPatient(data: {
     })
     if (!patient) return { success: false as const, error: "Patient not found" }
 
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-    const todayEnd = new Date()
-    todayEnd.setHours(23, 59, 59, 999)
+    const { start: todayStart, end: todayEnd } = getISTDayBounds()
 
     // Check for existing prescription today — add items to it instead of creating a new one
     const existingPrescription = await db.prescription.findFirst({

@@ -85,7 +85,20 @@ export function todayISO(): string {
 
 /** Convert YYYY-MM-DD string to Date */
 export function parseISODate(dateStr: string): Date {
-  return new Date(dateStr + "T00:00:00")
+  return new Date(dateStr + "T00:00:00+05:30")
+}
+
+/**
+ * Get IST day boundaries for a given YYYY-MM-DD date string (or today if omitted).
+ * Returns { start, end } as UTC Date objects representing IST midnight-to-midnight.
+ * Safe to use on any server timezone (UTC, IST, etc.).
+ */
+export function getISTDayBounds(dateStr?: string): { start: Date; end: Date } {
+  const d = dateStr ?? toLocalDateISO()
+  return {
+    start: new Date(d + "T00:00:00+05:30"),
+    end:   new Date(d + "T23:59:59.999+05:30"),
+  }
 }
 
 /** Calculate age from date of birth */
