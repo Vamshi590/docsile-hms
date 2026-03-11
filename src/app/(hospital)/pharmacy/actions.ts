@@ -407,10 +407,14 @@ export async function createPharmacyBill(data: {
   const user = await requireAuth()
   try {
     const billNumber = await getNextBillNumber()
-    const subtotal = data.items.reduce((sum, item) => sum + item.total, 0)
-    const gstAmount = data.items.reduce((sum, item) => sum + (item.amount * item.gstPercent) / (100 + item.gstPercent), 0)
+    const subtotal = data.items.reduce((sum, item) => sum + item.amount, 0)
     const discountAmount = subtotal * (data.discountPercent / 100)
-    const netAmount = subtotal - discountAmount
+    const afterDiscount = subtotal - discountAmount
+    const gstAmount = data.items.reduce((sum, item) => {
+      const itemShare = subtotal > 0 ? (item.amount / subtotal) * afterDiscount : 0
+      return sum + (itemShare * item.gstPercent) / (100 + item.gstPercent)
+    }, 0)
+    const netAmount = afterDiscount
     const billAmount = Math.round(netAmount + data.roundOff)
     const balanceDue = billAmount - data.paidAmount
 

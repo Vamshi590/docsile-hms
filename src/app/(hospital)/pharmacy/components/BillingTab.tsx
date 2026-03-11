@@ -86,9 +86,17 @@ export function BillingTab() {
   const [saving, setSaving] = useState(false)
 
   // Calculations
-  const subtotal = billItems.reduce((sum, item) => sum + item.total, 0)
-  const gstTotal = billItems.reduce((sum, item) => sum + (item.amount * item.gstPercent) / (100 + item.gstPercent), 0)
-  const netAmount = subtotal - subtotal * (discountPercent / 100)
+  // subtotal = sum of item amounts after item-level discounts (MRP inclusive of GST)
+  const subtotal = billItems.reduce((sum, item) => sum + item.amount, 0)
+  const discountAmount = subtotal * (discountPercent / 100)
+  const afterDiscount = subtotal - discountAmount
+  // Extract GST from each item's share of the after-discount amount
+  const gstTotal = billItems.reduce((sum, item) => {
+    const itemShare = subtotal > 0 ? (item.amount / subtotal) * afterDiscount : 0
+    return sum + (itemShare * item.gstPercent) / (100 + item.gstPercent)
+  }, 0)
+  const taxableAmount = afterDiscount - gstTotal
+  const netAmount = afterDiscount
   const billAmount = Math.round(netAmount + roundOff)
 
   // Search patient by ID
@@ -447,7 +455,7 @@ export function BillingTab() {
           <Card className="p-4 sticky top-28">
             <div className="space-y-2.5">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
+                <span className="text-muted-foreground">Subtotal (MRP)</span>
                 <span className="font-medium tabular-nums">{formatCurrency(subtotal)}</span>
               </div>
 
@@ -461,13 +469,25 @@ export function BillingTab() {
                 />
               </div>
 
+              {discountPercent > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Discount Amt</span>
+                  <span className="font-medium tabular-nums text-red-500">- {formatCurrency(discountAmount)}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center text-sm border-t pt-2">
+                <span className="text-muted-foreground">Taxable Amount</span>
+                <span className="font-medium tabular-nums">{formatCurrency(taxableAmount)}</span>
+              </div>
+
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">GST</span>
                 <span className="font-medium tabular-nums">{formatCurrency(gstTotal)}</span>
               </div>
 
               <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Net</span>
+                <span className="text-muted-foreground">Net Amount</span>
                 <span className="font-medium tabular-nums">{formatCurrency(netAmount)}</span>
               </div>
 

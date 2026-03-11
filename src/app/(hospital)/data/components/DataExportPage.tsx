@@ -50,7 +50,7 @@ type DataTab =
 type ColumnDef = {
   key: string
   label: string
-  format?: "date" | "currency" | "json"
+  format?: "date" | "currency" | "json" | "eyeAR" | "eyeDN" | "eyeCF"
 }
 
 const TAB_CONFIG: Record<DataTab, { label: string; columns: ColumnDef[] }> = {
@@ -102,11 +102,11 @@ const TAB_CONFIG: Record<DataTab, { label: string; columns: ColumnDef[] }> = {
     label: "Eye Readings",
     columns: [
       { key: "patientId", label: "Patient ID" },
-      { key: "autoRefractometer", label: "Auto Refractometer", format: "json" },
-      { key: "glassesReading", label: "Glasses Reading", format: "json" },
-      { key: "previousPrescription", label: "Previous Rx", format: "json" },
-      { key: "presentPrescription", label: "Present Rx", format: "json" },
-      { key: "clinicalFindings", label: "Clinical Findings", format: "json" },
+      { key: "autoRefractometer", label: "Auto Refractometer", format: "eyeAR" },
+      { key: "glassesReading", label: "Glasses Reading", format: "eyeDN" },
+      { key: "previousPrescription", label: "Previous Rx", format: "eyeDN" },
+      { key: "presentPrescription", label: "Present Rx", format: "eyeDN" },
+      { key: "clinicalFindings", label: "Clinical Findings", format: "eyeCF" },
       { key: "status", label: "Status" },
       { key: "readingDate", label: "Reading Date", format: "date" },
     ],
@@ -230,10 +230,79 @@ const ALL_TABS: DataTab[] = [
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-function formatCellValue(value: unknown, format?: "date" | "currency" | "json"): string {
+// Eye row: SPH/CYL×AXIS VA:xx
+function fmtEyeRow(r: Record<string, string> | null | undefined): string {
+  if (!r) return "—"
+  const parts: string[] = []
+  if (r.sph) parts.push(r.sph)
+  if (r.cyl) parts.push(r.cyl)
+  if (r.axis) parts.push(`×${r.axis}`)
+  if (r.va) parts.push(`VA:${r.va}`)
+  if (r.vacph) parts.push(`(PH:${r.vacph})`)
+  return parts.length ? parts.join(" ") : "—"
+}
+
+// Auto Refractometer: RE: +1.00 -0.50×90 VA:6/6 | LE: ... | PD: 64
+function formatEyeAR(value: unknown): string {
+  try {
+    const d = typeof value === "string" ? JSON.parse(value) : value as Record<string, unknown>
+    if (!d || typeof d !== "object") return ""
+    const parts: string[] = []
+    if (d.re) parts.push(`RE: ${fmtEyeRow(d.re as Record<string, string>)}`)
+    if (d.le) parts.push(`LE: ${fmtEyeRow(d.le as Record<string, string>)}`)
+    if (d.pd) parts.push(`PD: ${d.pd}`)
+    return parts.join("  |  ") || "—"
+  } catch { return String(value) }
+}
+
+// DN sections (GR / Previous Rx / Present Rx):
+// RE: D: +1.00 -0.50×90 VA:6/6  N: +2.50 | LE: ...
+function formatEyeDN(value: unknown): string {
+  try {
+    const d = typeof value === "string" ? JSON.parse(value) : value as Record<string, unknown>
+    if (!d || typeof d !== "object") return ""
+    const eye = (e: Record<string, Record<string, string>> | null, label: string) => {
+      if (!e) return null
+      const dist = fmtEyeRow(e.d)
+      const near = fmtEyeRow(e.n)
+      return `${label}: D: ${dist}  N: ${near}`
+    }
+    const parts = [
+      eye(d.re as Record<string, Record<string, string>>, "RE"),
+      eye(d.le as Record<string, Record<string, string>>, "LE"),
+    ].filter(Boolean)
+    return parts.join("  |  ") || "—"
+  } catch { return String(value) }
+}
+
+// Clinical Findings: RE: Lids-Normal, Cornea-Clear | LE: ...
+function formatEyeCF(value: unknown): string {
+  try {
+    const d = typeof value === "string" ? JSON.parse(value) : value as Record<string, unknown>
+    if (!d || typeof d !== "object") return ""
+    const eye = (e: Record<string, string> | null, label: string) => {
+      if (!e) return null
+      const fields = Object.entries(e)
+        .filter(([, v]) => v && String(v).trim())
+        .map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
+        .join(", ")
+      return fields ? `${label}: ${fields}` : null
+    }
+    const parts = [
+      eye(d.re as Record<string, string>, "RE"),
+      eye(d.le as Record<string, string>, "LE"),
+    ].filter(Boolean)
+    return parts.join("  |  ") || "—"
+  } catch { return String(value) }
+}
+
+function formatCellValue(value: unknown, format?: "date" | "currency" | "json" | "eyeAR" | "eyeDN" | "eyeCF"): string {
   if (value === null || value === undefined || value === "") return ""
   if (format === "date") return formatDate(value as string)
   if (format === "currency") return formatCurrency(value as number)
+  if (format === "eyeAR") return formatEyeAR(value)
+  if (format === "eyeDN") return formatEyeDN(value)
+  if (format === "eyeCF") return formatEyeCF(value)
   if (format === "json") {
     try {
       const parsed = typeof value === "string" ? JSON.parse(value) : value
@@ -253,7 +322,7 @@ function formatCellValue(value: unknown, format?: "date" | "currency" | "json"):
   return String(value)
 }
 
-function formatCellForExport(value: unknown, format?: "date" | "currency" | "json"): string {
+function formatCellForExport(value: unknown, format?: "date" | "currency" | "json" | "eyeAR" | "eyeDN" | "eyeCF"): string {
   if (value === null || value === undefined || value === "") return ""
   if (format === "date") {
     const d = new Date(value as string)
@@ -261,6 +330,9 @@ function formatCellForExport(value: unknown, format?: "date" | "currency" | "jso
     return d.toLocaleDateString("en-IN")
   }
   if (format === "currency") return String(value)
+  if (format === "eyeAR") return formatEyeAR(value)
+  if (format === "eyeDN") return formatEyeDN(value)
+  if (format === "eyeCF") return formatEyeCF(value)
   if (format === "json") {
     try {
       const parsed = typeof value === "string" ? JSON.parse(value) : value
