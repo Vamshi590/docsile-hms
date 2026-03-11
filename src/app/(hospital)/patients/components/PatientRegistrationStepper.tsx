@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { Check, ChevronRight, Loader2, Plus, Printer, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -21,6 +21,7 @@ import {
   addDropdownOption,
 } from "../actions"
 import { getHospitalProfile } from "../../settings/actions"
+import { CashReceipt } from "@/components/receipts/CashReceipt"
 
 type ServiceItem = {
   id: string
@@ -122,6 +123,7 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
   // Receipt data (step 3)
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null)
   const [hospitalProfile, setHospitalProfile] = useState<Awaited<ReturnType<typeof getHospitalProfile>>>(null)
+  const printRef = useRef<HTMLDivElement>(null)
 
   const [patientData, setPatientData] = useState<PatientFormData>({
     patientId: "",
@@ -447,87 +449,25 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
   }
 
   function handlePrintReceipt() {
-    if (!receiptData) return
-    const hosp = hospitalProfile
-    const hospName = hosp?.displayName || hosp?.name || "Hospital"
-    const hospPhone = hosp?.phone ?? ""
-
-    const rows = receiptData.services.map(s => `
-      <tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${s.description}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:center">${s.quantity}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right">₹${s.unitPrice.toFixed(2)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right">₹${s.amount.toFixed(2)}</td>
-      </tr>`).join("")
-
-    const html = `<!DOCTYPE html><html><head>
-      <meta charset="utf-8"/>
-      <title>Receipt ${receiptData.prescriptionNumber ?? ""}</title>
-      <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 24px; max-width: 520px; margin: auto; }
-        .header { text-align: center; border-bottom: 2px solid #111; padding-bottom: 12px; margin-bottom: 14px; }
-        .header h1 { font-size: 20px; font-weight: 700; }
-        .header p { font-size: 11px; color: #555; margin-top: 2px; }
-        .receipt-meta { display: flex; justify-content: space-between; margin-bottom: 14px; font-size: 12px; }
-        .patient-box { background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; }
-        .patient-box .row { display: flex; gap: 24px; margin-bottom: 2px; }
-        .patient-box .lbl { color: #888; min-width: 80px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-        thead tr { background: #f2f2f2; }
-        thead th { padding: 7px 8px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
-        thead th:nth-child(2) { text-align: center; }
-        thead th:nth-child(3), thead th:nth-child(4) { text-align: right; }
-        .totals { width: 220px; margin-left: auto; }
-        .totals tr td { padding: 3px 6px; font-size: 13px; }
-        .totals tr td:last-child { text-align: right; font-weight: 500; }
-        .totals .total-row td { font-weight: 700; font-size: 14px; border-top: 1.5px solid #111; padding-top: 6px; }
-        .payment-row td { color: #555; }
-        .balance-row td { color: ${receiptData.balanceDue > 0 ? "#d00" : "#080"}; font-weight: 600; }
-        .footer { text-align: center; margin-top: 20px; padding-top: 10px; border-top: 1px dashed #ccc; font-size: 11px; color: #888; }
-        @media print { body { padding: 10px; } }
-      </style>
-    </head><body>
-      <div class="header">
-        <h1>${hospName}</h1>
-        ${hospPhone ? `<p>Phone: ${hospPhone}</p>` : ""}
-        <p style="margin-top:6px;font-size:13px;font-weight:600;letter-spacing:.5px">CASH RECEIPT</p>
-      </div>
-      <div class="receipt-meta">
-        <span><strong>Receipt #:</strong> ${receiptData.prescriptionNumber ?? "—"}</span>
-        <span><strong>Date:</strong> ${receiptData.appointmentDate}</span>
-      </div>
-      <div class="patient-box">
-        <div class="row"><span class="lbl">Patient ID</span><span>${receiptData.patientId}</span></div>
-        <div class="row"><span class="lbl">Name</span><span>${receiptData.patientName}</span></div>
-        <div class="row">
-          <span class="lbl">Age / Gender</span><span>${receiptData.age || "—"} / ${receiptData.gender}</span>
-          ${receiptData.doctorName ? `<span class="lbl" style="margin-left:16px">Doctor</span><span>${receiptData.doctorName}</span>` : ""}
-        </div>
-        <div class="row"><span class="lbl">Type</span><span>${receiptData.patientType}</span></div>
-      </div>
-      <table>
-        <thead><tr>
-          <th>Service</th><th>Qty</th><th>Rate</th><th>Amount</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <table class="totals">
-        <tr><td>Subtotal</td><td>₹${receiptData.subtotal.toFixed(2)}</td></tr>
-        ${receiptData.discount > 0 ? `<tr><td>Discount</td><td>- ₹${receiptData.discount.toFixed(2)}</td></tr>` : ""}
-        <tr class="total-row"><td>Total</td><td>₹${receiptData.total.toFixed(2)}</td></tr>
-        <tr class="payment-row"><td>${receiptData.paymentMode} Received</td><td>₹${receiptData.amountPaid.toFixed(2)}</td></tr>
-        <tr class="balance-row"><td>Balance Due</td><td>₹${receiptData.balanceDue.toFixed(2)}</td></tr>
-      </table>
-      <div class="footer">Thank you for visiting ${hospName}</div>
-    </body></html>`
-
-    const w = window.open("", "_blank", "width=600,height=700")
+    if (!printRef.current) return
+    const content = printRef.current.innerHTML
+    const w = window.open("", "_blank", "width=800,height=1000")
     if (!w) return
-    w.document.write(html)
+    w.document.write(`<!DOCTYPE html><html><head>
+      <title>Receipt — ${receiptData?.patientName ?? ""}</title>
+      <script src="https://cdn.tailwindcss.com"></script>
+      <style>
+        @media print {
+          body { margin: 0; padding: 0; }
+          @page { size: A4 portrait; margin: 0; }
+          .receipt-page { width: 210mm; min-height: 297mm; padding: 8mm; page-break-after: always; }
+          .receipt-page:last-child { page-break-after: auto; }
+          .no-break { page-break-inside: avoid; }
+        }
+      </style>
+    </head><body>${content}</body></html>`)
     w.document.close()
-    w.focus()
-    setTimeout(() => { w.print(); w.close() }, 300)
+    setTimeout(() => { w.print(); w.close() }, 1000)
   }
 
   const filteredTemplates = serviceTemplates.filter(s => {
@@ -1003,105 +943,42 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
 
               {/* Step 3 — Receipt */}
               {step === 3 && receiptData && (
-                <div className="space-y-0">
-                  {/* Receipt card */}
-                  <div className="rounded-xl border border-border bg-white overflow-hidden">
-                    {/* Receipt header */}
-                    <div className="bg-muted/40 border-b px-5 py-4 text-center">
-                      <p className="text-base font-bold tracking-wide">
-                        {hospitalProfile?.displayName || hospitalProfile?.name || "Hospital"}
-                      </p>
-                      {hospitalProfile?.phone && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{hospitalProfile.phone}</p>
-                      )}
-                      <p className="text-xs font-semibold uppercase tracking-widest mt-2 text-primary">Cash Receipt</p>
-                    </div>
-
-                    {/* Receipt meta */}
-                    <div className="flex justify-between px-5 py-3 border-b text-xs text-muted-foreground">
-                      <span>Receipt # <span className="font-medium text-foreground">{receiptData.prescriptionNumber ?? "—"}</span></span>
-                      <span>Date: <span className="font-medium text-foreground">{receiptData.appointmentDate}</span></span>
-                    </div>
-
-                    {/* Patient info */}
-                    <div className="px-5 py-3 border-b bg-muted/20">
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                        {[
-                          ["Patient ID", receiptData.patientId],
-                          ["Name", receiptData.patientName],
-                          ["Age / Gender", `${receiptData.age || "—"} / ${receiptData.gender}`],
-                          ["Type", receiptData.patientType],
-                          ...(receiptData.doctorName ? [["Doctor", receiptData.doctorName]] : []),
-                        ].map(([lbl, val]) => (
-                          <div key={lbl} className="flex gap-1.5">
-                            <span className="text-muted-foreground min-w-[72px]">{lbl}</span>
-                            <span className="font-medium">{val}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Services */}
-                    <div className="px-5 py-3 border-b">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-xs text-muted-foreground uppercase tracking-wide border-b pb-1">
-                            <th className="text-left pb-2 font-medium">Service</th>
-                            <th className="text-center pb-2 font-medium w-10">Qty</th>
-                            <th className="text-right pb-2 font-medium w-20">Rate</th>
-                            <th className="text-right pb-2 font-medium w-20">Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {receiptData.services.map(s => (
-                            <tr key={s.id} className="border-b border-dashed border-border/50 last:border-0">
-                              <td className="py-1.5">{s.description}</td>
-                              <td className="py-1.5 text-center text-muted-foreground">{s.quantity}</td>
-                              <td className="py-1.5 text-right text-muted-foreground">{formatCurrency(s.unitPrice)}</td>
-                              <td className="py-1.5 text-right font-medium">{formatCurrency(s.amount)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Totals */}
-                    <div className="px-5 py-3 border-b">
-                      <div className="ml-auto w-52 space-y-1 text-sm">
-                        <div className="flex justify-between text-muted-foreground">
-                          <span>Subtotal</span><span>{formatCurrency(receiptData.subtotal)}</span>
-                        </div>
-                        {receiptData.discount > 0 && (
-                          <div className="flex justify-between text-muted-foreground">
-                            <span>Discount</span><span>- {formatCurrency(receiptData.discount)}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between font-semibold text-base border-t pt-1.5 mt-1">
-                          <span>Total</span><span>{formatCurrency(receiptData.total)}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Payment */}
-                    <div className="px-5 py-3">
-                      <div className="ml-auto w-52 space-y-1 text-sm">
-                        <div className="flex justify-between text-muted-foreground">
-                          <span>{receiptData.paymentMode} Received</span>
-                          <span className="text-foreground font-medium">{formatCurrency(receiptData.amountPaid)}</span>
-                        </div>
-                        <div className={cn(
-                          "flex justify-between font-semibold",
-                          receiptData.balanceDue > 0 ? "text-destructive" : "text-green-600"
-                        )}>
-                          <span>Balance Due</span><span>{formatCurrency(receiptData.balanceDue)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-center text-xs text-muted-foreground pt-3">
-                    Patient registered successfully · {receiptData.prescriptionNumber}
-                  </p>
+                <div ref={printRef} className="bg-gray-100 -mx-6 -my-5 p-4">
+                  <CashReceipt
+                    hospital={{
+                      name: hospitalProfile?.name ?? "",
+                      displayName: hospitalProfile?.displayName,
+                      address: hospitalProfile?.address,
+                      phone: hospitalProfile?.phone,
+                      email: hospitalProfile?.email,
+                      website: hospitalProfile?.website,
+                      registrationNo: hospitalProfile?.registrationNo,
+                    }}
+                    patient={{
+                      patientName: receiptData.patientName,
+                      patientId: receiptData.patientId,
+                      date: receiptData.appointmentDate,
+                      mobile: patientData.phone || "—",
+                      gender: receiptData.gender,
+                      age: receiptData.age || "—",
+                      address: patientData.address || "—",
+                      referredBy: patientData.referredBy || undefined,
+                      receiptNo: receiptData.prescriptionNumber ?? undefined,
+                      doctorName: receiptData.doctorName || "—",
+                      department: patientData.department || undefined,
+                    }}
+                    payment={{
+                      mode: receiptData.paymentMode,
+                      totalAmount: receiptData.total,
+                      discount: receiptData.discount,
+                      amountReceived: receiptData.amountPaid,
+                      amountDue: receiptData.balanceDue,
+                    }}
+                    items={receiptData.services.map(s => ({
+                      description: s.quantity > 1 ? `${s.description} ×${s.quantity}` : s.description,
+                      amount: s.amount,
+                    }))}
+                  />
                 </div>
               )}
             </>
