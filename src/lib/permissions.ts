@@ -112,7 +112,7 @@ export const ALL_PERMISSIONS = {
     ],
   },
   settings: {
-    label: "Settings",
+    label: "Configurations",
     permissions: [
       { key: "settings:view", label: "View Settings" },
       { key: "settings:edit", label: "Edit Settings" },

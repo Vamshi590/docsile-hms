@@ -237,10 +237,20 @@ export async function updateStock(id: string, data: {
   quantity?: number
   mrp?: number
   costPrice?: number
+  batchNumber?: string
+  gstPercent?: number
+  expiryDate?: string
 }) {
   await requireAuth()
   try {
-    await db.pharmacyStock.update({ where: { id }, data })
+    const { expiryDate, ...rest } = data
+    await db.pharmacyStock.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(expiryDate ? { expiryDate: new Date(expiryDate) } : {}),
+      },
+    })
     revalidatePath("/pharmacy")
     return { success: true as const }
   } catch {
@@ -714,7 +724,6 @@ export async function receivePurchaseOrder(
       })
       if (!po) throw new Error("Purchase order not found")
 
-      let allReceived = true
       for (const receivedItem of items) {
         const poItem = po.items.find((i) => i.id === receivedItem.itemId)
         if (!poItem) continue
@@ -731,8 +740,6 @@ export async function receivePurchaseOrder(
             costPrice: receivedItem.costPrice,
           },
         })
-
-        if (newReceivedQty < poItem.quantity) allReceived = false
 
         // Add to pharmacy stock
         const existingStock = await tx.pharmacyStock.findUnique({
@@ -762,6 +769,10 @@ export async function receivePurchaseOrder(
           })
         }
       }
+
+      // Check ALL PO items (not just those in this batch) to determine final status
+      const updatedItems = await tx.purchaseOrderItem.findMany({ where: { purchaseOrderId: poId } })
+      const allReceived = updatedItems.every((i) => i.receivedQty >= i.quantity)
 
       await tx.purchaseOrder.update({
         where: { id: poId },

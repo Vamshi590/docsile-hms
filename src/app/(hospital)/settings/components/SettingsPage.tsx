@@ -181,7 +181,7 @@ export default function SettingsPage({ hospitalName }: { hospitalName: string })
   return (
     <div className="space-y-0">
       <PageHeader
-        title="Settings"
+        title="Configurations"
         description={hospitalName}
       />
 
@@ -267,37 +267,35 @@ function ServicesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex gap-2 items-center flex-wrap">
-          <Input
-            placeholder="Search services..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-56"
+      <div className="flex items-center gap-3">
+        <Input
+          placeholder="Search services..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-56 h-9"
+        />
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-40 h-9 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {["All", ...SERVICE_CATEGORIES].map(cat => (
+              <SelectItem key={cat} value={cat}>{cat === "All" ? "All Categories" : cat}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-1.5">
+          <Checkbox
+            id="show-inactive"
+            checked={showInactive}
+            onCheckedChange={checked => setShowInactive(checked as boolean)}
           />
-          {["All", ...SERVICE_CATEGORIES].map(cat => (
-            <Button
-              key={cat}
-              size="sm"
-              variant={categoryFilter === cat ? "default" : "ghost"}
-              className="rounded-full text-xs h-8 px-3"
-              onClick={() => setCategoryFilter(cat)}
-            >
-              {cat}
-            </Button>
-          ))}
-          <div className="flex items-center gap-1.5 ml-2">
-            <Checkbox
-              id="show-inactive"
-              checked={showInactive}
-              onCheckedChange={checked => setShowInactive(checked as boolean)}
-            />
-            <Label htmlFor="show-inactive" className="text-sm text-muted-foreground cursor-pointer font-normal">
-              Show inactive
-            </Label>
-          </div>
+          <Label htmlFor="show-inactive" className="text-sm text-muted-foreground cursor-pointer font-normal">
+            Show inactive
+          </Label>
         </div>
-        <Button onClick={() => setAddOpen(true)}>+ Add Service</Button>
+        <div className="flex-1" />
+        <Button size="sm" className="h-9" onClick={() => setAddOpen(true)}>+ Add Service</Button>
       </div>
 
       <div className="rounded-xl border border-border bg-white overflow-hidden">
@@ -639,41 +637,47 @@ function HospitalTab() {
   if (loading) return <div className="space-y-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
 
   return (
-    <div className="max-w-xl space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
-          <Label>Hospital Name *</Label>
-          <Input value={name} onChange={e => setName(e.target.value)} className="mt-1" placeholder="Full hospital name" />
+    <div className="max-w-xl">
+      <div className="rounded-xl border border-border bg-white p-6 space-y-5">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Hospital Name <span className="text-destructive">*</span></Label>
+            <Input value={name} onChange={e => setName(e.target.value)} className="mt-1.5" placeholder="Full hospital name" />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Display Name</Label>
+            <Input value={displayName} onChange={e => setDisplayName(e.target.value)} className="mt-1.5" placeholder="Shorter name shown in app" />
+          </div>
         </div>
-        <div className="col-span-2">
-          <Label>Display Name</Label>
-          <Input value={displayName} onChange={e => setDisplayName(e.target.value)} className="mt-1" placeholder="Shorter name shown in app" />
+
+        <div className="border-t border-border pt-4 grid grid-cols-2 gap-4">
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Phone</Label>
+            <Input value={phone} onChange={e => setPhone(e.target.value)} className="mt-1.5" placeholder="Contact number" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Email</Label>
+            <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1.5" placeholder="contact@hospital.com" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Website</Label>
+            <Input value={website} onChange={e => setWebsite(e.target.value)} className="mt-1.5" placeholder="www.hospital.com" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Registration No.</Label>
+            <Input value={registrationNo} onChange={e => setRegistrationNo(e.target.value)} className="mt-1.5" placeholder="MCI registration number" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">GSTIN</Label>
+            <Input value={gstin} onChange={e => setGstin(e.target.value)} className="mt-1.5" placeholder="GST identification number" />
+          </div>
         </div>
-        <div>
-          <Label>Phone</Label>
-          <Input value={phone} onChange={e => setPhone(e.target.value)} className="mt-1" placeholder="Contact number" />
+
+        <div className="border-t border-border pt-4 flex justify-end">
+          <Button onClick={handleSave} disabled={saving} size="sm" className="h-9">
+            {saving ? "Saving..." : "Save Profile"}
+          </Button>
         </div>
-        <div>
-          <Label>Email</Label>
-          <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1" placeholder="contact@hospital.com" />
-        </div>
-        <div>
-          <Label>Website</Label>
-          <Input value={website} onChange={e => setWebsite(e.target.value)} className="mt-1" placeholder="www.hospital.com" />
-        </div>
-        <div>
-          <Label>Registration No.</Label>
-          <Input value={registrationNo} onChange={e => setRegistrationNo(e.target.value)} className="mt-1" placeholder="MCI registration number" />
-        </div>
-        <div>
-          <Label>GSTIN</Label>
-          <Input value={gstin} onChange={e => setGstin(e.target.value)} className="mt-1" placeholder="GST identification number" />
-        </div>
-      </div>
-      <div className="flex justify-end pt-2">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save Profile"}
-        </Button>
       </div>
     </div>
   )
@@ -702,8 +706,9 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={() => setAddOpen(true)}>+ Add User</Button>
+      <div className="flex items-center gap-3">
+        <div className="flex-1" />
+        <Button size="sm" className="h-9" onClick={() => setAddOpen(true)}>+ Add User</Button>
       </div>
       <div className="rounded-xl border border-border bg-white overflow-hidden">
         <Table>
@@ -834,26 +839,25 @@ function PrescriptionsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex gap-2 items-center flex-wrap">
-          <Input
-            placeholder="Search by code, name or diagnosis..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-72"
+      <div className="flex items-center gap-3">
+        <Input
+          placeholder="Search by code, name or diagnosis..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-72 h-9"
+        />
+        <div className="flex items-center gap-1.5">
+          <Checkbox
+            id="show-inactive-rx"
+            checked={showInactive}
+            onCheckedChange={checked => setShowInactive(checked as boolean)}
           />
-          <div className="flex items-center gap-1.5 ml-1">
-            <Checkbox
-              id="show-inactive-rx"
-              checked={showInactive}
-              onCheckedChange={checked => setShowInactive(checked as boolean)}
-            />
-            <Label htmlFor="show-inactive-rx" className="text-sm text-muted-foreground cursor-pointer font-normal">
-              Show inactive
-            </Label>
-          </div>
+          <Label htmlFor="show-inactive-rx" className="text-sm text-muted-foreground cursor-pointer font-normal">
+            Show inactive
+          </Label>
         </div>
-        <Button onClick={() => setAddOpen(true)}>+ Add Template</Button>
+        <div className="flex-1" />
+        <Button size="sm" className="h-9" onClick={() => setAddOpen(true)}>+ Add Template</Button>
       </div>
 
       <div className="rounded-xl border border-border bg-white overflow-hidden">
@@ -1511,67 +1515,69 @@ function PackagesTab() {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">IPD Packages</h2>
-        <Button size="sm" onClick={() => { setEditPkg(null); setDialogOpen(true) }}>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="flex-1" />
+        <Button size="sm" className="h-9" onClick={() => { setEditPkg(null); setDialogOpen(true) }}>
           + Add Package
         </Button>
       </div>
 
-      {loading ? (
-        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
-      ) : packages.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No packages created yet.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Package Name</TableHead>
-              <TableHead>Inclusions</TableHead>
-              <TableHead className="text-right">Total (₹)</TableHead>
-              <TableHead className="text-right">Discount (₹)</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {packages.map(pkg => {
-              let inclusions: PackageInclusion[] = []
-              try { inclusions = JSON.parse(pkg.inclusions) } catch {}
-              return (
-                <TableRow key={pkg.id}>
-                  <TableCell className="font-medium">{pkg.name}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {inclusions.map((inc, j) => (
-                        <Badge key={j} variant="secondary" className="text-xs">
-                          {inc.name}: ₹{inc.amount.toLocaleString("en-IN")}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">₹{pkg.totalAmount.toLocaleString("en-IN")}</TableCell>
-                  <TableCell className="text-right">₹{pkg.discount.toLocaleString("en-IN")}</TableCell>
-                  <TableCell>
-                    <Badge variant={pkg.isActive ? "default" : "secondary"} className="cursor-pointer" onClick={() => handleToggle(pkg)}>
-                      {pkg.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button size="sm" variant="outline" onClick={() => { setEditPkg(pkg); setDialogOpen(true) }}>
-                      Edit
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={() => handleDelete(pkg.id)}>
-                      Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      )}
+      <div className="rounded-xl border border-border bg-white overflow-hidden">
+        {loading ? (
+          <div className="space-y-2 p-4">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+        ) : packages.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground text-sm">No packages created yet.</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-100 hover:bg-gray-100">
+                <TableHead>Package Name</TableHead>
+                <TableHead>Inclusions</TableHead>
+                <TableHead className="text-right">Total (₹)</TableHead>
+                <TableHead className="text-right">Discount (₹)</TableHead>
+                <TableHead className="text-center">Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {packages.map(pkg => {
+                let inclusions: PackageInclusion[] = []
+                try { inclusions = JSON.parse(pkg.inclusions) } catch {}
+                return (
+                  <TableRow key={pkg.id}>
+                    <TableCell className="font-medium">{pkg.name}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {inclusions.map((inc, j) => (
+                          <Badge key={j} variant="secondary" className="text-xs">
+                            {inc.name}: ₹{inc.amount.toLocaleString("en-IN")}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">₹{pkg.totalAmount.toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {pkg.discount > 0 ? `₹${pkg.discount.toLocaleString("en-IN")}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={pkg.isActive ? "default" : "muted"} className="cursor-pointer" onClick={() => handleToggle(pkg)}>
+                        {pkg.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => { setEditPkg(pkg); setDialogOpen(true) }}>Edit</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => handleDelete(pkg.id)}>Delete</Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </div>
 
       <PackageDialog
         open={dialogOpen}
