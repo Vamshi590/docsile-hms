@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,10 +21,28 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   getOpticalProducts,
   createOpticalProduct,
+  updateOpticalProduct,
+  deleteOpticalProduct,
   getOpticalStock,
   addOpticalStock,
   updateOpticalStock,
@@ -146,6 +164,16 @@ export function InventoryTab({
   const [savingProduct, setSavingProduct] = useState(false);
   const [savingStock, setSavingStock] = useState(false);
 
+  // Edit stock
+  const [editingStock, setEditingStock] = useState<StockEntry | null>(null);
+  const [editStockForm, setEditStockForm] = useState({ quantity: "", mrp: "", costPrice: "" });
+
+  // Edit / delete product
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editProductForm, setEditProductForm] = useState({ ...{name:"",brand:"",category:"Frame",type:"",material:"",color:"",size:"",coating:"",index:"",modelNumber:"",hsnCode:"",gstPercent:"12"} });
+  const [savingEditProduct, setSavingEditProduct] = useState(false);
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+
   async function loadData() {
     setLoading(true);
     const [stockData, productData] = await Promise.all([
@@ -264,6 +292,91 @@ export function InventoryTab({
       toast.error(result.error);
     }
   }
+
+  function openEditStock(item: StockEntry) {
+    setEditingStock(item);
+    setEditStockForm({ quantity: String(item.quantity), mrp: String(item.mrp), costPrice: String(item.costPrice) });
+  }
+
+  async function handleSaveEditStock() {
+    if (!editingStock) return;
+    const updates: Record<string, number> = {};
+    const qty = parseFloat(editStockForm.quantity);
+    const mrp = parseFloat(editStockForm.mrp);
+    const cost = parseFloat(editStockForm.costPrice);
+    if (!isNaN(qty) && qty >= 0) updates.quantity = qty;
+    if (!isNaN(mrp) && mrp >= 0) updates.mrp = mrp;
+    if (!isNaN(cost) && cost >= 0) updates.costPrice = cost;
+    const result = await updateOpticalStock(editingStock.id, updates);
+    if (result.success) {
+      toast.success("Stock updated");
+      setEditingStock(null);
+      loadData();
+      onStockChanged?.();
+    } else {
+      toast.error(result.error);
+    }
+  }
+
+  function openEditProduct(p: Product) {
+    setEditingProduct(p);
+    setEditProductForm({
+      name: p.name, brand: p.brand ?? "", category: p.category,
+      type: p.type ?? "", material: p.material ?? "", color: p.color ?? "",
+      size: p.size ?? "", coating: p.coating ?? "", index: p.index ?? "",
+      modelNumber: p.modelNumber ?? "", hsnCode: p.hsnCode ?? "",
+      gstPercent: String(p.gstPercent),
+    });
+  }
+
+  async function handleSaveEditProduct() {
+    if (!editingProduct) return;
+    setSavingEditProduct(true);
+    const result = await updateOpticalProduct(editingProduct.id, {
+      name: editProductForm.name.trim(),
+      brand: editProductForm.brand.trim() || undefined,
+      category: editProductForm.category,
+      type: editProductForm.type || undefined,
+      material: editProductForm.material || undefined,
+      color: editProductForm.color || undefined,
+      size: editProductForm.size || undefined,
+      coating: editProductForm.coating || undefined,
+      index: editProductForm.index || undefined,
+      modelNumber: editProductForm.modelNumber || undefined,
+      hsnCode: editProductForm.hsnCode || undefined,
+      gstPercent: parseFloat(editProductForm.gstPercent) || 12,
+    });
+    setSavingEditProduct(false);
+    if (result.success) {
+      toast.success("Product updated");
+      setEditingProduct(null);
+      loadData();
+    } else {
+      toast.error(result.error);
+    }
+  }
+
+  async function handleDeleteProduct() {
+    if (!deletingProductId) return;
+    const result = await deleteOpticalProduct(deletingProductId);
+    if (result.success) {
+      toast.success("Product removed");
+      setDeletingProductId(null);
+      loadData();
+    } else {
+      toast.error(result.error);
+    }
+  }
+
+  // Category-specific type options for edit product dialog
+  const editTypeOptions =
+    editProductForm.category === "Frame" ? FRAME_TYPES :
+    editProductForm.category === "Lens" ? LENS_TYPES :
+    editProductForm.category === "Contact Lens" ? CL_TYPES : [];
+
+  const editMaterialOptions =
+    editProductForm.category === "Frame" ? FRAME_MATERIALS :
+    editProductForm.category === "Lens" ? LENS_MATERIALS : [];
 
   // Category-specific type options
   const typeOptions =
@@ -393,10 +506,10 @@ export function InventoryTab({
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground uppercase">
                   <th className="text-left px-3 py-2.5 font-medium">Product</th>
-                  <th className="text-left px-2 py-2.5 font-medium w-20">
+                  <th className="text-left px-2 py-2.5 font-medium w-28">
                     Category
                   </th>
-                  <th className="text-left px-2 py-2.5 font-medium w-24">
+                  <th className="text-left px-2 py-2.5 font-medium w-28">
                     Batch
                   </th>
                   <th className="text-center px-2 py-2.5 font-medium w-16">
@@ -411,6 +524,7 @@ export function InventoryTab({
                   <th className="text-right px-3 py-2.5 font-medium w-24">
                     Value
                   </th>
+                  <th className="w-10"></th>
                 </tr>
               </thead>
               <tbody>
@@ -444,7 +558,7 @@ export function InventoryTab({
                     <td className="px-2 py-2.5">
                       <Badge
                         variant="outline"
-                        className="text-[10px] px-1.5 py-0.5 font-normal"
+                        className="text-xs px-2 py-0.5 font-normal"
                       >
                         {item.product.category}
                       </Badge>
@@ -511,6 +625,20 @@ export function InventoryTab({
                     <td className="px-3 py-2.5 text-right font-medium tabular-nums">
                       {formatCurrency(item.quantity * item.mrp)}
                     </td>
+                    <td className="px-1 py-2.5">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-sm" className="h-7 w-7 text-muted-foreground">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditStock(item)}>
+                            <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -534,7 +662,7 @@ export function InventoryTab({
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground uppercase">
                   <th className="text-left px-3 py-2.5 font-medium">Product</th>
-                  <th className="text-left px-2 py-2.5 font-medium w-24">
+                  <th className="text-left px-2 py-2.5 font-medium w-28">
                     Category
                   </th>
                   <th className="text-left px-2 py-2.5 font-medium">Details</th>
@@ -547,6 +675,7 @@ export function InventoryTab({
                   <th className="text-right px-3 py-2.5 font-medium w-16">
                     GST %
                   </th>
+                  <th className="w-10"></th>
                 </tr>
               </thead>
               <tbody>
@@ -568,7 +697,7 @@ export function InventoryTab({
                     <td className="px-2 py-2.5">
                       <Badge
                         variant="outline"
-                        className="text-[10px] px-1.5 py-0.5 font-normal"
+                        className="text-xs px-2 py-0.5 font-normal"
                       >
                         {p.category}
                       </Badge>
@@ -594,12 +723,191 @@ export function InventoryTab({
                     <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                       {p.gstPercent}%
                     </td>
+                    <td className="px-1 py-2.5">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-sm" className="h-7 w-7 text-muted-foreground">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditProduct(p)}>
+                            <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive" onClick={() => setDeletingProductId(p.id)}>
+                            <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ))}
+
+      {/* ── Edit Stock Dialog ── */}
+      <Dialog open={!!editingStock} onOpenChange={(o) => !o && setEditingStock(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit Stock</DialogTitle>
+          </DialogHeader>
+          {editingStock && (
+            <div className="space-y-1.5 py-1">
+              <p className="text-sm font-medium text-muted-foreground mb-3">
+                {editingStock.product.brand ? `${editingStock.product.brand} ` : ""}{editingStock.product.name}
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Quantity</Label>
+                  <Input type="number" min={0} value={editStockForm.quantity}
+                    onChange={(e) => setEditStockForm((f) => ({ ...f, quantity: e.target.value }))}
+                    className="focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>MRP</Label>
+                  <Input type="number" value={editStockForm.mrp}
+                    onChange={(e) => setEditStockForm((f) => ({ ...f, mrp: e.target.value }))}
+                    className="focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Cost Price</Label>
+                  <Input type="number" value={editStockForm.costPrice}
+                    onChange={(e) => setEditStockForm((f) => ({ ...f, costPrice: e.target.value }))}
+                    className="focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0" />
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditingStock(null)}>Cancel</Button>
+            <Button onClick={handleSaveEditStock}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Product Dialog ── */}
+      <Dialog open={!!editingProduct} onOpenChange={(o) => !o && setEditingProduct(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Name <span className="text-destructive">*</span></Label>
+                <Input value={editProductForm.name} onChange={(e) => setEditProductForm((p) => ({ ...p, name: e.target.value }))}
+                  className="focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Brand</Label>
+                <Input value={editProductForm.brand} onChange={(e) => setEditProductForm((p) => ({ ...p, brand: e.target.value }))}
+                  className="focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label>Category <span className="text-destructive">*</span></Label>
+                <Select value={editProductForm.category} onValueChange={(v) => setEditProductForm((p) => ({ ...p, category: v, type: "", material: "", coating: "", index: "" }))}>
+                  <SelectTrigger className="focus:ring-1 focus:ring-gray-200 focus:ring-offset-0"><SelectValue /></SelectTrigger>
+                  <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              {editTypeOptions.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label>Type</Label>
+                  <Select value={editProductForm.type} onValueChange={(v) => setEditProductForm((p) => ({ ...p, type: v }))}>
+                    <SelectTrigger className="focus:ring-1 focus:ring-gray-200 focus:ring-offset-0"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>{editTypeOptions.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
+              {editMaterialOptions.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label>Material</Label>
+                  <Select value={editProductForm.material} onValueChange={(v) => setEditProductForm((p) => ({ ...p, material: v }))}>
+                    <SelectTrigger className="focus:ring-1 focus:ring-gray-200 focus:ring-offset-0"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>{editMaterialOptions.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            {editProductForm.category === "Lens" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Coating</Label>
+                  <Select value={editProductForm.coating} onValueChange={(v) => setEditProductForm((p) => ({ ...p, coating: v }))}>
+                    <SelectTrigger className="focus:ring-1 focus:ring-gray-200 focus:ring-offset-0"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>{LENS_COATINGS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Index</Label>
+                  <Select value={editProductForm.index} onValueChange={(v) => setEditProductForm((p) => ({ ...p, index: v }))}>
+                    <SelectTrigger className="focus:ring-1 focus:ring-gray-200 focus:ring-offset-0"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>{LENS_INDICES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label>Color</Label>
+                <Input value={editProductForm.color} onChange={(e) => setEditProductForm((p) => ({ ...p, color: e.target.value }))}
+                  className="focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Size</Label>
+                <Input value={editProductForm.size} onChange={(e) => setEditProductForm((p) => ({ ...p, size: e.target.value }))}
+                  className="focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Model Number</Label>
+                <Input value={editProductForm.modelNumber} onChange={(e) => setEditProductForm((p) => ({ ...p, modelNumber: e.target.value }))}
+                  className="focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>HSN Code</Label>
+                <Input value={editProductForm.hsnCode} onChange={(e) => setEditProductForm((p) => ({ ...p, hsnCode: e.target.value }))}
+                  className="focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>GST %</Label>
+                <Input type="number" value={editProductForm.gstPercent} onChange={(e) => setEditProductForm((p) => ({ ...p, gstPercent: e.target.value }))}
+                  className="focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditingProduct(null)}>Cancel</Button>
+            <Button onClick={handleSaveEditProduct} disabled={savingEditProduct}>
+              {savingEditProduct && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Product Confirmation ── */}
+      <AlertDialog open={!!deletingProductId} onOpenChange={(o) => !o && setDeletingProductId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Product</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will deactivate the product and hide it from listings. Existing stock entries are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteProduct} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Add Product Dialog ── */}
       <Dialog open={showProductDialog} onOpenChange={setShowProductDialog}>
