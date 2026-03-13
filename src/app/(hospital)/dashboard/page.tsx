@@ -18,6 +18,7 @@ import {
   Glasses,
   ScrollText,
   DatabaseZap,
+  BarChart3,
 } from "lucide-react"
 import { PageHeader } from "@/components/layout/header"
 import { Card, CardContent } from "@/components/ui/card"
@@ -108,6 +109,14 @@ const modules = [
     description: "Record and categorize hospital expenses and expenditures",
     iconBg: "bg-orange-50",
     iconColor: "text-orange-500",
+  },
+  {
+    href: "/analytics",
+    icon: BarChart3,
+    label: "Analytics",
+    description: "Comprehensive analytics dashboard with trends, financials and reports",
+    iconBg: "bg-rose-50",
+    iconColor: "text-rose-500",
   },
   {
     href: "/reports",

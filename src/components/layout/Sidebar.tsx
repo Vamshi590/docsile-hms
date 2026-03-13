@@ -23,6 +23,7 @@ import {
   Glasses,
   ScrollText,
   DatabaseZap,
+  BarChart3,
   UserCog,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -43,6 +44,7 @@ const navItems = [
   { href: "/insurance", icon: Shield, label: "Insurance" },
   { href: "/dues-followups", icon: ClipboardList, label: "Dues & Follow-Ups" },
   { href: "/expenses", icon: Wallet, label: "Expenses" },
+  { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/reports", icon: FileBarChart, label: "Reports" },
   { href: "/license-tracker", icon: ScrollText, label: "Licenses" },
   { href: "/data", icon: DatabaseZap, label: "Data Export" },
