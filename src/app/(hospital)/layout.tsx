@@ -17,12 +17,12 @@ export default async function HospitalLayout({
   if (!user) redirect("/login")
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="h-screen overflow-hidden bg-gray-50">
       <Sidebar
         user={user}
         hospitalName={hospitalName}
       />
-      <main className="flex-1 overflow-y-auto">
+      <main className="h-full overflow-y-auto">
         <div className="min-h-full px-4 pt-6 pb-8">{children}</div>
       </main>
       <InstallPrompt />

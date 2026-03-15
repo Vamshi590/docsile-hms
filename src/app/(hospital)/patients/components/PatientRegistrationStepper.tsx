@@ -884,8 +884,9 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
                           <span className="text-muted-foreground">Discount</span>
                           <Input
                             type="number"
-                            value={discount}
+                            value={discount || ""}
                             onChange={e => setDiscount(parseFloat(e.target.value) || 0)}
+                            placeholder="0"
                             className="h-7 w-24 text-right text-sm bg-white border-gray-200 focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 focus:outline-none tabular-nums"
                             min={0}
                             max={subtotal}

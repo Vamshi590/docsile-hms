@@ -5,7 +5,7 @@ import { Hospital } from "lucide-react"
 
 export default async function LoginPage() {
   const session = await getSession()
-  if (session) redirect("/patients")
+  if (session) redirect("/dashboard")
 
   return (
     <div className="min-h-screen bg-muted flex items-center justify-center p-4">
