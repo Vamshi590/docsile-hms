@@ -188,7 +188,7 @@ export default async function DashboardPage() {
     <div className="space-y-7 animate-fade-in bg-gray-50">
 
       <PageHeader
-        title={`${greeting}, ${user.fullName.split(" ")[0]} 👋`}
+        title={`${greeting},👋`}
         description="Dashboard"
       />
 
