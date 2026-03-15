@@ -3,15 +3,12 @@
 import { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Card, CardContent } from "@/components/ui/card"
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/table"
-import { Search, RefreshCw, Plus } from "lucide-react"
-import { PageHeader } from "@/components/layout/header"
+import { RefreshCw, Plus } from "lucide-react"
+import { PageHeader, FilterBar, SearchInput, StatBadge } from "@/components/layout/header"
 import { InPatientStatusBadge } from "./InPatientStatusBadge"
 import { InPatientDetailPage } from "./InPatientDetailPage"
 import InPatientAdmissionForm from "./InPatientAdmissionForm"
@@ -36,7 +33,7 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Discharged", value: "DISCHARGED" },
 ]
 
-export default function InPatientsPage({ hospitalName }: { hospitalName: string }) {
+export default function InPatientsPage() {
   const [patients, setPatients] = useState<InPatient[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -77,50 +74,35 @@ export default function InPatientsPage({ hospitalName }: { hospitalName: string 
   }
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title="In-Patients"
-        description={hospitalName}
-      >
+    <div className="">
+      <PageHeader title="In-Patients" description="Admission & ward management">
         {stats && (
           <>
-            <Badge variant="info" className="px-3 py-1.5 gap-1.5 text-sm">
-              <span className="font-bold">{stats.totalAdmitted}</span>
-              <span className="font-normal">Admitted</span>
-            </Badge>
-            <Badge variant="secondary" className="px-3 py-1.5 gap-1.5 text-sm">
-              <span className="font-bold text-foreground">{stats.activeInStay}</span>
-              <span className="font-normal">Active</span>
-            </Badge>
-            <Badge variant="success" className="px-3 py-1.5 gap-1.5 text-sm">
-              <span className="font-bold">{stats.readyToDischarge}</span>
-              <span className="font-normal">Discharge Ready</span>
-            </Badge>
+            <StatBadge value={stats.totalAdmitted} label="Admitted" variant="info" />
+            <StatBadge value={stats.activeInStay} label="Active" variant="default" />
+            <StatBadge value={stats.readyToDischarge} label="Discharge Ready" variant="success" />
           </>
         )}
       </PageHeader>
 
-
       {/* Filters */}
-      <div className="rounded-xl border border-border bg-white shadow-sm p-3">
+      <FilterBar className="top-16">
         <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, IP number, phone..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-9 h-9 text-sm bg-gray-50/80 border-gray-200"
-            />
-          </div>
-          <div className="h-6 w-px bg-border" />
-          <div className="flex gap-1 bg-gray-50 rounded-lg p-0.5">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            onSubmit={fetchData}
+            placeholder="Search by name, IP number, phone..."
+            className="w-64"
+          />
+          <div className="filter-divider" />
+          <div className="flex gap-0.5 bg-muted/40 rounded-lg p-0.5 border border-border/30">
             {STATUS_FILTER_OPTIONS.map(opt => (
               <button
                 key={opt.value}
                 className={`rounded-md text-xs font-medium h-7 px-3 transition-all ${
                   statusFilter === opt.value
-                    ? "bg-white text-foreground shadow-sm border border-border"
+                    ? "bg-white text-foreground shadow-sm border border-border/60"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
                 onClick={() => setStatusFilter(opt.value)}
@@ -129,23 +111,21 @@ export default function InPatientsPage({ hospitalName }: { hospitalName: string 
               </button>
             ))}
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={fetchData}
-              className="text-muted-foreground h-8 gap-1.5"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Refresh
-            </Button>
-            <Button size="sm" className="h-8 gap-1.5" onClick={() => setAdmitOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              Admit Patient
-            </Button>
-          </div>
         </div>
-      </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchData}
+            className="h-8 px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
+          </button>
+          <Button size="sm" className="h-8 gap-1.5" onClick={() => setAdmitOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            Admit Patient
+          </Button>
+        </div>
+      </FilterBar>
 
       {/* Table */}
       <div className="rounded-xl border border-border bg-white overflow-hidden">

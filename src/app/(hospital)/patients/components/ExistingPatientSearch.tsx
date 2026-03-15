@@ -58,7 +58,7 @@ export function ExistingPatientSearch({ onSelect }: Props) {
     setShowDropdown(false)
   }
 
-  function getDaysSinceVisit(lastVisitDate: Date) {
+  function getDaysSinceVisit(lastVisitDate: Date | string) {
     const days = Math.floor(
       (new Date().getTime() - new Date(lastVisitDate).getTime()) / (1000 * 60 * 60 * 24)
     )

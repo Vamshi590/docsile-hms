@@ -29,7 +29,7 @@ type PatientInfo = {
   autoRefractometer: ReadingData
   glassesReading: ReadingData
   presentPrescription: ReadingData
-  readingDate: Date | null
+  readingDate: Date | string | null
   prescriptionId: string | null
 }
 

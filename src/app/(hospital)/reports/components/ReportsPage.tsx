@@ -40,7 +40,7 @@ const ACCENT_STYLES: Record<string, { active: string; icon: string; dot: string 
   rose:    { active: "bg-rose-50 border-rose-200 text-rose-700 shadow-sm shadow-rose-100/50",       icon: "text-rose-600",    dot: "bg-rose-500" },
 }
 
-export default function ReportsPage({ hospitalName }: { hospitalName: string }) {
+export default function ReportsPage() {
   const [patient, setPatient] = useState<PatientSummary>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("visits")
@@ -55,7 +55,7 @@ export default function ReportsPage({ hospitalName }: { hospitalName: string }) 
 
   return (
     <div className="space-y-0">
-      <PageHeader title="Patient Reports" description={hospitalName}>
+      <PageHeader title="Patient Reports">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <ClipboardList className="h-3.5 w-3.5" />
           <span>Complete Patient History</span>

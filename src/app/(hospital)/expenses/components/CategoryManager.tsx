@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Plus, Pencil, Trash2, Check, X, GripVertical } from "lucide-react"
 import { createCategory, updateCategory, deleteCategory, reorderCategories } from "../actions"
 import { toast } from "sonner"
-import type { ExpenseCategory } from "@prisma/client"
+import type { Database } from "@/lib/supabase/types"
+type ExpenseCategory = Database["public"]["Tables"]["ExpenseCategory"]["Row"]
 
 const PRESET_COLORS = [
   "#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6",

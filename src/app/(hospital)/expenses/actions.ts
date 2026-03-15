@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 
 // ─── Default Categories (matching old app) ───────────────────────────────────
@@ -21,73 +21,106 @@ const DEFAULT_CATEGORIES = [
 
 export async function seedDefaultCategories() {
   const user = await requireAuth()
-  const count = await db.expenseCategory.count()
-  if (count > 0) return
+  const supabase = await createClient()
+  const { count } = await supabase.from("ExpenseCategory").select("*", { count: "exact", head: true })
+  if ((count ?? 0) > 0) return
 
-  await db.expenseCategory.createMany({
-    data: DEFAULT_CATEGORIES.map((cat, i) => ({
+  const now = new Date().toISOString()
+  await supabase.from("ExpenseCategory").insert(
+    DEFAULT_CATEGORIES.map((cat, i) => ({
       name: cat.name,
       color: cat.color,
       sortOrder: i,
       createdBy: user.id,
-    })),
-  })
+      createdAt: now,
+      updatedAt: now,
+    }))
+  )
   revalidatePath("/expenses")
 }
 
 // ─── Category CRUD ───────────────────────────────────────────────────────────
 
 export async function getCategories() {
-  return db.expenseCategory.findMany({
-    where: { isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  })
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("ExpenseCategory")
+    .select("*")
+    .eq("isActive", true)
+    .order("sortOrder", { ascending: true })
+    .order("name", { ascending: true })
+  if (error) throw error
+  return data
 }
 
 export async function createCategory(data: { name: string; color: string }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const maxSort = await db.expenseCategory.aggregate({ _max: { sortOrder: true } })
-    const category = await db.expenseCategory.create({
-      data: {
+    // Get max sortOrder
+    const { data: maxRow } = await supabase
+      .from("ExpenseCategory")
+      .select("sortOrder")
+      .order("sortOrder", { ascending: false })
+      .limit(1)
+      .single()
+    const maxSort = maxRow?.sortOrder ?? 0
+
+    const now = new Date().toISOString()
+    const { data: category, error } = await supabase
+      .from("ExpenseCategory")
+      .insert({
         name: data.name,
         color: data.color,
-        sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
+        sortOrder: maxSort + 1,
         createdBy: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) {
+      if (error.code === "23505") return { success: false as const, error: "A category with this name already exists" }
+      throw error
+    }
     revalidatePath("/expenses")
     return { success: true as const, data: category }
-  } catch (error: unknown) {
-    const msg = error instanceof Error && error.message.includes("Unique")
-      ? "A category with this name already exists"
-      : "Failed to create category"
-    return { success: false as const, error: msg }
+  } catch {
+    return { success: false as const, error: "Failed to create category" }
   }
 }
 
 export async function updateCategory(id: string, data: { name?: string; color?: string }) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const category = await db.expenseCategory.update({ where: { id }, data })
+    const { data: category, error } = await supabase
+      .from("ExpenseCategory")
+      .update({ ...data, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) {
+      if (error.code === "23505") return { success: false as const, error: "A category with this name already exists" }
+      throw error
+    }
     revalidatePath("/expenses")
     return { success: true as const, data: category }
-  } catch (error: unknown) {
-    const msg = error instanceof Error && error.message.includes("Unique")
-      ? "A category with this name already exists"
-      : "Failed to update category"
-    return { success: false as const, error: msg }
+  } catch {
+    return { success: false as const, error: "Failed to update category" }
   }
 }
 
 export async function deleteCategory(id: string) {
   await requireAuth()
-  const expenseCount = await db.expense.count({ where: { categoryId: id } })
-  if (expenseCount > 0) {
-    return { success: false as const, error: `Cannot delete: ${expenseCount} expense(s) linked. Reassign them first.` }
+  const supabase = await createClient()
+  const { count } = await supabase.from("Expense").select("*", { count: "exact", head: true }).eq("categoryId", id)
+  if ((count ?? 0) > 0) {
+    return { success: false as const, error: `Cannot delete: ${count} expense(s) linked. Reassign them first.` }
   }
   try {
-    await db.expenseCategory.delete({ where: { id } })
+    const { error } = await supabase.from("ExpenseCategory").delete().eq("id", id)
+    if (error) throw error
     revalidatePath("/expenses")
     return { success: true as const }
   } catch {
@@ -97,9 +130,11 @@ export async function deleteCategory(id: string) {
 
 export async function reorderCategories(orderedIds: string[]) {
   await requireAuth()
+  const supabase = await createClient()
+  const now = new Date().toISOString()
   await Promise.all(
     orderedIds.map((id, i) =>
-      db.expenseCategory.update({ where: { id }, data: { sortOrder: i } })
+      supabase.from("ExpenseCategory").update({ sortOrder: i, updatedAt: now }).eq("id", id)
     )
   )
   revalidatePath("/expenses")
@@ -109,17 +144,15 @@ export async function reorderCategories(orderedIds: string[]) {
 // ─── Expense CRUD ────────────────────────────────────────────────────────────
 
 export async function getExpensesByDateRange(startDate: string, endDate: string) {
-  const expenses = await db.expense.findMany({
-    where: {
-      date: {
-        gte: new Date(startDate),
-        lte: new Date(endDate + "T23:59:59"),
-      },
-    },
-    include: { category: true },
-    orderBy: { date: "desc" },
-  })
-  return expenses
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("Expense")
+    .select("*, category:ExpenseCategory(*)")
+    .gte("date", new Date(startDate).toISOString())
+    .lte("date", new Date(endDate + "T23:59:59").toISOString())
+    .order("date", { ascending: false })
+  if (error) throw error
+  return data
 }
 
 export async function createExpense(data: {
@@ -130,18 +163,24 @@ export async function createExpense(data: {
   reason?: string
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const expense = await db.expense.create({
-      data: {
+    const now = new Date().toISOString()
+    const { data: expense, error } = await supabase
+      .from("Expense")
+      .insert({
         title: data.title,
         categoryId: data.categoryId,
         amount: data.amount,
-        date: new Date(data.date),
+        date: new Date(data.date).toISOString(),
         reason: data.reason ?? null,
         createdBy: user.id,
-      },
-      include: { category: true },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select("*, category:ExpenseCategory(*)")
+      .single()
+    if (error) throw error
     revalidatePath("/expenses")
     return { success: true as const, data: expense }
   } catch {
@@ -157,14 +196,17 @@ export async function updateExpense(id: string, data: {
   reason?: string
 }) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const updateData: Record<string, unknown> = { ...data }
-    if (data.date) updateData.date = new Date(data.date)
-    const expense = await db.expense.update({
-      where: { id },
-      data: updateData,
-      include: { category: true },
-    })
+    const updateData: Record<string, unknown> = { ...data, updatedAt: new Date().toISOString() }
+    if (data.date) updateData.date = new Date(data.date).toISOString()
+    const { data: expense, error } = await supabase
+      .from("Expense")
+      .update(updateData)
+      .eq("id", id)
+      .select("*, category:ExpenseCategory(*)")
+      .single()
+    if (error) throw error
     revalidatePath("/expenses")
     return { success: true as const, data: expense }
   } catch {
@@ -174,8 +216,10 @@ export async function updateExpense(id: string, data: {
 
 export async function deleteExpense(id: string) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.expense.delete({ where: { id } })
+    const { error } = await supabase.from("Expense").delete().eq("id", id)
+    if (error) throw error
     revalidatePath("/expenses")
     return { success: true as const }
   } catch {

@@ -238,9 +238,9 @@ export function PrintReceiptsModal({ open, onClose, patientId, patientName }: Pr
                         discount: prescription.discount ?? 0,
                         amountReceived: prescription.amountPaid ?? 0,
                         amountDue: prescription.balanceDue ?? 0,
-                        paidFor: prescription.items?.map(i => i.description).join(", ") || undefined,
+                        paidFor: prescription.items?.map((i: any) => i.description).join(", ") || undefined,
                       }}
-                      items={prescription.items?.map(i => ({ description: i.description, amount: i.amount })) || undefined}
+                      items={prescription.items?.map((i: any) => ({ description: i.description, amount: i.amount })) || undefined}
                     />
                   )}
                   {!prescription && (

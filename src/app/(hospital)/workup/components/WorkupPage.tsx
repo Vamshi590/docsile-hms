@@ -1,10 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Eye, Search, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react"
+import { Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
+import { BreadcrumbHeader, FilterBar, DateNavigator, SearchInput, StatBadge } from "@/components/layout/header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { EyeReadingForm } from "./EyeReadingForm"
@@ -13,7 +12,7 @@ import { cn, formatDate, calculateAge, todayISO, toLocalDateISO } from "@/lib/ut
 
 type QueueItem = Awaited<ReturnType<typeof getWorkupQueue>>[0]
 
-export function WorkupPage({ hospitalName }: { hospitalName: string }) {
+export function WorkupPage() {
   const [date, setDate] = useState(todayISO())
   const [search, setSearch] = useState("")
   const [queue, setQueue] = useState<QueueItem[]>([])
@@ -52,79 +51,49 @@ export function WorkupPage({ hospitalName }: { hospitalName: string }) {
   return (
     <>
       {/* Sticky page header */}
-      <div className="bg-white border-b border-border px-6 py-4 -mx-6 -mt-6 mb-0 sticky top-0 z-20">
-        <div className="flex items-center justify-between">
-          <div>
-            {selected ? (
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setSelected(null)}
-                  className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span className="text-[1.2rem] font-semibold">Workup</span>
-                </button>
-                <span className="text-muted-foreground text-[1.2rem]">/</span>
-                <span className="text-[1.2rem] font-semibold text-foreground">
-                  {selected.firstName} {selected.lastName ?? ""}
-                </span>
-                <span className="text-xs font-mono text-muted-foreground ml-1 mt-0.5">
-                  · {selected.patientId}
-                </span>
-              </div>
-            ) : (
-              <>
-                <h1 className="text-[1.2rem] font-semibold text-foreground tracking-tight leading-none">Workup</h1>
-                <p className="text-xs text-muted-foreground mt-1">{hospitalName}</p>
-              </>
-            )}
+      {selected ? (
+        <BreadcrumbHeader
+          onBack={() => setSelected(null)}
+          backLabel="Workup"
+          currentLabel={`${selected.firstName} ${selected.lastName ?? ""}`.trim()}
+          subtitle={`· ${selected.patientId}`}
+        />
+      ) : (
+        <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Workup</h1>
+            <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Pre-consultation assessment</p>
           </div>
-
-          {!selected && (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold text-foreground">{queue.length}</span>
-                <span className="font-normal">Total</span>
-              </Badge>
-              <Badge variant="destructive" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold">{queue.filter(p => ["REGISTERED", "IN_WORKUP"].includes(p.status)).length}</span>
-                <span className="font-normal">Optometrist</span>
-              </Badge>
-              <Badge variant="warning" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold">{queue.filter(p => ["WORKUP_DONE", "WITH_DOCTOR"].includes(p.status)).length}</span>
-                <span className="font-normal">Doctor</span>
-              </Badge>
-              <Badge className="px-3 py-1.5 gap-1.5 text-sm bg-green-100 text-green-700 hover:bg-green-100">
-                <span className="font-bold">{queue.filter(p => ["COMPLETED", "MEDICAL_ONLY"].includes(p.status)).length}</span>
-                <span className="font-normal">Completed</span>
-              </Badge>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <StatBadge value={queue.length} label="Total" />
+            <StatBadge value={queue.filter(p => ["REGISTERED", "IN_WORKUP"].includes(p.status)).length} label="Optometrist" variant="destructive" />
+            <StatBadge value={queue.filter(p => ["WORKUP_DONE", "WITH_DOCTOR"].includes(p.status)).length} label="Doctor" variant="warning" />
+            <StatBadge value={queue.filter(p => ["COMPLETED", "MEDICAL_ONLY"].includes(p.status)).length} label="Completed" variant="success" />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Date nav + Search — only shown in list view */}
       {!selected && (
-        <div className="bg-gray-50 border-b border-border shadow-sm px-6 py-2 -mx-6 mb-5 sticky top-18 z-10">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon-sm" onClick={prevDay}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-40 text-sm bg-white" />
-            <Button variant="outline" size="icon-sm" onClick={nextDay}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <div className="relative flex-1 max-w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search patient..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-9 text-sm bg-white"
-              />
-            </div>
+        <FilterBar>
+          <div className="flex items-center gap-3">
+            <DateNavigator
+              date={date}
+              onDateChange={setDate}
+              onPrev={prevDay}
+              onNext={nextDay}
+              onToday={() => setDate(todayISO())}
+              isToday={date === todayISO()}
+            />
+            <div className="filter-divider" />
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search by name, ID, phone..."
+              className="w-64"
+            />
           </div>
-        </div>
+        </FilterBar>
       )}
 
       {/* Inline detail view */}
@@ -187,78 +156,105 @@ export function WorkupPage({ hospitalName }: { hospitalName: string }) {
       ) : (
         /* Queue table */
         loading ? (
-          <div className="rounded-xl border border-border bg-white divide-y divide-border">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-4 px-4 py-4">
-                <Skeleton className="h-4 w-6 rounded" />
-                <Skeleton className="h-9 w-9 rounded-full shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-36" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-                <Skeleton className="h-7 w-20 rounded-full" />
-              </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="rounded-xl border border-border bg-white py-20 text-center">
-            <Eye className="h-9 w-9 text-muted-foreground mx-auto mb-3" />
-            <p className="font-semibold text-foreground">No patients in workup queue</p>
-            <p className="text-sm text-muted-foreground mt-1">Patients appear here after registration</p>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-border bg-white overflow-hidden">
+          <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-100 hover:bg-gray-100">
-                  <TableHead className="w-10 text-center">#</TableHead>
-                  <TableHead>Patient</TableHead>
+                <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
+                  <TableHead className="w-12 text-center">Token</TableHead>
+                  <TableHead>Patient ID</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead className="hidden sm:table-cell">Age / Gender</TableHead>
                   <TableHead className="hidden md:table-cell">Phone</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden lg:table-cell">Appointment</TableHead>
-                  <TableHead className="text-right pr-4">Action</TableHead>
+                  <TableHead className="text-right pr-3">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i} className="hover:bg-transparent">
+                    <TableCell className="text-center"><Skeleton className="h-6 w-7 rounded mx-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-5 w-16 rounded" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                    <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
+                    <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
+                    <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-7 w-16 rounded-lg ml-auto" /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-xl border border-border/60 bg-white py-20 text-center shadow-sm">
+            <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-muted/60 mb-4">
+              <Eye className="h-7 w-7 text-muted-foreground" />
+            </div>
+            <p className="font-semibold text-foreground">No patients in workup queue</p>
+            <p className="text-sm text-muted-foreground mt-1.5">Patients appear here after registration</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
+                  <TableHead className="w-12 text-center">Token</TableHead>
+                  <TableHead>Patient ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="hidden sm:table-cell">Age / Gender</TableHead>
+                  <TableHead className="hidden md:table-cell">Phone</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="hidden lg:table-cell">Appointment</TableHead>
+                  <TableHead className="text-right pr-3">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((patient, i) => {
                   const age = patient.age ?? calculateAge(patient.dateOfBirth)
                   const fullName = `${patient.firstName} ${patient.lastName ?? ""}`.trim()
-                  const hasReading = patient.eyeReadings?.[0]
                   const genderShort = patient.gender === "MALE" ? "M" : patient.gender === "FEMALE" ? "F" : "O"
+                  const statusConfig: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+                    REGISTERED:   { label: "Optometrist",  bg: "bg-red-50",    text: "text-red-700",    dot: "bg-red-500" },
+                    IN_WORKUP:    { label: "Optometrist",  bg: "bg-red-50",    text: "text-red-700",    dot: "bg-red-500" },
+                    WORKUP_DONE:  { label: "Doctor",       bg: "bg-amber-50",  text: "text-amber-700",  dot: "bg-amber-500" },
+                    WITH_DOCTOR:  { label: "Doctor",       bg: "bg-amber-50",  text: "text-amber-700",  dot: "bg-amber-500" },
+                    COMPLETED:    { label: "Completed",    bg: "bg-green-50",  text: "text-green-700",  dot: "bg-green-500" },
+                    MEDICAL_ONLY: { label: "Medical Only", bg: "bg-blue-50",   text: "text-blue-700",   dot: "bg-blue-500" },
+                  }
+                  const sc = statusConfig[patient.status] ?? { label: patient.status, bg: "bg-slate-50", text: "text-slate-600", dot: "bg-slate-400" }
                   return (
                     <TableRow
                       key={patient.id}
                       onClick={() => setSelected(patient)}
-                      className="cursor-pointer"
+                      className="cursor-pointer group hover:bg-primary/[0.02] transition-colors"
                     >
-                      <TableCell className="text-center text-xs text-muted-foreground font-medium">{i + 1}</TableCell>
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center justify-center h-6 min-w-7 rounded bg-primary/10 border border-primary/20 border-dashed text-xs font-bold text-primary tabular-nums px-1.5">
+                          {i + 1}
+                        </span>
+                      </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2.5">
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm text-foreground truncate">{fullName}</p>
-                            <p className="text-xs font-mono text-primary">{patient.patientId}</p>
-                          </div>
-                        </div>
+                        <span className="font-mono text-xs font-semibold text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                          {patient.patientId}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-semibold text-sm text-foreground">{fullName}</span>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-sm text-muted-foreground whitespace-nowrap">
                         {age ? `${age}y` : "—"} / {genderShort}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                        {patient.phone || "—"}
+                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground tabular-nums">
+                        {patient.phone || <span className="text-muted-foreground/50">—</span>}
                       </TableCell>
                       <TableCell>
-                        <span className={cn("text-xs font-semibold", {
-                          "text-red-600": ["REGISTERED", "IN_WORKUP"].includes(patient.status),
-                          "text-yellow-600": ["WORKUP_DONE", "WITH_DOCTOR"].includes(patient.status),
-                          "text-green-600": patient.status === "COMPLETED",
-                          "text-blue-600": patient.status === "MEDICAL_ONLY",
-                        })}>
-                          {["REGISTERED", "IN_WORKUP"].includes(patient.status) ? "Optometrist"
-                            : ["WORKUP_DONE", "WITH_DOCTOR"].includes(patient.status) ? "Doctor"
-                            : patient.status === "COMPLETED" ? "Completed"
-                            : patient.status === "MEDICAL_ONLY" ? "Medical Only"
-                            : patient.status}
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full",
+                          sc.bg, sc.text,
+                        )}>
+                          <span className={cn("h-1.5 w-1.5 rounded-full", sc.dot)} />
+                          {sc.label}
                         </span>
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-sm text-muted-foreground whitespace-nowrap">
@@ -268,9 +264,10 @@ export function WorkupPage({ hospitalName }: { hospitalName: string }) {
                         <Button
                           size="sm"
                           variant="outline"
+                          className="h-8 gap-1.5 opacity-70 group-hover:opacity-100 transition-opacity"
                           onClick={e => { e.stopPropagation(); setSelected(patient) }}
                         >
-                          <Eye className="h-3.5 w-3.5 mr-1" /> Open
+                          <Eye className="h-3.5 w-3.5" /> Open
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -278,6 +275,11 @@ export function WorkupPage({ hospitalName }: { hospitalName: string }) {
                 })}
               </TableBody>
             </Table>
+            <div className="px-4 py-2.5 border-t border-border/40 bg-muted/20">
+              <span className="text-xs text-muted-foreground">
+                {filtered.length} patient{filtered.length !== 1 ? "s" : ""} in queue
+              </span>
+            </div>
           </div>
         )
       )}

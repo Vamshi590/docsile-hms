@@ -1,8 +1,10 @@
-import { db } from "@/lib/db"
-import LicenseTrackerPage from "./components/LicenseTrackerPage"
+import dynamic from "next/dynamic"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
+
+const LicenseTrackerPage = dynamic(() => import("./components/LicenseTrackerPage"), {
+  loading: () => <PageSkeleton />,
+})
 
 export default async function LicenseTrackerRoute() {
-  const hospital = await db.hospitalProfile.findFirst()
-  const hospitalName = hospital?.displayName ?? hospital?.name ?? "Docsile HMS"
-  return <LicenseTrackerPage hospitalName={hospitalName} />
+  return <LicenseTrackerPage />
 }

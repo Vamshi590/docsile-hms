@@ -139,7 +139,7 @@ export function LabRecordsTab({ patientId }: { patientId: string }) {
                     Tests Ordered
                   </h4>
                   <div className="space-y-1.5">
-                    {bill.items.map((item) => (
+                    {bill.items.map((item: any) => (
                       <div key={item.id} className="flex items-center justify-between text-sm">
                         <span className="text-foreground">{item.name}</span>
                         <span className="text-muted-foreground font-medium">{formatCurrency(item.amount)}</span>
@@ -155,7 +155,7 @@ export function LabRecordsTab({ patientId }: { patientId: string }) {
                       Payments
                     </h4>
                     <div className="space-y-1.5">
-                      {bill.payments.map((payment) => (
+                      {bill.payments.map((payment: any) => (
                         <div key={payment.id} className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2">
                             <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />

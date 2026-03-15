@@ -18,7 +18,8 @@ import { formatCurrency } from "@/lib/utils"
 import { getCategories, seedDefaultCategories, getExpensesByDateRange, deleteExpense } from "../actions"
 import { ExpenseForm } from "./ExpenseForm"
 import { CategoryManager } from "./CategoryManager"
-import type { ExpenseCategory } from "@prisma/client"
+import type { Database } from "@/lib/supabase/types"
+type ExpenseCategory = Database["public"]["Tables"]["ExpenseCategory"]["Row"]
 
 type ExpenseWithCategory = {
   id: string
@@ -64,7 +65,7 @@ function formatAmountShort(amount: number): string {
   return amount.toString()
 }
 
-export default function ExpensesPage({ hospitalName }: { hospitalName: string }) {
+export default function ExpensesPage() {
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
   const [expenses, setExpenses] = useState<ExpenseWithCategory[]>([])
   const [loading, setLoading] = useState(true)
@@ -169,7 +170,7 @@ export default function ExpensesPage({ hospitalName }: { hospitalName: string })
 
   return (
     <div className="space-y-0">
-      <PageHeader title="Expenses Management" description={hospitalName}>
+      <PageHeader title="Expenses Management">
         <Button variant="outline" size="sm" onClick={() => setShowCategoryManager(true)}>
           <Settings2 className="h-4 w-4 mr-1.5" />
           Categories

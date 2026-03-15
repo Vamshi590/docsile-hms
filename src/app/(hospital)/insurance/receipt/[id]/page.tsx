@@ -1,4 +1,4 @@
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import ReceiptRenderer from "./ReceiptRenderer"
 import type { PackageInclusion } from "@/lib/types"
@@ -13,8 +13,13 @@ export default async function InsuranceReceiptPage({
   const { id } = await params
   const { type = "final" } = await searchParams
 
-  const claim = await db.insuranceClaim.findUnique({ where: { id } })
-  if (!claim) notFound()
+  const supabase = await createClient()
+  const { data: claim, error } = await supabase
+    .from("InsuranceClaim")
+    .select("*")
+    .eq("id", id)
+    .single()
+  if (error || !claim) notFound()
 
   const doctors: string[] = (() => {
     try { return JSON.parse(claim.doctorNames) } catch { return [] }
@@ -39,9 +44,9 @@ export default async function InsuranceReceiptPage({
     type,
     claim: {
       ...claim,
-      admissionDate: claim.admissionDate.toISOString(),
-      dischargeDate: claim.dischargeDate?.toISOString() ?? "",
-      createdAt: claim.createdAt.toISOString(),
+      admissionDate: claim.admissionDate ?? "",
+      dischargeDate: claim.dischargeDate ?? "",
+      createdAt: claim.createdAt,
     },
     doctors,
     billingItems,

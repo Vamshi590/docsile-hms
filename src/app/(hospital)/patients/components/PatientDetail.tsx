@@ -63,7 +63,7 @@ export function PatientDetail({ patientId, onBack, onUpdate }: Props) {
     const result = await updatePatientStatus(patient.patientId, status)
     if (result.success) {
       toast.success("Status updated")
-      setPatient(prev => prev ? { ...prev, status } : prev)
+      setPatient((prev: any) => prev ? { ...prev, status } : prev)
       onUpdate()
     } else {
       toast.error(result.error)
@@ -179,13 +179,13 @@ export function PatientDetail({ patientId, onBack, onUpdate }: Props) {
             {patient.doctorName && <span>{patient.doctorName}</span>}
           </div>
           {(() => {
-            const totalDue = patient.prescriptions?.reduce((sum, p) => sum + (p.balanceDue ?? 0), 0) ?? 0
+            const totalDue = patient.prescriptions?.reduce((sum: any, p: any) => sum + (p.balanceDue ?? 0), 0) ?? 0
             return totalDue > 0 ? (
               <div className="flex items-center gap-1.5 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-1.5">
                 <span className="text-xs font-medium text-destructive/70">Due</span>
                 <span className="text-sm font-bold text-destructive">{formatCurrency(totalDue)}</span>
               </div>
-            ) : patient.prescriptions && patient.prescriptions.some(p => p.total > 0) ? (
+            ) : patient.prescriptions && patient.prescriptions.some((p: any) => p.total > 0) ? (
               <div className="flex items-center gap-1.5 rounded-lg bg-green-50 border border-green-200 px-3 py-1.5">
                 <span className="text-xs font-medium text-green-600">No Dues</span>
               </div>
@@ -244,8 +244,8 @@ export function PatientDetail({ patientId, onBack, onUpdate }: Props) {
 
             {/* Receipts tab */}
             <TabsContent value="receipts" className="p-5 space-y-3 mt-0">
-              {patient.prescriptions && patient.prescriptions.filter(p => p.total > 0).length > 0 ? (
-                patient.prescriptions.filter(p => p.total > 0).map(prescription => (
+              {patient.prescriptions && patient.prescriptions.filter((p: any) => p.total > 0).length > 0 ? (
+                patient.prescriptions.filter((p: any) => p.total > 0).map((prescription: any) => (
                   <div key={prescription.id} className="rounded-xl border border-border overflow-hidden">
                     <div className="px-4 py-2.5 bg-gray-50 flex justify-between items-center border-b border-border">
                       <span className="text-xs font-mono font-medium">
@@ -256,7 +256,7 @@ export function PatientDetail({ patientId, onBack, onUpdate }: Props) {
                       </span>
                     </div>
                     <div className="p-4 space-y-1.5">
-                      {prescription.items && prescription.items.map(item => (
+                      {prescription.items && prescription.items.map((item: any) => (
                         <div key={item.id} className="flex justify-between text-sm">
                           <span className="text-foreground">{item.description}</span>
                           <span className="text-muted-foreground">{formatCurrency(item.amount)}</span>
@@ -291,7 +291,7 @@ export function PatientDetail({ patientId, onBack, onUpdate }: Props) {
             <TabsContent value="history" className="p-5 space-y-3 mt-0">
               {patient.prescriptions && patient.prescriptions.length > 0 ? (
                 <div className="space-y-3">
-                  {patient.prescriptions.map(p => (
+                  {patient.prescriptions.map((p: any) => (
                     <div key={p.id} className="flex items-start gap-3 text-sm">
                       <div className="h-2 w-2 rounded-full bg-primary/40 shrink-0 mt-1.5" />
                       <div>

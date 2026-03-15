@@ -195,12 +195,12 @@ const ROLE_VARIANT: Record<string, "default" | "info" | "success" | "warning" | 
   NURSE: "secondary",
 }
 
-export default function SettingsPage({ hospitalName }: { hospitalName: string }) {
+export default function SettingsPage() {
   return (
     <div className="space-y-0">
       <PageHeader
         title="Configurations"
-        description={hospitalName}
+        description="Configurations"
       />
 
       <div className="pt-5">

@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 import { z } from "zod"
 import { getNextInsClaimNumber } from "@/lib/id-generators"
@@ -54,11 +54,15 @@ const InPatientSchema = z.object({
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function getNextIPNumber(): Promise<string> {
-  const last = await db.inPatient.findFirst({
-    where: { ipNumber: { startsWith: "IP-" } },
-    orderBy: { createdAt: "desc" },
-    select: { ipNumber: true },
-  })
+  const supabase = await createClient()
+  const { data: last } = await supabase
+    .from("InPatient")
+    .select("ipNumber")
+    .like("ipNumber", "IP-%")
+    .order("createdAt", { ascending: false })
+    .limit(1)
+    .single()
+
   if (!last) return "IP-0001"
   const num = parseInt(last.ipNumber.replace(/\D/g, ""), 10) || 0
   return `IP-${String(num + 1).padStart(4, "0")}`
@@ -79,72 +83,76 @@ export async function getInPatients(filters: {
   doctor?: string
   department?: string
 }) {
+  const supabase = await createClient()
   const { search, statuses, showDischarged, dateFrom, dateTo, doctor, department } = filters
 
-  const where: Record<string, unknown> = {}
+  let query = supabase.from("InPatient").select("*").order("admissionDate", { ascending: false })
 
   if (!showDischarged) {
-    where.status = { not: "DISCHARGED" }
+    query = query.neq("status", "DISCHARGED")
   }
 
   if (statuses && statuses.length > 0) {
-    where.status = { in: statuses }
+    query = query.in("status", statuses)
   }
 
-  if (dateFrom || dateTo) {
-    where.admissionDate = {
-      ...(dateFrom ? { gte: new Date(dateFrom + "T00:00:00") } : {}),
-      ...(dateTo ? { lte: new Date(dateTo + "T23:59:59") } : {}),
-    }
+  if (dateFrom) {
+    query = query.gte("admissionDate", dateFrom + "T00:00:00")
+  }
+  if (dateTo) {
+    query = query.lte("admissionDate", dateTo + "T23:59:59")
   }
 
   if (doctor) {
-    where.doctorNames = { contains: doctor }
+    query = query.ilike("doctorNames", `%${doctor}%`)
   }
 
   if (department) {
-    where.department = department
+    query = query.eq("department", department)
   }
 
   if (search) {
-    where.OR = [
-      { ipNumber: { contains: search } },
-      { name: { contains: search } },
-      { phone: { contains: search } },
-      { guardianName: { contains: search } },
-      { operationName: { contains: search } },
-    ]
+    query = query.or(
+      `ipNumber.ilike.%${search}%,name.ilike.%${search}%,phone.ilike.%${search}%,guardianName.ilike.%${search}%,operationName.ilike.%${search}%`
+    )
   }
 
-  const inpatients = await db.inPatient.findMany({
-    where,
-    orderBy: { admissionDate: "desc" },
-  })
+  const { data: inpatients } = await query
 
   // Stats
-  const all = await db.inPatient.findMany({
-    where: { status: { not: "DISCHARGED" } },
-    select: { status: true, balanceAmount: true },
-  })
+  const { data: all } = await supabase
+    .from("InPatient")
+    .select("status, balanceAmount")
+    .neq("status", "DISCHARGED")
+
+  const allRecords = all ?? []
+
+  const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).toISOString()
+  const { count: dischargedTodayCount } = await supabase
+    .from("InPatient")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "DISCHARGED")
+    .gte("dischargeDate", todayStart)
 
   const stats = {
-    totalAdmitted: all.length,
-    activeInStay: all.filter(p => ["ADMITTED", "PRE_OP", "IN_SURGERY", "POST_OP"].includes(p.status)).length,
-    readyToDischarge: all.filter(p => p.status === "READY_FOR_DISCHARGE").length,
-    dischargedToday: await db.inPatient.count({
-      where: {
-        status: "DISCHARGED",
-        dischargeDate: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-      },
-    }),
-    totalBalancePending: all.reduce((sum, p) => sum + p.balanceAmount, 0),
+    totalAdmitted: allRecords.length,
+    activeInStay: allRecords.filter(p => ["ADMITTED", "PRE_OP", "IN_SURGERY", "POST_OP"].includes(p.status)).length,
+    readyToDischarge: allRecords.filter(p => p.status === "READY_FOR_DISCHARGE").length,
+    dischargedToday: dischargedTodayCount ?? 0,
+    totalBalancePending: allRecords.reduce((sum, p) => sum + p.balanceAmount, 0),
   }
 
-  return { data: inpatients, stats }
+  return { data: inpatients ?? [], stats }
 }
 
 export async function getInPatientById(id: string) {
-  return db.inPatient.findUnique({ where: { id } })
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("InPatient")
+    .select("*")
+    .eq("id", id)
+    .single()
+  return data
 }
 
 export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
@@ -156,6 +164,7 @@ export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
 
   const pd = validated.data
   try {
+    const supabase = await createClient()
     const ipNumber = await getNextIPNumber()
     const netAmount = pd.packageAmount - pd.discount
     const totalReceived = pd.paymentRecords?.reduce((s, r) => s + r.amount, 0) ?? 0
@@ -164,17 +173,20 @@ export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
     // Find OP patient if patientId given
     let opPatientId: string | undefined
     if (pd.patientId) {
-      const op = await db.patient.findUnique({
-        where: { patientId: pd.patientId },
-        select: { id: true },
-      })
+      const { data: op } = await supabase
+        .from("Patient")
+        .select("id")
+        .eq("patientId", pd.patientId)
+        .single()
       opPatientId = op?.id
     }
 
-    const parseDate = (val: string) => new Date(val.includes("T") ? val : val + "T00:00:00")
+    const parseDate = (val: string) => new Date(val.includes("T") ? val : val + "T00:00:00").toISOString()
 
-    const ip = await db.inPatient.create({
-      data: {
+    const now = new Date().toISOString()
+    const { data: ip, error: ipError } = await supabase
+      .from("InPatient")
+      .insert({
         patientId: opPatientId ?? "",
         ipNumber,
         name: pd.name,
@@ -205,8 +217,13 @@ export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
         dischargeDate: pd.dischargeDate ? parseDate(pd.dischargeDate) : null,
         status: "ADMITTED",
         createdById: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+
+    if (ipError || !ip) throw ipError
 
     // Auto-create insurance claim if any payment has amountType "Insurance"
     const hasInsurancePayment = pd.paymentRecords?.some(
@@ -224,35 +241,36 @@ export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
           notes: "Auto-created from inpatient admission (Insurance payment detected)",
           updatedBy: user.fullName,
         }]
-        await db.insuranceClaim.create({
-          data: {
-            claimNumber: insClaimNumber,
-            inPatientId: ip.id,
-            patientName: pd.name,
-            ipNumber: ip.ipNumber,
-            age: pd.age,
-            gender: pd.gender,
-            phone: pd.phone,
-            guardianName: pd.guardianName ?? null,
-            department: pd.department ?? null,
-            doctorNames: JSON.stringify(pd.doctorNames),
-            operationName: pd.operationName ?? null,
-            provisionDiagnosis: pd.provisionDiagnosis ?? null,
-            admissionDate: new Date(pd.admissionDate.includes("T") ? pd.admissionDate : pd.admissionDate + "T00:00:00"),
-            insuranceCompanyName: insurancePayment?.notes || "TBD",
-            packageAmount: pd.packageAmount,
-            totalBillAmount: netAmount,
-            preauthAmount: insurancePayment?.amount ?? 0,
-            totalApprovedAmount: insurancePayment?.amount ?? 0,
-            patientPayableAmount: Math.max(0, netAmount - (insurancePayment?.amount ?? 0)),
-            patientBalance: Math.max(0, netAmount - (insurancePayment?.amount ?? 0)),
-            discount: pd.discount,
-            status: "PREAUTH_SUBMITTED",
-            preauthSubmittedDate: new Date(),
-            statusHistory: JSON.stringify(initialHistory),
-            packageInclusions: pd.packageInclusions ? JSON.stringify(pd.packageInclusions) : null,
-            createdById: user.id,
-          },
+        const claimNow = new Date().toISOString()
+        await supabase.from("InsuranceClaim").insert({
+          claimNumber: insClaimNumber,
+          inPatientId: ip.id,
+          patientName: pd.name,
+          ipNumber: ip.ipNumber,
+          age: pd.age,
+          gender: pd.gender,
+          phone: pd.phone,
+          guardianName: pd.guardianName ?? null,
+          department: pd.department ?? null,
+          doctorNames: JSON.stringify(pd.doctorNames),
+          operationName: pd.operationName ?? null,
+          provisionDiagnosis: pd.provisionDiagnosis ?? null,
+          admissionDate: new Date(pd.admissionDate.includes("T") ? pd.admissionDate : pd.admissionDate + "T00:00:00").toISOString(),
+          insuranceCompanyName: insurancePayment?.notes || "TBD",
+          packageAmount: pd.packageAmount,
+          totalBillAmount: netAmount,
+          preauthAmount: insurancePayment?.amount ?? 0,
+          totalApprovedAmount: insurancePayment?.amount ?? 0,
+          patientPayableAmount: Math.max(0, netAmount - (insurancePayment?.amount ?? 0)),
+          patientBalance: Math.max(0, netAmount - (insurancePayment?.amount ?? 0)),
+          discount: pd.discount,
+          status: "PREAUTH_SUBMITTED",
+          preauthSubmittedDate: claimNow,
+          statusHistory: JSON.stringify(initialHistory),
+          packageInclusions: pd.packageInclusions ? JSON.stringify(pd.packageInclusions) : null,
+          createdById: user.id,
+          createdAt: claimNow,
+          updatedAt: claimNow,
         })
         revalidatePath("/insurance")
       } catch (insError) {
@@ -271,11 +289,16 @@ export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
 
 export async function updateInPatientStatus(id: string, status: InPatientStatus) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const ip = await db.inPatient.update({
-      where: { id },
-      data: { status, updatedBy: user.id },
-    })
+    const now = new Date().toISOString()
+    const { data: ip, error } = await supabase
+      .from("InPatient")
+      .update({ status, updatedBy: user.id, updatedAt: now })
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/inpatients")
     return { success: true, data: ip }
   } catch {
@@ -292,8 +315,13 @@ export async function addInPatientPayment(data: {
   date?: string
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const ip = await db.inPatient.findUnique({ where: { id: data.inpatientId } })
+    const { data: ip } = await supabase
+      .from("InPatient")
+      .select("*")
+      .eq("id", data.inpatientId)
+      .single()
     if (!ip) return { success: false, error: "InPatient not found" }
 
     const existing: PaymentRecord[] = ip.paymentRecords ? JSON.parse(ip.paymentRecords) : []
@@ -308,22 +336,28 @@ export async function addInPatientPayment(data: {
     const totalReceived = updated.reduce((s, r) => s + r.amount, 0)
     const balance = ip.netAmount - totalReceived
 
-    await db.inPatient.update({
-      where: { id: data.inpatientId },
-      data: {
+    const now = new Date().toISOString()
+    await supabase
+      .from("InPatient")
+      .update({
         paymentRecords: JSON.stringify(updated),
         totalReceivedAmount: totalReceived,
         balanceAmount: Math.max(0, balance),
         updatedBy: user.id,
-      },
-    })
+        updatedAt: now,
+      })
+      .eq("id", data.inpatientId)
 
     // Auto-create insurance claim if this is an insurance payment and no claim exists
     if (data.amountType.toLowerCase() === "insurance") {
       try {
-        const existingClaim = await db.insuranceClaim.findFirst({
-          where: { inPatientId: data.inpatientId },
-        })
+        const { data: existingClaim } = await supabase
+          .from("InsuranceClaim")
+          .select("id")
+          .eq("inPatientId", data.inpatientId)
+          .limit(1)
+          .single()
+
         if (!existingClaim) {
           const insClaimNumber = await getNextInsClaimNumber()
           const initialHistory: InsuranceStatusHistoryEntry[] = [{
@@ -332,35 +366,36 @@ export async function addInPatientPayment(data: {
             notes: "Auto-created from insurance payment record",
             updatedBy: user.fullName,
           }]
-          await db.insuranceClaim.create({
-            data: {
-              claimNumber: insClaimNumber,
-              inPatientId: ip.id,
-              patientName: ip.name,
-              ipNumber: ip.ipNumber,
-              age: ip.age,
-              gender: ip.gender,
-              phone: ip.phone,
-              guardianName: ip.guardianName,
-              department: ip.department,
-              doctorNames: ip.doctorNames,
-              operationName: ip.operationName,
-              provisionDiagnosis: ip.provisionDiagnosis,
-              admissionDate: ip.admissionDate,
-              insuranceCompanyName: data.notes || "TBD",
-              packageAmount: ip.packageAmount,
-              totalBillAmount: ip.netAmount,
-              preauthAmount: data.amount,
-              totalApprovedAmount: data.amount,
-              patientPayableAmount: Math.max(0, ip.netAmount - data.amount),
-              patientBalance: Math.max(0, ip.netAmount - data.amount),
-              discount: ip.discount,
-              status: "PREAUTH_SUBMITTED",
-              preauthSubmittedDate: new Date(),
-              statusHistory: JSON.stringify(initialHistory),
-              packageInclusions: ip.packageInclusions,
-              createdById: user.id,
-            },
+          const claimNow = new Date().toISOString()
+          await supabase.from("InsuranceClaim").insert({
+            claimNumber: insClaimNumber,
+            inPatientId: ip.id,
+            patientName: ip.name,
+            ipNumber: ip.ipNumber,
+            age: ip.age,
+            gender: ip.gender,
+            phone: ip.phone,
+            guardianName: ip.guardianName,
+            department: ip.department,
+            doctorNames: ip.doctorNames,
+            operationName: ip.operationName,
+            provisionDiagnosis: ip.provisionDiagnosis,
+            admissionDate: ip.admissionDate,
+            insuranceCompanyName: data.notes || "TBD",
+            packageAmount: ip.packageAmount,
+            totalBillAmount: ip.netAmount,
+            preauthAmount: data.amount,
+            totalApprovedAmount: data.amount,
+            patientPayableAmount: Math.max(0, ip.netAmount - data.amount),
+            patientBalance: Math.max(0, ip.netAmount - data.amount),
+            discount: ip.discount,
+            status: "PREAUTH_SUBMITTED",
+            preauthSubmittedDate: claimNow,
+            statusHistory: JSON.stringify(initialHistory),
+            packageInclusions: ip.packageInclusions,
+            createdById: user.id,
+            createdAt: claimNow,
+            updatedAt: claimNow,
           })
           revalidatePath("/insurance")
         }
@@ -386,6 +421,7 @@ export async function dischargeInPatient(data: {
   followUpInstructions?: string
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
     const summaryJson = JSON.stringify({
       notes: data.dischargeNotes ?? "",
@@ -394,15 +430,18 @@ export async function dischargeInPatient(data: {
       medications: data.dischargeMedications ?? "",
       followUpInstructions: data.followUpInstructions ?? "",
     })
-    await db.inPatient.update({
-      where: { id: data.id },
-      data: {
+    const now = new Date().toISOString()
+    const { error } = await supabase
+      .from("InPatient")
+      .update({
         status: "DISCHARGED",
-        dischargeDate: new Date(data.dischargeDate),
+        dischargeDate: new Date(data.dischargeDate).toISOString(),
         dischargeNotes: summaryJson,
         updatedBy: user.id,
-      },
-    })
+        updatedAt: now,
+      })
+      .eq("id", data.id)
+    if (error) throw error
     revalidatePath("/inpatients")
     revalidatePath("/patients")
     return { success: true }
@@ -424,23 +463,29 @@ export async function updateInPatientDetails(id: string, data: {
   doctorNames?: string[]
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.inPatient.update({
-      where: { id },
-      data: {
-        operationName: data.operationName,
-        operationDate: data.operationDate ? new Date(data.operationDate + "T00:00:00") : undefined,
-        operationProcedure: data.operationProcedure,
-        operationDetails: data.operationDetails,
-        provisionDiagnosis: data.provisionDiagnosis,
-        medicalValues: data.medicalValues ? JSON.stringify(data.medicalValues) : undefined,
-        prescriptions: data.prescriptions ? JSON.stringify(data.prescriptions) : undefined,
-        followUpDate: data.followUpDate ? new Date(data.followUpDate + "T00:00:00") : undefined,
-        onDutyDoctor: data.onDutyDoctor,
-        doctorNames: data.doctorNames ? JSON.stringify(data.doctorNames) : undefined,
-        updatedBy: user.id,
-      },
-    })
+    const updateData: Record<string, unknown> = {
+      updatedBy: user.id,
+      updatedAt: new Date().toISOString(),
+    }
+
+    if (data.operationName !== undefined) updateData.operationName = data.operationName
+    if (data.operationDate !== undefined) updateData.operationDate = new Date(data.operationDate + "T00:00:00").toISOString()
+    if (data.operationProcedure !== undefined) updateData.operationProcedure = data.operationProcedure
+    if (data.operationDetails !== undefined) updateData.operationDetails = data.operationDetails
+    if (data.provisionDiagnosis !== undefined) updateData.provisionDiagnosis = data.provisionDiagnosis
+    if (data.medicalValues !== undefined) updateData.medicalValues = JSON.stringify(data.medicalValues)
+    if (data.prescriptions !== undefined) updateData.prescriptions = JSON.stringify(data.prescriptions)
+    if (data.followUpDate !== undefined) updateData.followUpDate = new Date(data.followUpDate + "T00:00:00").toISOString()
+    if (data.onDutyDoctor !== undefined) updateData.onDutyDoctor = data.onDutyDoctor
+    if (data.doctorNames !== undefined) updateData.doctorNames = JSON.stringify(data.doctorNames)
+
+    const { error } = await supabase
+      .from("InPatient")
+      .update(updateData)
+      .eq("id", id)
+    if (error) throw error
     revalidatePath("/inpatients")
     revalidatePath("/patients")
     return { success: true }
@@ -454,13 +499,13 @@ export async function updateInPatientDetails(id: string, data: {
 export async function deleteInPatient(id: string) {
   const user = await requireAuth()
   if (user.role !== "ADMIN") return { success: false as const, error: "Admin only" }
+  const supabase = await createClient()
   try {
-    await db.$transaction(async (tx) => {
-      // Delete related insurance claims first
-      await tx.insuranceClaim.deleteMany({ where: { inPatientId: id } })
-      // Delete the inpatient
-      await tx.inPatient.delete({ where: { id } })
-    })
+    // Delete related insurance claims first
+    await supabase.from("InsuranceClaim").delete().eq("inPatientId", id)
+    // Delete the inpatient
+    const { error } = await supabase.from("InPatient").delete().eq("id", id)
+    if (error) throw error
     revalidatePath("/inpatients")
     revalidatePath("/patients")
     revalidatePath("/insurance")
@@ -485,14 +530,18 @@ export async function updateInPatientBasicInfo(id: string, data: {
   admissionNotes?: string
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.inPatient.update({
-      where: { id },
-      data: {
+    const now = new Date().toISOString()
+    const { error } = await supabase
+      .from("InPatient")
+      .update({
         ...data,
         updatedBy: user.id,
-      },
-    })
+        updatedAt: now,
+      })
+      .eq("id", id)
+    if (error) throw error
     revalidatePath("/inpatients")
     revalidatePath("/patients")
     return { success: true as const }
@@ -512,15 +561,17 @@ export async function updateInPatient(id: string, data: z.infer<typeof InPatient
 
   const pd = validated.data
   try {
+    const supabase = await createClient()
     const netAmount = pd.packageAmount - pd.discount
     const totalReceived = pd.paymentRecords?.reduce((s, r) => s + r.amount, 0) ?? 0
     const balanceAmount = netAmount - totalReceived
 
-    const parseDate = (val: string) => new Date(val.includes("T") ? val : val + "T00:00:00")
+    const parseDate = (val: string) => new Date(val.includes("T") ? val : val + "T00:00:00").toISOString()
 
-    await db.inPatient.update({
-      where: { id },
-      data: {
+    const now = new Date().toISOString()
+    const { error } = await supabase
+      .from("InPatient")
+      .update({
         name: pd.name,
         age: pd.age,
         gender: pd.gender,
@@ -548,8 +599,10 @@ export async function updateInPatient(id: string, data: z.infer<typeof InPatient
         paymentRecords: pd.paymentRecords && pd.paymentRecords.length > 0 ? JSON.stringify(pd.paymentRecords) : null,
         dischargeDate: pd.dischargeDate ? parseDate(pd.dischargeDate) : null,
         updatedBy: user.id,
-      },
-    })
+        updatedAt: now,
+      })
+      .eq("id", id)
+    if (error) throw error
 
     revalidatePath("/inpatients")
     revalidatePath("/patients")

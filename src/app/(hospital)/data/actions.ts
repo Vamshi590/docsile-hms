@@ -1,6 +1,6 @@
 "use server"
 
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 
 type DateRange = { from?: string; to?: string }
@@ -13,39 +13,49 @@ function buildDateFilter(range: DateRange, field: string) {
   return { [field]: filter }
 }
 
+function applyDateRange(
+  query: any,
+  range: DateRange | undefined,
+  field: string
+) {
+  if (!range) return query
+  let q = query
+  if (range.from) q = q.gte(field, new Date(range.from + "T00:00:00").toISOString())
+  if (range.to) q = q.lte(field, new Date(range.to + "T23:59:59").toISOString())
+  return q
+}
+
 export async function getExportPatients(filters: {
   search?: string
   dateRange?: DateRange
   patientType?: "OPD" | "IPD" | "ALL"
 }) {
   await requireAuth()
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
+
+  let query = supabase
+    .from("Patient")
+    .select("*")
+    .order("createdAt", { ascending: false })
+    .limit(5000)
 
   if (filters.patientType && filters.patientType !== "ALL") {
-    where.patientType = filters.patientType
+    query = query.eq("patientType", filters.patientType)
   }
 
-  if (filters.dateRange) {
-    Object.assign(where, buildDateFilter(filters.dateRange, "appointmentDate"))
-  }
+  query = applyDateRange(query, filters.dateRange, "appointmentDate")
 
   if (filters.search) {
     const s = filters.search.trim()
-    where.OR = [
-      { firstName: { contains: s, mode: "insensitive" } },
-      { lastName: { contains: s, mode: "insensitive" } },
-      { phone: { contains: s } },
-      { patientId: { contains: s, mode: "insensitive" } },
-    ]
+    query = query.or(
+      `firstName.ilike.%${s}%,lastName.ilike.%${s}%,phone.ilike.%${s}%,patientId.ilike.%${s}%`
+    )
   }
 
-  const data = await db.patient.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 5000,
-  })
+  const { data, error } = await query
+  if (error) throw error
 
-  return data.map((p) => ({
+  return (data ?? []).map((p: any) => ({
     id: p.id,
     patientId: p.patientId,
     firstName: p.firstName,
@@ -61,8 +71,8 @@ export async function getExportPatients(filters: {
     department: p.department ?? "",
     patientType: p.patientType,
     status: p.status,
-    appointmentDate: p.appointmentDate.toISOString(),
-    createdAt: p.createdAt.toISOString(),
+    appointmentDate: new Date(p.appointmentDate).toISOString(),
+    createdAt: new Date(p.createdAt).toISOString(),
   }))
 }
 
@@ -72,32 +82,31 @@ export async function getExportPrescriptions(filters: {
   status?: string
 }) {
   await requireAuth()
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
+
+  let query = supabase
+    .from("Prescription")
+    .select("*")
+    .order("createdAt", { ascending: false })
+    .limit(5000)
 
   if (filters.status && filters.status !== "ALL") {
-    where.status = filters.status
+    query = query.eq("status", filters.status)
   }
 
-  if (filters.dateRange) {
-    Object.assign(where, buildDateFilter(filters.dateRange, "prescriptionDate"))
-  }
+  query = applyDateRange(query, filters.dateRange, "prescriptionDate")
 
   if (filters.search) {
     const s = filters.search.trim()
-    where.OR = [
-      { prescriptionNumber: { contains: s, mode: "insensitive" } },
-      { doctorName: { contains: s, mode: "insensitive" } },
-      { patientId: { contains: s, mode: "insensitive" } },
-    ]
+    query = query.or(
+      `prescriptionNumber.ilike.%${s}%,doctorName.ilike.%${s}%,patientId.ilike.%${s}%`
+    )
   }
 
-  const data = await db.prescription.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 5000,
-  })
+  const { data, error } = await query
+  if (error) throw error
 
-  return data.map((p) => ({
+  return (data ?? []).map((p: any) => ({
     id: p.id,
     prescriptionNumber: p.prescriptionNumber ?? "",
     patientId: p.patientId,
@@ -115,9 +124,9 @@ export async function getExportPrescriptions(filters: {
     balanceDue: p.balanceDue,
     paymentMode: p.paymentMode ?? "",
     status: p.status,
-    prescriptionDate: p.prescriptionDate.toISOString(),
-    followUpDate: p.followUpDate?.toISOString() ?? "",
-    createdAt: p.createdAt.toISOString(),
+    prescriptionDate: new Date(p.prescriptionDate).toISOString(),
+    followUpDate: p.followUpDate ? new Date(p.followUpDate).toISOString() : "",
+    createdAt: new Date(p.createdAt).toISOString(),
   }))
 }
 
@@ -126,26 +135,25 @@ export async function getExportEyeReadings(filters: {
   dateRange?: DateRange
 }) {
   await requireAuth()
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
 
-  if (filters.dateRange) {
-    Object.assign(where, buildDateFilter(filters.dateRange, "readingDate"))
-  }
+  let query = supabase
+    .from("EyeReading")
+    .select("*")
+    .order("createdAt", { ascending: false })
+    .limit(5000)
+
+  query = applyDateRange(query, filters.dateRange, "readingDate")
 
   if (filters.search) {
     const s = filters.search.trim()
-    where.OR = [
-      { patientId: { contains: s, mode: "insensitive" } },
-    ]
+    query = query.ilike("patientId", `%${s}%`)
   }
 
-  const data = await db.eyeReading.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 5000,
-  })
+  const { data, error } = await query
+  if (error) throw error
 
-  return data.map((e) => ({
+  return (data ?? []).map((e: any) => ({
     id: e.id,
     patientId: e.patientId,
     autoRefractometer: e.autoRefractometer ?? "",
@@ -154,8 +162,8 @@ export async function getExportEyeReadings(filters: {
     presentPrescription: e.presentPrescription ?? "",
     clinicalFindings: e.clinicalFindings ?? "",
     status: e.status,
-    readingDate: e.readingDate.toISOString(),
-    createdAt: e.createdAt.toISOString(),
+    readingDate: new Date(e.readingDate).toISOString(),
+    createdAt: new Date(e.createdAt).toISOString(),
   }))
 }
 
@@ -165,32 +173,31 @@ export async function getExportInPatients(filters: {
   status?: string
 }) {
   await requireAuth()
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
+
+  let query = supabase
+    .from("InPatient")
+    .select("*")
+    .order("createdAt", { ascending: false })
+    .limit(5000)
 
   if (filters.status && filters.status !== "ALL") {
-    where.status = filters.status
+    query = query.eq("status", filters.status)
   }
 
-  if (filters.dateRange) {
-    Object.assign(where, buildDateFilter(filters.dateRange, "admissionDate"))
-  }
+  query = applyDateRange(query, filters.dateRange, "admissionDate")
 
   if (filters.search) {
     const s = filters.search.trim()
-    where.OR = [
-      { name: { contains: s, mode: "insensitive" } },
-      { ipNumber: { contains: s, mode: "insensitive" } },
-      { phone: { contains: s } },
-    ]
+    query = query.or(
+      `name.ilike.%${s}%,ipNumber.ilike.%${s}%,phone.ilike.%${s}%`
+    )
   }
 
-  const data = await db.inPatient.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 5000,
-  })
+  const { data, error } = await query
+  if (error) throw error
 
-  return data.map((ip) => ({
+  return (data ?? []).map((ip: any) => ({
     id: ip.id,
     ipNumber: ip.ipNumber,
     patientId: ip.patientId,
@@ -202,7 +209,7 @@ export async function getExportInPatients(filters: {
     department: ip.department ?? "",
     doctorNames: ip.doctorNames,
     operationName: ip.operationName ?? "",
-    operationDate: ip.operationDate?.toISOString() ?? "",
+    operationDate: ip.operationDate ? new Date(ip.operationDate).toISOString() : "",
     packageAmount: ip.packageAmount,
     discount: ip.discount,
     netAmount: ip.netAmount,
@@ -211,9 +218,9 @@ export async function getExportInPatients(filters: {
     status: ip.status,
     bedNumber: ip.bedNumber ?? "",
     wardName: ip.wardName ?? "",
-    admissionDate: ip.admissionDate.toISOString(),
-    dischargeDate: ip.dischargeDate?.toISOString() ?? "",
-    createdAt: ip.createdAt.toISOString(),
+    admissionDate: new Date(ip.admissionDate).toISOString(),
+    dischargeDate: ip.dischargeDate ? new Date(ip.dischargeDate).toISOString() : "",
+    createdAt: new Date(ip.createdAt).toISOString(),
   }))
 }
 
@@ -223,32 +230,31 @@ export async function getExportInsuranceClaims(filters: {
   status?: string
 }) {
   await requireAuth()
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
+
+  let query = supabase
+    .from("InsuranceClaim")
+    .select("*")
+    .order("createdAt", { ascending: false })
+    .limit(5000)
 
   if (filters.status && filters.status !== "ALL") {
-    where.status = filters.status
+    query = query.eq("status", filters.status)
   }
 
-  if (filters.dateRange) {
-    Object.assign(where, buildDateFilter(filters.dateRange, "createdAt"))
-  }
+  query = applyDateRange(query, filters.dateRange, "createdAt")
 
   if (filters.search) {
     const s = filters.search.trim()
-    where.OR = [
-      { claimNumber: { contains: s, mode: "insensitive" } },
-      { patientName: { contains: s, mode: "insensitive" } },
-      { insuranceCompanyName: { contains: s, mode: "insensitive" } },
-    ]
+    query = query.or(
+      `claimNumber.ilike.%${s}%,patientName.ilike.%${s}%,insuranceCompanyName.ilike.%${s}%`
+    )
   }
 
-  const data = await db.insuranceClaim.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 5000,
-  })
+  const { data, error } = await query
+  if (error) throw error
 
-  return data.map((c) => ({
+  return (data ?? []).map((c: any) => ({
     id: c.id,
     claimNumber: c.claimNumber,
     patientName: c.patientName,
@@ -268,9 +274,9 @@ export async function getExportInsuranceClaims(filters: {
     patientPaidAmount: c.patientPaidAmount,
     patientBalance: c.patientBalance,
     status: c.status,
-    admissionDate: c.admissionDate.toISOString(),
-    dischargeDate: c.dischargeDate?.toISOString() ?? "",
-    createdAt: c.createdAt.toISOString(),
+    admissionDate: new Date(c.admissionDate).toISOString(),
+    dischargeDate: c.dischargeDate ? new Date(c.dischargeDate).toISOString() : "",
+    createdAt: new Date(c.createdAt).toISOString(),
   }))
 }
 
@@ -280,32 +286,31 @@ export async function getExportLabBills(filters: {
   status?: string
 }) {
   await requireAuth()
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
+
+  let query = supabase
+    .from("LabBill")
+    .select("*, lab:Lab(name)")
+    .order("createdAt", { ascending: false })
+    .limit(5000)
 
   if (filters.status && filters.status !== "ALL") {
-    where.status = filters.status
+    query = query.eq("status", filters.status)
   }
 
-  if (filters.dateRange) {
-    Object.assign(where, buildDateFilter(filters.dateRange, "createdAt"))
-  }
+  query = applyDateRange(query, filters.dateRange, "createdAt")
 
   if (filters.search) {
     const s = filters.search.trim()
-    where.OR = [
-      { billNumber: { contains: s, mode: "insensitive" } },
-      { patientId: { contains: s, mode: "insensitive" } },
-    ]
+    query = query.or(
+      `billNumber.ilike.%${s}%,patientId.ilike.%${s}%`
+    )
   }
 
-  const data = await db.labBill.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: { lab: { select: { name: true } } },
-    take: 5000,
-  })
+  const { data, error } = await query
+  if (error) throw error
 
-  return data.map((b) => ({
+  return (data ?? []).map((b: any) => ({
     id: b.id,
     billNumber: b.billNumber,
     labName: b.lab.name,
@@ -317,7 +322,7 @@ export async function getExportLabBills(filters: {
     balanceDue: b.balanceDue,
     paymentMode: b.paymentMode ?? "",
     status: b.status,
-    createdAt: b.createdAt.toISOString(),
+    createdAt: new Date(b.createdAt).toISOString(),
   }))
 }
 
@@ -326,27 +331,27 @@ export async function getExportPharmacyBills(filters: {
   dateRange?: DateRange
 }) {
   await requireAuth()
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
 
-  if (filters.dateRange) {
-    Object.assign(where, buildDateFilter(filters.dateRange, "billDate"))
-  }
+  let query = supabase
+    .from("PharmacyBill")
+    .select("*")
+    .order("createdAt", { ascending: false })
+    .limit(5000)
+
+  query = applyDateRange(query, filters.dateRange, "billDate")
 
   if (filters.search) {
     const s = filters.search.trim()
-    where.OR = [
-      { billNumber: { contains: s, mode: "insensitive" } },
-      { patientName: { contains: s, mode: "insensitive" } },
-    ]
+    query = query.or(
+      `billNumber.ilike.%${s}%,patientName.ilike.%${s}%`
+    )
   }
 
-  const data = await db.pharmacyBill.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 5000,
-  })
+  const { data, error } = await query
+  if (error) throw error
 
-  return data.map((b) => ({
+  return (data ?? []).map((b: any) => ({
     id: b.id,
     billNumber: b.billNumber,
     patientName: b.patientName,
@@ -360,8 +365,8 @@ export async function getExportPharmacyBills(filters: {
     balanceDue: b.balanceDue,
     paymentMode: b.paymentMode,
     status: b.status,
-    billDate: b.billDate.toISOString(),
-    createdAt: b.createdAt.toISOString(),
+    billDate: new Date(b.billDate).toISOString(),
+    createdAt: new Date(b.createdAt).toISOString(),
   }))
 }
 
@@ -370,27 +375,27 @@ export async function getExportOpticalBills(filters: {
   dateRange?: DateRange
 }) {
   await requireAuth()
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
 
-  if (filters.dateRange) {
-    Object.assign(where, buildDateFilter(filters.dateRange, "billDate"))
-  }
+  let query = supabase
+    .from("OpticalBill")
+    .select("*")
+    .order("createdAt", { ascending: false })
+    .limit(5000)
+
+  query = applyDateRange(query, filters.dateRange, "billDate")
 
   if (filters.search) {
     const s = filters.search.trim()
-    where.OR = [
-      { billNumber: { contains: s, mode: "insensitive" } },
-      { patientName: { contains: s, mode: "insensitive" } },
-    ]
+    query = query.or(
+      `billNumber.ilike.%${s}%,patientName.ilike.%${s}%`
+    )
   }
 
-  const data = await db.opticalBill.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 5000,
-  })
+  const { data, error } = await query
+  if (error) throw error
 
-  return data.map((b) => ({
+  return (data ?? []).map((b: any) => ({
     id: b.id,
     billNumber: b.billNumber,
     patientName: b.patientName,
@@ -404,8 +409,8 @@ export async function getExportOpticalBills(filters: {
     balanceDue: b.balanceDue,
     paymentMode: b.paymentMode,
     status: b.status,
-    billDate: b.billDate.toISOString(),
-    createdAt: b.createdAt.toISOString(),
+    billDate: new Date(b.billDate).toISOString(),
+    createdAt: new Date(b.createdAt).toISOString(),
   }))
 }
 
@@ -414,34 +419,32 @@ export async function getExportExpenses(filters: {
   dateRange?: DateRange
 }) {
   await requireAuth()
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
 
-  if (filters.dateRange) {
-    Object.assign(where, buildDateFilter(filters.dateRange, "date"))
-  }
+  let query = supabase
+    .from("Expense")
+    .select("*, category:ExpenseCategory(name)")
+    .order("createdAt", { ascending: false })
+    .limit(5000)
+
+  query = applyDateRange(query, filters.dateRange, "date")
 
   if (filters.search) {
     const s = filters.search.trim()
-    where.OR = [
-      { title: { contains: s, mode: "insensitive" } },
-    ]
+    query = query.ilike("title", `%${s}%`)
   }
 
-  const data = await db.expense.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: { category: { select: { name: true } } },
-    take: 5000,
-  })
+  const { data, error } = await query
+  if (error) throw error
 
-  return data.map((e) => ({
+  return (data ?? []).map((e: any) => ({
     id: e.id,
     title: e.title,
     category: e.category.name,
     amount: e.amount,
-    date: e.date.toISOString(),
+    date: new Date(e.date).toISOString(),
     reason: e.reason ?? "",
     paymentMode: e.paymentMode ?? "",
-    createdAt: e.createdAt.toISOString(),
+    createdAt: new Date(e.createdAt).toISOString(),
   }))
 }

@@ -1,6 +1,6 @@
 import Link from "next/link"
-import { requireAuth } from "@/lib/auth"
-import { db } from "@/lib/db"
+import { getSession } from "@/lib/auth"
+import { createClient } from "@/lib/supabase/server"
 import {
   Users,
   Eye,
@@ -153,7 +153,7 @@ const modules = [
 ]
 
 export default async function DashboardPage() {
-  const user = await requireAuth()
+  const user = (await getSession())!
   const now = new Date()
   const hour = now.getHours()
   const greeting = getGreeting(hour)
@@ -161,27 +161,35 @@ export default async function DashboardPage() {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const tomorrow = new Date(today.getTime() + 86400000)
 
-  const [hospital, opdToday, ipdToday, activeIP] = await Promise.all([
-    db.hospitalProfile.findFirst(),
-    db.patient.count({
-      where: { patientType: "OPD", appointmentDate: { gte: today, lt: tomorrow } },
-    }),
-    db.patient.count({
-      where: { patientType: "IPD", appointmentDate: { gte: today, lt: tomorrow } },
-    }),
-    db.inPatient.count({
-      where: { status: { not: "DISCHARGED" } },
-    }),
+  const supabase = await createClient()
+  const [opdResult, ipdResult, activeIPResult] = await Promise.all([
+    supabase
+      .from("Patient")
+      .select("*", { count: "exact", head: true })
+      .eq("patientType", "OPD")
+      .gte("appointmentDate", today.toISOString())
+      .lt("appointmentDate", tomorrow.toISOString()),
+    supabase
+      .from("Patient")
+      .select("*", { count: "exact", head: true })
+      .eq("patientType", "IPD")
+      .gte("appointmentDate", today.toISOString())
+      .lt("appointmentDate", tomorrow.toISOString()),
+    supabase
+      .from("InPatient")
+      .select("*", { count: "exact", head: true })
+      .neq("status", "DISCHARGED"),
   ])
-
-  const hospitalName = hospital?.displayName ?? hospital?.name ?? "Docsile HMS"
+  const opdToday = opdResult.count ?? 0
+  const ipdToday = ipdResult.count ?? 0
+  const activeIP = activeIPResult.count ?? 0
 
   return (
     <div className="space-y-7 animate-fade-in bg-gray-50">
 
       <PageHeader
         title={`${greeting}, ${user.fullName.split(" ")[0]} 👋`}
-        description={hospitalName}
+        description="Dashboard"
       />
 
       {/* Module Cards */}

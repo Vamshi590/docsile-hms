@@ -1,19 +1,22 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
 async function getNextLabBillNumber(): Promise<string> {
+  const supabase = await createClient()
   const today = new Date()
   const prefix = `LB-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`
-  const last = await db.labBill.findFirst({
-    where: { billNumber: { startsWith: prefix } },
-    orderBy: { billNumber: "desc" },
-    select: { billNumber: true },
-  })
+  const { data: last } = await supabase
+    .from("LabBill")
+    .select("billNumber")
+    .like("billNumber", `${prefix}%`)
+    .order("billNumber", { ascending: false })
+    .limit(1)
+    .single()
   if (!last) return `${prefix}-0001`
   const lastNum = parseInt(last.billNumber.split("-").pop() ?? "0", 10)
   return `${prefix}-${String(lastNum + 1).padStart(4, "0")}`
@@ -22,38 +25,67 @@ async function getNextLabBillNumber(): Promise<string> {
 // ─── Lab CRUD ────────────────────────────────────────────────────────────────
 
 export async function getLabs() {
-  const labs = await db.lab.findMany({
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    include: {
-      _count: { select: { investigations: { where: { isActive: true } } } },
-    },
-  })
-  return labs
+  const supabase = await createClient()
+  const { data: labs, error } = await supabase
+    .from("Lab")
+    .select("*")
+    .order("sortOrder", { ascending: true })
+    .order("name", { ascending: true })
+
+  if (error) throw error
+
+  // Get active investigation counts per lab
+  const labsWithCounts = await Promise.all(
+    (labs ?? []).map(async (lab) => {
+      const { count } = await supabase
+        .from("LabInvestigation")
+        .select("*", { count: "exact", head: true })
+        .eq("labId", lab.id)
+        .eq("isActive", true)
+      return { ...lab, _count: { investigations: count ?? 0 } }
+    })
+  )
+
+  return labsWithCounts
 }
 
 export async function getLabById(id: string) {
-  return db.lab.findUnique({
-    where: { id },
-    include: {
-      investigations: {
-        where: { isActive: true },
-        include: { investigation: true },
-        orderBy: { investigation: { name: "asc" } },
-      },
-    },
-  })
+  const supabase = await createClient()
+  const { data: lab, error } = await supabase
+    .from("Lab")
+    .select("*")
+    .eq("id", id)
+    .single()
+
+  if (error || !lab) return null
+
+  const { data: investigations } = await supabase
+    .from("LabInvestigation")
+    .select("*, investigation:InvestigationMaster(*)")
+    .eq("labId", id)
+    .eq("isActive", true)
+    .order("investigation(name)", { ascending: true })
+
+  return { ...lab, investigations: investigations ?? [] }
 }
 
 export async function createLab(data: { name: string; description?: string; location?: string }) {
   await requireAuth()
   try {
-    const lab = await db.lab.create({
-      data: {
+    const supabase = await createClient()
+    const now = new Date().toISOString()
+    const { data: lab, error } = await supabase
+      .from("Lab")
+      .insert({
         name: data.name,
         description: data.description ?? null,
         location: data.location ?? null,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/labs")
     return { success: true as const, data: lab }
   } catch (error: unknown) {
@@ -67,7 +99,14 @@ export async function createLab(data: { name: string; description?: string; loca
 export async function updateLab(id: string, data: { name?: string; description?: string; location?: string; isActive?: boolean }) {
   await requireAuth()
   try {
-    const lab = await db.lab.update({ where: { id }, data })
+    const supabase = await createClient()
+    const { data: lab, error } = await supabase
+      .from("Lab")
+      .update({ ...data, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/labs")
     return { success: true as const, data: lab }
   } catch {
@@ -78,7 +117,12 @@ export async function updateLab(id: string, data: { name?: string; description?:
 export async function deleteLab(id: string) {
   await requireAuth()
   try {
-    await db.lab.delete({ where: { id } })
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("Lab")
+      .delete()
+      .eq("id", id)
+    if (error) throw error
     revalidatePath("/labs")
     return { success: true as const }
   } catch {
@@ -89,32 +133,46 @@ export async function deleteLab(id: string) {
 // ─── Lab Investigation Mapping ───────────────────────────────────────────────
 
 export async function getLabInvestigations(labId: string) {
-  return db.labInvestigation.findMany({
-    where: { labId, isActive: true },
-    include: { investigation: true },
-    orderBy: { investigation: { name: "asc" } },
-  })
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("LabInvestigation")
+    .select("*, investigation:InvestigationMaster(*)")
+    .eq("labId", labId)
+    .eq("isActive", true)
+    .order("investigation(name)", { ascending: true })
+  return data ?? []
 }
 
 export async function getAllInvestigations() {
-  return db.investigationMaster.findMany({
-    where: { isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  })
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("InvestigationMaster")
+    .select("*")
+    .eq("isActive", true)
+    .order("sortOrder", { ascending: true })
+    .order("name", { ascending: true })
+  return data ?? []
 }
 
 export async function createInvestigation(data: { name: string; category?: string; description?: string }) {
   const user = await requireAuth()
   try {
-    const inv = await db.investigationMaster.create({
-      data: {
+    const supabase = await createClient()
+    const now = new Date().toISOString()
+    const { data: inv, error } = await supabase
+      .from("InvestigationMaster")
+      .insert({
         name: data.name,
         category: data.category ?? null,
         description: data.description ?? null,
         isActive: true,
         createdBy: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/labs")
     return { success: true as const, data: inv }
   } catch (error: unknown) {
@@ -131,23 +189,30 @@ export async function updateLabInvestigations(
 ) {
   await requireAuth()
   try {
-    await db.$transaction(async (tx) => {
-      // Remove existing mappings for this lab
-      await tx.labInvestigation.deleteMany({ where: { labId } })
+    const supabase = await createClient()
 
-      // Create new mappings
-      if (investigations.length > 0) {
-        await tx.labInvestigation.createMany({
-          data: investigations.map((inv) => ({
+    // Remove existing mappings for this lab
+    await supabase
+      .from("LabInvestigation")
+      .delete()
+      .eq("labId", labId)
+
+    // Create new mappings
+    if (investigations.length > 0) {
+      const { error } = await supabase
+        .from("LabInvestigation")
+        .insert(
+          investigations.map((inv) => ({
             labId,
             investigationId: inv.investigationId,
             amount: inv.amount,
             isDefault: inv.isDefault,
             isActive: true,
-          })),
-        })
-      }
-    })
+          }))
+        )
+      if (error) throw error
+    }
+
     revalidatePath("/labs")
     return { success: true as const }
   } catch {
@@ -158,39 +223,28 @@ export async function updateLabInvestigations(
 // ─── Lab Billing - Patient Investigation Lookup ──────────────────────────────
 
 export async function getPatientInvestigations(patientId: string) {
+  const supabase = await createClient()
+
   // Find patient
-  const patient = await db.patient.findUnique({
-    where: { patientId },
-    select: {
-      id: true,
-      patientId: true,
-      firstName: true,
-      lastName: true,
-      age: true,
-      gender: true,
-      phone: true,
-      doctorName: true,
-      prescriptions: {
-        where: {
-          status: { in: ["COMPLETED", "DRAFT"] },
-          investigations: { not: "[]" },
-        },
-        orderBy: { prescriptionDate: "desc" },
-        take: 1,
-        select: {
-          id: true,
-          prescriptionNumber: true,
-          investigations: true,
-          doctorName: true,
-          prescriptionDate: true,
-        },
-      },
-    },
-  })
+  const { data: patient } = await supabase
+    .from("Patient")
+    .select("id, patientId, firstName, lastName, age, gender, phone, doctorName")
+    .eq("patientId", patientId)
+    .single()
 
   if (!patient) return { success: false as const, error: "Patient not found" }
 
-  const prescription = patient.prescriptions[0]
+  // Find latest prescription with investigations
+  const { data: prescriptions } = await supabase
+    .from("Prescription")
+    .select("id, prescriptionNumber, investigations, doctorName, prescriptionDate")
+    .eq("patientId", patient.patientId)
+    .in("status", ["COMPLETED", "DRAFT"])
+    .neq("investigations", "[]")
+    .order("prescriptionDate", { ascending: false })
+    .limit(1)
+
+  const prescription = prescriptions?.[0]
   if (!prescription) {
     return {
       success: true as const,
@@ -246,28 +300,39 @@ export async function getPatientInvestigations(patientId: string) {
   }
 
   // Find investigation master records by name
-  const investigationMasters = await db.investigationMaster.findMany({
-    where: { name: { in: investigationNames }, isActive: true },
-    select: { id: true, name: true },
-  })
+  const { data: investigationMasters } = await supabase
+    .from("InvestigationMaster")
+    .select("id, name")
+    .in("name", investigationNames)
+    .eq("isActive", true)
 
-  const masterMap = new Map(investigationMasters.map((m) => [m.name, m.id]))
+  const masterList = investigationMasters ?? []
+  const masterMap = new Map(masterList.map((m) => [m.name, m.id]))
 
   // Get all lab-investigation mappings for these investigations
-  const masterIds = investigationMasters.map((m) => m.id)
-  const labMappings = await db.labInvestigation.findMany({
-    where: { investigationId: { in: masterIds }, isActive: true, lab: { isActive: true } },
-    include: { lab: true, investigation: true },
-  })
+  const masterIds = masterList.map((m) => m.id)
+
+  // Fetch lab-investigation mappings with lab and investigation details
+  const { data: labMappingsRaw } = await supabase
+    .from("LabInvestigation")
+    .select("*, lab:Lab(*), investigation:InvestigationMaster(*)")
+    .in("investigationId", masterIds.length > 0 ? masterIds : ["__none__"])
+    .eq("isActive", true)
+
+  // Filter out mappings where the lab is not active
+  const labMappings = (labMappingsRaw ?? []).filter((m) => m.lab?.isActive === true)
 
   // Check for existing lab bills for this prescription
-  const existingBills = await db.labBill.findMany({
-    where: { prescriptionId: prescription.id, status: { not: "CANCELLED" } },
-    include: { items: true, lab: true },
-  })
+  const { data: existingBillsRaw } = await supabase
+    .from("LabBill")
+    .select("*, lab:Lab(*), items:LabBillItem(*)")
+    .eq("prescriptionId", prescription.id)
+    .neq("status", "CANCELLED")
+
+  const existingBills = existingBillsRaw ?? []
 
   const billedInvestigationNames = new Set(
-    existingBills.flatMap((b) => b.items.map((item) => item.name))
+    existingBills.flatMap((b) => (b.items ?? []).map((item: { name: string }) => item.name))
   )
 
   // Build mapping: investigationId -> labMappings
@@ -305,7 +370,7 @@ export async function getPatientInvestigations(patientId: string) {
 
     const group = labGroupMap.get(chosen.labId) ?? {
       lab: { id: chosen.lab.id, name: chosen.lab.name, location: chosen.lab.location },
-      items: [],
+      items: [] as { investigationId: string; name: string; amount: number }[],
     }
     group.items.push({
       investigationId: masterId,
@@ -340,7 +405,7 @@ export async function getPatientInvestigations(patientId: string) {
         labName: b.lab.name,
         total: b.total,
         status: b.status,
-        items: b.items.map((i) => i.name),
+        items: (b.items ?? []).map((i: { name: string }) => i.name),
       })),
     },
   }
@@ -362,6 +427,7 @@ export async function createLabBills(data: {
 }) {
   const user = await requireAuth()
   try {
+    const supabase = await createClient()
     const createdBills: { id: string; billNumber: string; labName: string; total: number }[] = []
 
     for (const bill of data.bills) {
@@ -369,9 +435,11 @@ export async function createLabBills(data: {
       const subtotal = bill.items.reduce((sum, item) => sum + item.amount, 0)
       const total = subtotal - bill.discount
       const balanceDue = total - bill.amountPaid
+      const now = new Date().toISOString()
 
-      const labBill = await db.labBill.create({
-        data: {
+      const { data: labBill, error: billError } = await supabase
+        .from("LabBill")
+        .insert({
           billNumber,
           labId: bill.labId,
           patientId: data.patientId,
@@ -383,30 +451,41 @@ export async function createLabBills(data: {
           amountPaid: bill.amountPaid,
           balanceDue,
           paymentMode: bill.paymentMode,
-          paymentDate: bill.amountPaid > 0 ? new Date() : null,
+          paymentDate: bill.amountPaid > 0 ? now : null,
           status: balanceDue <= 0 ? "PAID" : bill.amountPaid > 0 ? "PARTIAL" : "PENDING",
           createdBy: user.id,
-          items: {
-            create: bill.items.map((item, i) => ({
-              investigationId: item.investigationId,
-              name: item.name,
-              amount: item.amount,
-              sortOrder: i,
-            })),
-          },
-        },
-        include: { lab: true },
-      })
+          createdAt: now,
+          updatedAt: now,
+        })
+        .select("*, lab:Lab(*)")
+        .single()
+
+      if (billError) throw billError
+
+      // Create bill items
+      const { error: itemsError } = await supabase
+        .from("LabBillItem")
+        .insert(
+          bill.items.map((item, i) => ({
+            labBillId: labBill.id,
+            investigationId: item.investigationId,
+            name: item.name,
+            amount: item.amount,
+            sortOrder: i,
+          }))
+        )
+      if (itemsError) throw itemsError
 
       if (bill.amountPaid > 0) {
-        await db.labPayment.create({
-          data: {
+        const { error: payError } = await supabase
+          .from("LabPayment")
+          .insert({
             labBillId: labBill.id,
             amount: bill.amountPaid,
             paymentMode: bill.paymentMode,
             receivedBy: user.id,
-          },
-        })
+          })
+        if (payError) throw payError
       }
 
       createdBills.push({
@@ -434,43 +513,51 @@ export async function getLabBills(filters: {
   patientId?: string
   status?: string
 }) {
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
+  let query = supabase
+    .from("LabBill")
+    .select("*, lab:Lab(name), patient:Patient(patientId, firstName, lastName, phone), items:LabBillItem(*), payments:LabPayment(*)")
+    .order("createdAt", { ascending: false })
+    .limit(100)
 
-  if (filters.dateFrom || filters.dateTo) {
-    const dateFilter: Record<string, Date> = {}
-    if (filters.dateFrom) dateFilter.gte = new Date(filters.dateFrom + "T00:00:00")
-    if (filters.dateTo) dateFilter.lte = new Date(filters.dateTo + "T23:59:59")
-    where.createdAt = dateFilter
+  if (filters.dateFrom) {
+    query = query.gte("createdAt", new Date(filters.dateFrom + "T00:00:00").toISOString())
   }
+  if (filters.dateTo) {
+    query = query.lte("createdAt", new Date(filters.dateTo + "T23:59:59").toISOString())
+  }
+  if (filters.labId) query = query.eq("labId", filters.labId)
+  if (filters.patientId) query = query.eq("patientId", filters.patientId)
+  if (filters.status) query = query.eq("status", filters.status)
 
-  if (filters.labId) where.labId = filters.labId
-  if (filters.patientId) where.patientId = filters.patientId
-  if (filters.status) where.status = filters.status
+  const { data: bills } = await query
 
-  const bills = await db.labBill.findMany({
-    where,
-    include: {
-      lab: { select: { name: true } },
-      patient: { select: { patientId: true, firstName: true, lastName: true, phone: true } },
-      items: { orderBy: { sortOrder: "asc" } },
-      payments: { orderBy: { paymentDate: "desc" } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  })
-
-  return bills
+  // Sort nested items and payments client-side
+  return (bills ?? []).map((bill) => ({
+    ...bill,
+    items: (bill.items ?? []).sort((a: { sortOrder: number }, b: { sortOrder: number }) => a.sortOrder - b.sortOrder),
+    payments: (bill.payments ?? []).sort((a: { paymentDate: string }, b: { paymentDate: string }) =>
+      new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
+    ),
+  }))
 }
 
 export async function getLabBillById(id: string) {
-  return db.labBill.findUnique({
-    where: { id },
-    include: {
-      lab: true,
-      patient: true,
-      prescription: { select: { prescriptionNumber: true, doctorName: true } },
-      items: { orderBy: { sortOrder: "asc" } },
-      payments: { orderBy: { paymentDate: "desc" } },
-    },
-  })
+  const supabase = await createClient()
+  const { data: bill } = await supabase
+    .from("LabBill")
+    .select("*, lab:Lab(*), patient:Patient(*), prescription:Prescription(prescriptionNumber, doctorName), items:LabBillItem(*), payments:LabPayment(*)")
+    .eq("id", id)
+    .single()
+
+  if (!bill) return null
+
+  // Sort nested items and payments client-side
+  return {
+    ...bill,
+    items: (bill.items ?? []).sort((a: { sortOrder: number }, b: { sortOrder: number }) => a.sortOrder - b.sortOrder),
+    payments: (bill.payments ?? []).sort((a: { paymentDate: string }, b: { paymentDate: string }) =>
+      new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
+    ),
+  }
 }

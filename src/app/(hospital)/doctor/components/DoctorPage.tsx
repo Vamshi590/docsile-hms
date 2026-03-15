@@ -1,22 +1,19 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Stethoscope, Search, ChevronLeft, ChevronRight, ArrowLeft, Loader2, Printer, Settings2 } from "lucide-react"
+import { Stethoscope, Loader2, Printer, Settings2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
+import { BreadcrumbHeader, FilterBar, DateNavigator, SearchInput, StatBadge } from "@/components/layout/header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
-import { PatientStatusBadge } from "../../patients/components/PatientStatusBadge"
 import { PrescriptionForm, type PrescriptionFormHandle } from "./PrescriptionForm"
 import { PrintReceiptsModal } from "./PrintReceiptsModal"
 import { EyeReadingForm, type EyeReadingFormHandle } from "../../workup/components/EyeReadingForm"
 import { getDoctorQueue, getPatientForConsultation } from "../actions"
 import { cn, formatDate, formatCurrency, calculateAge, todayISO, toLocalDateISO } from "@/lib/utils"
-import type { PatientStatus } from "@/lib/types"
 
 type QueueItem = Awaited<ReturnType<typeof getDoctorQueue>>[0]
 type PatientDetail = Awaited<ReturnType<typeof getPatientForConsultation>>
@@ -29,7 +26,8 @@ const TAB_CLASS =
 
 const QUEUE_COLUMNS = [
   { key: "sno", label: "#", alwaysOn: true },
-  { key: "patient", label: "Patient", alwaysOn: true },
+  { key: "patientId", label: "Patient ID", alwaysOn: true },
+  { key: "patient", label: "Name", alwaysOn: true },
   { key: "age", label: "Age / Gender" },
   { key: "phone", label: "Phone" },
   { key: "referredBy", label: "Referred By" },
@@ -42,9 +40,9 @@ const QUEUE_COLUMNS = [
 
 type ColumnKey = (typeof QUEUE_COLUMNS)[number]["key"]
 
-const DEFAULT_COLUMNS: ColumnKey[] = ["sno", "patient", "age", "phone", "srReading", "status", "print"]
+const DEFAULT_COLUMNS: ColumnKey[] = ["sno", "patientId", "patient", "age", "phone", "srReading", "status", "print"]
 
-export function DoctorPage({ hospitalName }: { hospitalName: string }) {
+export function DoctorPage() {
   const [date, setDate] = useState(todayISO())
   const [search, setSearch] = useState("")
   const [queue, setQueue] = useState<QueueItem[]>([])
@@ -60,7 +58,16 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
     if (typeof window !== "undefined") {
       try {
         const saved = localStorage.getItem("doctor-queue-columns")
-        if (saved) return JSON.parse(saved)
+        if (saved) {
+          const parsed = JSON.parse(saved) as ColumnKey[]
+          // Ensure newly added always-on columns are present
+          const alwaysOn = QUEUE_COLUMNS.filter(c => "alwaysOn" in c && c.alwaysOn).map(c => c.key)
+          const merged = [...parsed]
+          for (const key of alwaysOn) {
+            if (!merged.includes(key)) merged.splice(merged.indexOf("patient") ?? 1, 0, key)
+          }
+          return merged
+        }
       } catch { /* ignore */ }
     }
     return DEFAULT_COLUMNS
@@ -153,102 +160,71 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
   return (
     <>
       {/* ── Sticky page header ── */}
-      <div className="bg-white border-b border-border px-6 py-4 -mx-6 -mt-6 mb-0 sticky top-0 z-20">
-        <div className="flex items-center justify-between">
-          <div>
-            {selectedRow ? (
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={closeDetail}
-                  className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span className="text-[1.2rem] font-semibold">Doctor Console</span>
-                </button>
-                <span className="text-muted-foreground text-[1.2rem]">/</span>
-                <span className="text-[1.2rem] font-semibold text-foreground">
-                  {selectedRow.firstName} {selectedRow.lastName ?? ""}
-                </span>
-                <span className="text-xs font-mono text-muted-foreground ml-1 mt-0.5">
-                  · {selectedRow.patientId}
-                </span>
-              </div>
-            ) : (
-              <>
-                <h1 className="text-[1.2rem] font-semibold text-foreground tracking-tight leading-none">Doctor Console</h1>
-                <p className="text-xs text-muted-foreground mt-1">{hospitalName}</p>
-              </>
-            )}
+      {selectedRow ? (
+        <BreadcrumbHeader
+          onBack={closeDetail}
+          backLabel="Doctor Console"
+          currentLabel={`${selectedRow.firstName} ${selectedRow.lastName ?? ""}`.trim()}
+          subtitle={`· ${selectedRow.patientId}`}
+        />
+      ) : (
+        <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Doctor Console</h1>
+            <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Patient queue & consultation</p>
           </div>
-
-          {!selectedRow && (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="px-3 py-1.5 gap-1.5 text-sm">
-                <span className="font-bold text-foreground">{queue.length}</span>
-                <span className="font-normal">Total</span>
-              </Badge>
-            </div>
-          )}
+          <StatBadge value={queue.length} label="in queue" variant="info" />
         </div>
-      </div>
+      )}
 
       {/* ── Date nav + Search — hidden when patient open ── */}
       {!selectedRow && (
-        <div className="bg-gray-50 border-b border-border flex justify-between items-center shadow-sm px-6 py-2 -mx-6 mb-5 sticky top-18 z-10">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon-sm" onClick={prevDay}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className="w-40 text-sm bg-white"
+        <FilterBar>
+          <div className="flex items-center gap-3">
+            <DateNavigator
+              date={date}
+              onDateChange={setDate}
+              onPrev={prevDay}
+              onNext={nextDay}
+              onToday={() => setDate(todayISO())}
+              isToday={date === todayISO()}
             />
-            <Button variant="outline" size="icon-sm" onClick={nextDay}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <div className="relative flex-1 max-w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search patient..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-9 text-sm bg-white"
-              />
-            </div>
+            <div className="filter-divider" />
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search by name, ID, phone..."
+              className="w-64"
+            />
           </div>
           {/* Column customizer */}
-            <div className="flex justify-end px-4 py-2 border-b border-border bg-gray-50">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground gap-1.5">
-                    <Settings2 className="h-3.5 w-3.5" /> Columns
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-48 p-2">
-                  <p className="text-xs font-medium text-muted-foreground px-2 pb-1.5">Toggle columns</p>
-                  {QUEUE_COLUMNS.map(col => {
-                    const locked = "alwaysOn" in col && col.alwaysOn
-                    return (
-                      <label
-                        key={col.key}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer text-sm"
-                      >
-                        <Checkbox
-                          checked={isColumnVisible(col.key)}
-                          onCheckedChange={() => toggleColumn(col.key)}
-                          disabled={!!locked}
-                        />
-                        <span className={locked ? "text-muted-foreground" : ""}>{col.label}</span>
-                      </label>
-                    )
-                  })}
-                </PopoverContent>
-              </Popover>
-            </div>
-
-        </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="h-8 px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+                <Settings2 className="h-3.5 w-3.5" /> Columns
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-48 p-2">
+              <p className="text-xs font-medium text-muted-foreground px-2 pb-1.5">Toggle columns</p>
+              {QUEUE_COLUMNS.map(col => {
+                const locked = "alwaysOn" in col && col.alwaysOn
+                return (
+                  <label
+                    key={col.key}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer text-sm"
+                  >
+                    <Checkbox
+                      checked={isColumnVisible(col.key)}
+                      onCheckedChange={() => toggleColumn(col.key)}
+                      disabled={!!locked}
+                    />
+                    <span className={locked ? "text-muted-foreground" : ""}>{col.label}</span>
+                  </label>
+                )
+              })}
+            </PopoverContent>
+          </Popover>
+        </FilterBar>
       )}
 
       {/* ── Inline detail view ── */}
@@ -351,7 +327,7 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
 
                   {pastPrescriptions.length > 0 ? (
                     <div className="space-y-3">
-                      {pastPrescriptions.map(rx => (
+                      {pastPrescriptions.map((rx: any) => (
                         <PrescriptionHistoryCard key={rx.id} prescription={rx} />
                       ))}
                     </div>
@@ -372,38 +348,56 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
       ) : (
         /* ── Queue table ── */
         loading ? (
-          <div className="rounded-xl border border-border bg-white divide-y divide-border">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-4 px-4 py-4">
-                <Skeleton className="h-4 w-6 rounded" />
-                <Skeleton className="h-9 w-9 rounded-full shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-36" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-                <Skeleton className="h-7 w-20 rounded-full" />
-              </div>
-            ))}
+          <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
+                  {isColumnVisible("sno") && <TableHead className="w-12 text-center">Token</TableHead>}
+                  {isColumnVisible("patientId") && <TableHead>Patient ID</TableHead>}
+                  {isColumnVisible("patient") && <TableHead>Name</TableHead>}
+                  {isColumnVisible("age") && <TableHead>Age / Gender</TableHead>}
+                  {isColumnVisible("phone") && <TableHead>Phone</TableHead>}
+                  {isColumnVisible("status") && <TableHead>Status</TableHead>}
+                  {isColumnVisible("print") && <TableHead className="w-10"></TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i} className="hover:bg-transparent">
+                    {isColumnVisible("sno") && <TableCell className="text-center"><Skeleton className="h-6 w-7 rounded mx-auto" /></TableCell>}
+                    {isColumnVisible("patientId") && <TableCell><Skeleton className="h-5 w-16 rounded" /></TableCell>}
+                    {isColumnVisible("patient") && <TableCell><Skeleton className="h-4 w-28" /></TableCell>}
+                    {isColumnVisible("age") && <TableCell><Skeleton className="h-4 w-16" /></TableCell>}
+                    {isColumnVisible("phone") && <TableCell><Skeleton className="h-4 w-24" /></TableCell>}
+                    {isColumnVisible("status") && <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>}
+                    {isColumnVisible("print") && <TableCell><Skeleton className="h-6 w-6 rounded" /></TableCell>}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-xl border border-border bg-white py-20 text-center">
-            <Stethoscope className="h-9 w-9 text-muted-foreground mx-auto mb-3" />
+          <div className="rounded-xl border border-border/60 bg-white py-20 text-center shadow-sm">
+            <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-muted/60 mb-4">
+              <Stethoscope className="h-7 w-7 text-muted-foreground" />
+            </div>
             <p className="font-semibold text-foreground">No patients in queue</p>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground mt-1.5">
               Patients with Workup Done status appear here
             </p>
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-white overflow-hidden">
+          <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-100 hover:bg-gray-100">
-                  {isColumnVisible("sno") && <TableHead className="w-10 text-center">#</TableHead>}
-                  {isColumnVisible("patient") && <TableHead>Patient</TableHead>}
+                <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
+                  {isColumnVisible("sno") && <TableHead className="w-12 text-center">Token</TableHead>}
+                  {isColumnVisible("patientId") && <TableHead>Patient ID</TableHead>}
+                  {isColumnVisible("patient") && <TableHead>Name</TableHead>}
                   {isColumnVisible("age") && <TableHead>Age / Gender</TableHead>}
                   {isColumnVisible("phone") && <TableHead>Phone</TableHead>}
                   {isColumnVisible("referredBy") && <TableHead>Referred By</TableHead>}
-                  {isColumnVisible("service") && <TableHead>Service</TableHead>}
+                  {isColumnVisible("service") && <TableHead className="w-40">Service</TableHead>}
                   {isColumnVisible("srReading") && <TableHead>SR Reading</TableHead>}
                   {isColumnVisible("labAmount") && <TableHead className="text-right">Lab Amount</TableHead>}
                   {isColumnVisible("status") && <TableHead>Status</TableHead>}
@@ -421,21 +415,41 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                   const serviceNames = hasPrescription?.items?.map((it: { description: string }) => it.description) ?? []
                   const labBills = patient.labBills ?? []
                   const labTotal = labBills.reduce((sum: number, lb: { total: number }) => sum + lb.total, 0)
+
+                  const statusConfig: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+                    REGISTERED:   { label: "Optometrist",  bg: "bg-red-50",    text: "text-red-700",    dot: "bg-red-500" },
+                    IN_WORKUP:    { label: "Optometrist",  bg: "bg-red-50",    text: "text-red-700",    dot: "bg-red-500" },
+                    WORKUP_DONE:  { label: "Doctor",       bg: "bg-amber-50",  text: "text-amber-700",  dot: "bg-amber-500" },
+                    WITH_DOCTOR:  { label: "Doctor",       bg: "bg-amber-50",  text: "text-amber-700",  dot: "bg-amber-500" },
+                    VISITED:      { label: "Visited",      bg: "bg-slate-50",  text: "text-slate-600",  dot: "bg-slate-400" },
+                    COMPLETED:    { label: "Completed",    bg: "bg-green-50",  text: "text-green-700",  dot: "bg-green-500" },
+                    MEDICAL_ONLY: { label: "Medical Only", bg: "bg-blue-50",   text: "text-blue-700",   dot: "bg-blue-500" },
+                  }
+                  const sc = statusConfig[patient.status] ?? { label: patient.status, bg: "bg-slate-50", text: "text-slate-600", dot: "bg-slate-400" }
+
                   return (
                     <TableRow
                       key={patient.id}
                       onClick={() => openPatient(patient)}
-                      className="cursor-pointer"
+                      className="cursor-pointer group hover:bg-primary/[0.02] transition-colors"
                     >
                       {isColumnVisible("sno") && (
-                        <TableCell className="text-center text-xs text-muted-foreground font-medium">{i + 1}</TableCell>
+                        <TableCell className="text-center">
+                          <span className="inline-flex items-center justify-center h-6 min-w-7 rounded bg-primary/10 border border-primary/20 border-dashed text-xs font-bold text-primary tabular-nums px-1.5">
+                            {i + 1}
+                          </span>
+                        </TableCell>
+                      )}
+                      {isColumnVisible("patientId") && (
+                        <TableCell>
+                          <span className="font-mono text-xs font-semibold text-foreground bg-muted/60 px-2 py-0.5 rounded">
+                            {patient.patientId}
+                          </span>
+                        </TableCell>
                       )}
                       {isColumnVisible("patient") && (
                         <TableCell>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm text-foreground truncate">{fullName}</p>
-                            <p className="text-xs font-mono text-primary">{patient.patientId}</p>
-                          </div>
+                          <span className="font-semibold text-sm text-foreground">{fullName}</span>
                         </TableCell>
                       )}
                       {isColumnVisible("age") && (
@@ -444,39 +458,42 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                         </TableCell>
                       )}
                       {isColumnVisible("phone") && (
-                        <TableCell className="text-sm text-muted-foreground">
-                          {patient.phone || "—"}
+                        <TableCell className="text-sm text-muted-foreground tabular-nums">
+                          {patient.phone || <span className="text-muted-foreground/50">—</span>}
                         </TableCell>
                       )}
                       {isColumnVisible("referredBy") && (
                         <TableCell className="text-sm text-muted-foreground">
-                          {patient.referredBy || "—"}
+                          {patient.referredBy || <span className="text-muted-foreground/50">—</span>}
                         </TableCell>
                       )}
                       {isColumnVisible("service") && (
                         <TableCell>
                           {serviceNames.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 max-w-48">
-                              {serviceNames.map((name: string, idx: number) => (
-                                <Badge key={idx} variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  {name}
-                                </Badge>
-                              ))}
+                            <div className="flex items-center gap-1 max-w-40 overflow-hidden">
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200/60 truncate shrink-0">
+                                {serviceNames[0]}
+                              </span>
+                              {serviceNames.length > 1 && (
+                                <span className="text-[10px] font-semibold text-muted-foreground shrink-0" title={serviceNames.slice(1).join(", ")}>
+                                  +{serviceNames.length - 1}
+                                </span>
+                              )}
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <span className="text-xs text-muted-foreground/50">—</span>
                           )}
                         </TableCell>
                       )}
                       {isColumnVisible("srReading") && (
                         <TableCell>
                           {srSummary ? (
-                            <div className="text-xs space-y-0.5">
-                              <p><span className="font-semibold text-foreground w-5 inline-block">RE</span> {srSummary.re}</p>
-                              <p><span className="font-semibold text-foreground w-5 inline-block">LE</span> {srSummary.le}</p>
+                            <div className="text-xs font-mono space-y-0.5">
+                              <p><span className="font-semibold text-violet-600 w-5 inline-block">RE</span> <span className="text-foreground tabular-nums">{srSummary.re}</span></p>
+                              <p><span className="font-semibold text-violet-600 w-5 inline-block">LE</span> <span className="text-foreground tabular-nums">{srSummary.le}</span></p>
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground">No reading</span>
+                            <span className="text-xs text-muted-foreground/50 italic">No reading</span>
                           )}
                         </TableCell>
                       )}
@@ -491,30 +508,24 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                                 </p>
                               ))}
                               {labBills.length > 1 && (
-                                <p className="text-xs font-semibold border-t border-border pt-0.5 tabular-nums">
+                                <p className="text-xs font-semibold border-t border-border/40 pt-0.5 tabular-nums">
                                   {formatCurrency(labTotal)}
                                 </p>
                               )}
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <span className="text-xs text-muted-foreground/50">—</span>
                           )}
                         </TableCell>
                       )}
                       {isColumnVisible("status") && (
                         <TableCell>
-                          <span className={cn("text-xs font-semibold", {
-                            "text-red-600": ["REGISTERED", "IN_WORKUP"].includes(patient.status),
-                            "text-yellow-600": ["WORKUP_DONE", "WITH_DOCTOR"].includes(patient.status),
-                            "text-green-600": patient.status === "COMPLETED",
-                            "text-blue-600": patient.status === "MEDICAL_ONLY",
-                            "text-muted-foreground": patient.status === "VISITED",
-                          })}>
-                            {patient.status === "REGISTERED" || patient.status === "IN_WORKUP" ? "Optometrist"
-                              : patient.status === "WORKUP_DONE" || patient.status === "WITH_DOCTOR" ? "Doctor"
-                              : patient.status === "COMPLETED" ? "Completed"
-                              : patient.status === "MEDICAL_ONLY" ? "Medical Only"
-                              : patient.status}
+                          <span className={cn(
+                            "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full",
+                            sc.bg, sc.text,
+                          )}>
+                            <span className={cn("h-1.5 w-1.5 rounded-full", sc.dot)} />
+                            {sc.label}
                           </span>
                         </TableCell>
                       )}
@@ -523,7 +534,7 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                           <Button
                             size="icon-sm"
                             variant="ghost"
-                            className="text-muted-foreground hover:text-foreground"
+                            className="text-muted-foreground hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
                             onClick={e => {
                               e.stopPropagation()
                               setPrintPatient({ patientId: patient.patientId, name: fullName })
@@ -538,6 +549,11 @@ export function DoctorPage({ hospitalName }: { hospitalName: string }) {
                 })}
               </TableBody>
             </Table>
+            <div className="px-4 py-2.5 border-t border-border/40 bg-muted/20">
+              <span className="text-xs text-muted-foreground">
+                {filtered.length} patient{filtered.length !== 1 ? "s" : ""} in queue
+              </span>
+            </div>
           </div>
         )
       )}

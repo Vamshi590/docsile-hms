@@ -1,46 +1,60 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 import { getISTDayBounds, toLocalDateISO, computePatientStatus } from "@/lib/utils"
 
 export async function getWorkupQueue(date?: string) {
   const targetDate = date ?? toLocalDateISO()
   const { start, end } = getISTDayBounds(targetDate)
+  const startMs = start.getTime()
+  const endMs = end.getTime()
+  const supabase = await createClient()
 
-  const patients = await db.patient.findMany({
-    where: {
-      patientType: "OPD",
-      OR: [
-        { prescriptions: { some: { prescriptionDate: { gte: start, lte: end } } } },
-        { appointmentDate: { gte: start, lte: end } },
-      ],
-    },
-    orderBy: { createdAt: "asc" },
-    include: {
-      eyeReadings: {
-        where: { readingDate: { gte: start, lte: end } },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-      prescriptions: {
-        where: { prescriptionDate: { gte: start, lte: end } },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { id: true, status: true, prescriptionDate: true, doctorName: true },
-      },
-    },
+  // Get OPD patients with appointments or prescriptions today
+  const { data: patients, error } = await supabase
+    .from("Patient")
+    .select("*, eyeReadings:EyeReading(*), prescriptions:Prescription(id, status, prescriptionDate, doctorName)")
+    .eq("patientType", "OPD")
+    .order("createdAt", { ascending: true })
+
+  if (error) throw error
+
+  function isInDay(dateStr: string) {
+    const t = new Date(dateStr).getTime()
+    return t >= startMs && t <= endMs
+  }
+
+  // Filter to patients with appointments or prescriptions today
+  const filtered = (patients ?? []).filter(p => {
+    const hasAppointmentToday = p.appointmentDate && isInDay(p.appointmentDate)
+    const hasPrescriptionToday = p.prescriptions?.some(
+      (rx: { prescriptionDate: string }) => isInDay(rx.prescriptionDate)
+    )
+    return hasAppointmentToday || hasPrescriptionToday
   })
 
-  // Compute status from actual data
-  return patients.map(p => {
-    const hasWorkup = p.eyeReadings.length > 0
-    const hasDoctorPrescription = p.prescriptions.some(
-      rx => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
+  // Filter nested relations to today only and compute status
+  return filtered.map(p => {
+    const todayEyeReadings = (p.eyeReadings ?? []).filter(
+      (er: { readingDate: string }) => isInDay(er.readingDate)
+    ).sort((a: { createdAt: string }, b: { createdAt: string }) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 1)
+
+    const todayPrescriptions = (p.prescriptions ?? []).filter(
+      (rx: { prescriptionDate: string }) => isInDay(rx.prescriptionDate)
+    ).sort((a: { createdAt: string }, b: { createdAt: string }) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 1)
+
+    const hasWorkup = todayEyeReadings.length > 0
+    const hasDoctorPrescription = todayPrescriptions.some(
+      (rx: { status: string; doctorName: string | null }) => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
     )
     return {
       ...p,
+      eyeReadings: todayEyeReadings,
+      prescriptions: todayPrescriptions,
       status: computePatientStatus(hasWorkup, hasDoctorPrescription, p.status),
     }
   })
@@ -48,22 +62,34 @@ export async function getWorkupQueue(date?: string) {
 
 export async function getPatientForWorkup(patientId: string) {
   const { start, end } = getISTDayBounds()
+  const startMs = start.getTime()
+  const endMs = end.getTime()
+  const supabase = await createClient()
 
-  return db.patient.findUnique({
-    where: { patientId },
-    include: {
-      eyeReadings: {
-        where: { readingDate: { gte: start, lte: end } },
-        orderBy: { createdAt: "desc" },
-      },
-      prescriptions: {
-        where: { prescriptionDate: { gte: start, lte: end } },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: { id: true, prescriptionDate: true },
-      },
-    },
-  })
+  function isInDay(dateStr: string) {
+    const t = new Date(dateStr).getTime()
+    return t >= startMs && t <= endMs
+  }
+
+  const { data: patient, error } = await supabase
+    .from("Patient")
+    .select("*, eyeReadings:EyeReading(*), prescriptions:Prescription(id, prescriptionDate)")
+    .eq("patientId", patientId)
+    .single()
+
+  if (error) return null
+
+  // Filter nested relations to today only
+  patient.eyeReadings = (patient.eyeReadings ?? [])
+    .filter((er: { readingDate: string }) => isInDay(er.readingDate))
+    .sort((a: { createdAt: string }, b: { createdAt: string }) => b.createdAt.localeCompare(a.createdAt))
+
+  patient.prescriptions = (patient.prescriptions ?? [])
+    .filter((rx: { prescriptionDate: string }) => isInDay(rx.prescriptionDate))
+    .sort((a: { createdAt: string }, b: { createdAt: string }) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 1)
+
+  return patient
 }
 
 export async function startWorkup(patientId: string) {
@@ -84,34 +110,40 @@ export async function saveEyeReading(data: {
   readingDate: string
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
 
   try {
-    const patient = await db.patient.findUnique({
-      where: { patientId: data.patientId },
-      select: { id: true, patientId: true },
-    })
+    // Find patient
+    const { data: patient } = await supabase
+      .from("Patient")
+      .select("id, patientId")
+      .eq("patientId", data.patientId)
+      .single()
     if (!patient) return { success: false, error: "Patient not found" }
 
     // Find today's prescription for this patient to link the eye reading
     const { start: today, end: tomorrow } = getISTDayBounds(data.readingDate)
 
-    const todayPrescription = await db.prescription.findFirst({
-      where: {
-        patientId: patient.patientId,
-        prescriptionDate: { gte: today, lte: tomorrow },
-        eyeReading: null, // only link if not yet linked
-      },
-      orderBy: { createdAt: "desc" },
-      select: { id: true },
-    })
+    const { data: todayPrescription } = await supabase
+      .from("Prescription")
+      .select("id")
+      .eq("patientId", patient.patientId)
+      .gte("prescriptionDate", today.toISOString())
+      .lte("prescriptionDate", tomorrow.toISOString())
+      .is("eyeReadingId", null)
+      .order("createdAt", { ascending: false })
+      .limit(1)
+      .single()
 
     // Check for existing eye reading today
-    const existing = await db.eyeReading.findFirst({
-      where: {
-        patientId: patient.patientId,
-        readingDate: { gte: today, lte: tomorrow },
-      },
-    })
+    const { data: existing } = await supabase
+      .from("EyeReading")
+      .select("id")
+      .eq("patientId", patient.patientId)
+      .gte("readingDate", today.toISOString())
+      .lte("readingDate", tomorrow.toISOString())
+      .limit(1)
+      .single()
 
     const eyeData = {
       autoRefractometer: data.autoRefractometer ? JSON.stringify(data.autoRefractometer) : null,
@@ -123,24 +155,24 @@ export async function saveEyeReading(data: {
     }
 
     if (existing) {
-      await db.eyeReading.update({
-        where: { id: existing.id },
-        data: { ...eyeData, updatedBy: user.id },
-      })
+      await supabase
+        .from("EyeReading")
+        .update({ ...eyeData, updatedBy: user.id })
+        .eq("id", existing.id)
     } else {
-      await db.eyeReading.create({
-        data: {
+      const now = new Date().toISOString()
+      await supabase
+        .from("EyeReading")
+        .insert({
           patientId: patient.patientId,
           ...eyeData,
-          readingDate: new Date(data.readingDate + "T00:00:00+05:30"),
+          readingDate: new Date(data.readingDate + "T00:00:00+05:30").toISOString(),
           createdById: user.id,
-          // Link to today's billing prescription if one exists and has no eye reading yet
+          createdAt: now,
+          updatedAt: now,
           ...(todayPrescription ? { prescriptionId: todayPrescription.id } : {}),
-        },
-      })
+        })
     }
-
-    // Status is computed from data — no DB status update needed.
 
     revalidatePath("/workup")
     revalidatePath("/patients")

@@ -3,13 +3,12 @@
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import {
-  Plus, Search, ChevronLeft, ChevronRight,
-  BarChart2, TrendingUp, IndianRupee, X, ArrowLeft,
+  Plus, BarChart2, TrendingUp, IndianRupee, X,
   MoreVertical, Pencil, Trash2, Loader2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { BreadcrumbHeader, FilterBar, DateNavigator, SearchInput } from "@/components/layout/header"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { PatientTable, PatientRow } from "./PatientTable"
@@ -31,7 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 type SearchResult = Awaited<ReturnType<typeof searchExistingPatients>>[0]
 
-export function PatientsPage({ hospitalName }: { hospitalName: string }) {
+export function PatientsPage() {
   const [tab, setTab] = useState<"OPD" | "IPD">("OPD")
   const [selectedDate, setSelectedDate] = useState(todayISO())
   const [search, setSearch] = useState("")
@@ -114,108 +113,74 @@ export function PatientsPage({ hospitalName }: { hospitalName: string }) {
       <Tabs value={tab} onValueChange={(v) => { setTab(v as "OPD" | "IPD"); setSelectedPatient(null) }}>
 
         {/* Page Header — sticky bar */}
-        <div className="bg-white border-b border-border px-6 py-4 -mx-6 -mt-6 mb-0 sticky top-0 z-20">
-          <div className="flex items-center justify-between">
-            <div>
-              {(selectedPatient || selectedInpatient) ? (
-                /* Breadcrumb */
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => { setSelectedPatient(null); setSelectedInpatient(null) }}
-                    className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    <span className="text-[1.2rem] font-semibold">Patients</span>
-                  </button>
-                  <span className="text-muted-foreground text-[1.2rem]">/</span>
-                  <span className="text-[1.2rem] font-semibold text-foreground">
-                    {selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName ?? ""}` : selectedInpatient?.name}
-                  </span>
-                  <span className="text-xs font-mono text-muted-foreground ml-1 mt-0.5">
-                    · {selectedPatient ? selectedPatient.patientId : selectedInpatient?.ipNumber}
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <h1 className="text-[1.2rem] font-semibold text-foreground tracking-tight leading-none">Patients</h1>
-                  <p className="text-xs text-muted-foreground mt-1">{hospitalName}</p>
-                </>
-              )}
+        {(selectedPatient || selectedInpatient) ? (
+          <BreadcrumbHeader
+            onBack={() => { setSelectedPatient(null); setSelectedInpatient(null) }}
+            backLabel="Patients"
+            currentLabel={selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName ?? ""}`.trim() : selectedInpatient?.name ?? ""}
+            subtitle={`· ${selectedPatient ? selectedPatient.patientId : selectedInpatient?.ipNumber}`}
+          />
+        ) : (
+          <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Patients</h1>
+              <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Registration & management</p>
             </div>
             <div className="flex items-center gap-2.5">
-              {!selectedPatient && !selectedInpatient && (
-                <>
-                  <TabsList>
-                    <TabsTrigger
-                      value="OPD"
-                      className="text-sm px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
-                    >
-                      Out-Patients
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="IPD"
-                      className="text-sm px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
-                    >
-                      In-Patients
-                    </TabsTrigger>
-                  </TabsList>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowStats(true)}
-                    className="gap-2 text-sm"
-                  >
-                    <BarChart2 className="h-4 w-4" />
-                    Stats
-                  </Button>
-                  <Button onClick={() => setShowAdd(true)} size="sm" className="gap-1.5">
-                    <Plus className="h-4 w-4" />
-                    Add Patient
-                  </Button>
-                </>
-              )}
+              <TabsList className="bg-muted/50 border border-border/40">
+                <TabsTrigger
+                  value="OPD"
+                  className="text-sm px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
+                >
+                  Out-Patients
+                </TabsTrigger>
+                <TabsTrigger
+                  value="IPD"
+                  className="text-sm px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
+                >
+                  In-Patients
+                </TabsTrigger>
+              </TabsList>
+              <button
+                onClick={() => setShowStats(true)}
+                className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-border/60 bg-white hover:bg-muted/40 transition-colors text-sm font-medium text-muted-foreground hover:text-foreground"
+              >
+                <BarChart2 className="h-3.5 w-3.5" />
+                Stats
+              </button>
+              <Button onClick={() => setShowAdd(true)} size="sm" className="gap-1.5 h-9">
+                <Plus className="h-4 w-4" />
+                Add Patient
+              </Button>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Date nav + Search — only shown in list view */}
         {!selectedPatient && !selectedInpatient && (
-          <div className="bg-gray-50 border-b border-border shadow-sm px-6 py-2 -mx-6 mb-5 sticky top-18 z-10">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon-sm" onClick={prevDay}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  onChange={e => setSelectedDate(e.target.value)}
-                  className="w-40 text-sm bg-white"
-                />
-                <Button variant="outline" size="icon-sm" onClick={nextDay}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-                <div className="relative max-w-72 flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by ID, name, phone..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && loadPatients()}
-                    className="pl-9 text-sm bg-white"
-                  />
-                </div>
-                <Button variant="secondary" size="sm" onClick={loadPatients} disabled={loading}>
-                  Search
-                </Button>
-              </div>
-              <div className="flex items-center gap-2">
-                <ExistingPatientSearch
-                  onSelect={(patient: SearchResult) => setExistingPatientId(patient.patientId)}
-                />
-              </div>
+          <FilterBar>
+            <div className="flex items-center gap-3">
+              <DateNavigator
+                date={selectedDate}
+                onDateChange={setSelectedDate}
+                onPrev={prevDay}
+                onNext={nextDay}
+                onToday={() => setSelectedDate(todayISO())}
+                isToday={selectedDate === todayISO()}
+              />
+              <div className="filter-divider" />
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                onSubmit={loadPatients}
+                placeholder="Search by ID, name, phone..."
+                className="w-64"
+              />
             </div>
-          </div>
+            <ExistingPatientSearch
+              onSelect={(patient: SearchResult) => setExistingPatientId(patient.patientId)}
+            />
+          </FilterBar>
         )}
 
         {/* Patient detail view */}
@@ -249,36 +214,40 @@ export function PatientsPage({ hospitalName }: { hospitalName: string }) {
               />
             </TabsContent>
             <TabsContent value="IPD" className="mt-0">
-              <div className="rounded-xl border border-border bg-white overflow-hidden">
+              <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-gray-100 hover:bg-gray-100">
-                      <TableHead>IP Number</TableHead>
-                      <TableHead>Patient</TableHead>
-                      <TableHead>Doctor(s)</TableHead>
-                      <TableHead>Operation</TableHead>
-                      <TableHead>Admission</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Balance</TableHead>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
+                      <TableHead className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">IP Number</TableHead>
+                      <TableHead className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">Patient</TableHead>
+                      <TableHead className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">Doctor(s)</TableHead>
+                      <TableHead className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">Operation</TableHead>
+                      <TableHead className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">Admission</TableHead>
+                      <TableHead className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                      <TableHead className="text-right font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">Balance</TableHead>
                       <TableHead className="w-12"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       Array.from({ length: 6 }).map((_, i) => (
-                        <TableRow key={i}>
-                          {Array.from({ length: 8 }).map((_, j) => (
-                            <TableCell key={j}>
-                              <Skeleton className="h-4 w-full" />
-                            </TableCell>
-                          ))}
+                        <TableRow key={i} className="hover:bg-transparent">
+                          <TableCell><Skeleton className="h-5 w-20 rounded" /></TableCell>
+                          <TableCell><div className="space-y-1.5"><Skeleton className="h-4 w-28" /><Skeleton className="h-3 w-24" /></div></TableCell>
+                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                          <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                          <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                          <TableCell><Skeleton className="h-7 w-7 rounded" /></TableCell>
                         </TableRow>
                       ))
                     ) : inpatients.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
-                          <div className="font-medium">No inpatients found</div>
-                          <div className="text-xs mt-1">
+                          <div className="text-3xl mb-3">🏥</div>
+                          <div className="font-medium text-foreground">No inpatients found</div>
+                          <div className="text-xs mt-1.5">
                             {search ? "Try a different search term" : "Use Add Patient to admit a new inpatient"}
                           </div>
                         </TableCell>
@@ -290,32 +259,32 @@ export function PatientsPage({ hospitalName }: { hospitalName: string }) {
                           catch { return patient.doctorNames }
                         })()
                         return (
-                          <TableRow key={patient.id} className="cursor-pointer" onClick={() => setSelectedInpatient(patient)}>
+                          <TableRow key={patient.id} className="cursor-pointer group hover:bg-primary/[0.02] transition-colors" onClick={() => setSelectedInpatient(patient)}>
                             <TableCell>
-                              <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded font-medium">
+                              <span className="font-mono text-xs bg-muted/60 px-2 py-0.5 rounded font-semibold text-foreground">
                                 {patient.ipNumber}
                               </span>
                             </TableCell>
                             <TableCell>
-                              <div className="font-medium">{patient.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {patient.age}y · {patient.gender.charAt(0)} · {patient.phone}
+                              <div className="font-semibold text-sm text-foreground">{patient.name}</div>
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                {patient.age}y · {patient.gender.charAt(0)} · <span className="tabular-nums">{patient.phone}</span>
                               </div>
                             </TableCell>
                             <TableCell>
-                              <span className="text-xs text-muted-foreground">
-                                {doctors || "—"}
+                              <span className="text-sm text-muted-foreground">
+                                {doctors || <span className="text-muted-foreground/50">—</span>}
                               </span>
                             </TableCell>
                             <TableCell>
-                              <span className="text-xs">
+                              <span className="text-sm">
                                 {patient.operationName || (
-                                  <span className="text-muted-foreground italic">Not assigned</span>
+                                  <span className="text-muted-foreground/50 italic text-xs">Not assigned</span>
                                 )}
                               </span>
                             </TableCell>
                             <TableCell>
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-sm text-muted-foreground tabular-nums">
                                 {new Date(patient.admissionDate).toLocaleDateString("en-IN", {
                                   day: "2-digit",
                                   month: "short",
@@ -328,7 +297,7 @@ export function PatientsPage({ hospitalName }: { hospitalName: string }) {
                             </TableCell>
                             <TableCell className="text-right">
                               <span
-                                className={`font-medium text-xs ${
+                                className={`font-semibold text-sm tabular-nums ${
                                   patient.balanceAmount > 0
                                     ? "text-orange-600"
                                     : "text-green-600"
@@ -340,7 +309,7 @@ export function PatientsPage({ hospitalName }: { hospitalName: string }) {
                             <TableCell onClick={e => e.stopPropagation()}>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon-sm" className="h-7 w-7">
+                                  <Button variant="ghost" size="icon-sm" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <MoreVertical className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
@@ -366,7 +335,7 @@ export function PatientsPage({ hospitalName }: { hospitalName: string }) {
                   </TableBody>
                 </Table>
                 {!loading && inpatients.length > 0 && (
-                  <div className="px-4 py-2 border-t border-border bg-muted/20">
+                  <div className="px-4 py-2.5 border-t border-border/40 bg-muted/20">
                     <span className="text-xs text-muted-foreground">
                       {inpatients.length} patient{inpatients.length !== 1 ? "s" : ""}
                     </span>

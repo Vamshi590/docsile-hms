@@ -1,13 +1,17 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 
 export async function getLicenses() {
-  return db.license.findMany({
-    orderBy: { expiryDate: "asc" },
-  })
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("License")
+    .select("*")
+    .order("expiryDate", { ascending: true })
+  if (error) throw error
+  return data
 }
 
 export async function createLicense(data: {
@@ -21,20 +25,27 @@ export async function createLicense(data: {
   notes?: string
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const license = await db.license.create({
-      data: {
+    const now = new Date().toISOString()
+    const { data: license, error } = await supabase
+      .from("License")
+      .insert({
         name: data.name,
         licenseNumber: data.licenseNumber ?? null,
         issuingBody: data.issuingBody ?? null,
         category: data.category ?? null,
-        issueDate: data.issueDate ? new Date(data.issueDate) : null,
-        expiryDate: new Date(data.expiryDate),
+        issueDate: data.issueDate ? new Date(data.issueDate).toISOString() : null,
+        expiryDate: new Date(data.expiryDate).toISOString(),
         reminderDays: data.reminderDays ?? 30,
         notes: data.notes ?? null,
         createdBy: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/license-tracker")
     return { success: true as const, data: license }
   } catch {
@@ -54,14 +65,18 @@ export async function updateLicense(id: string, data: {
   notes?: string
 }) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const updateData: Record<string, unknown> = { ...data }
-    if (data.issueDate) updateData.issueDate = new Date(data.issueDate)
-    if (data.expiryDate) updateData.expiryDate = new Date(data.expiryDate)
-    const license = await db.license.update({
-      where: { id },
-      data: updateData,
-    })
+    const updateData: Record<string, unknown> = { ...data, updatedAt: new Date().toISOString() }
+    if (data.issueDate) updateData.issueDate = new Date(data.issueDate).toISOString()
+    if (data.expiryDate) updateData.expiryDate = new Date(data.expiryDate).toISOString()
+    const { data: license, error } = await supabase
+      .from("License")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/license-tracker")
     return { success: true as const, data: license }
   } catch {
@@ -71,8 +86,10 @@ export async function updateLicense(id: string, data: {
 
 export async function deleteLicense(id: string) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.license.delete({ where: { id } })
+    const { error } = await supabase.from("License").delete().eq("id", id)
+    if (error) throw error
     revalidatePath("/license-tracker")
     return { success: true as const }
   } catch {

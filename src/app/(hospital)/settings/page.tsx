@@ -1,8 +1,10 @@
-import { db } from "@/lib/db"
-import SettingsPage from "./components/SettingsPage"
+import dynamic from "next/dynamic"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
+
+const SettingsPage = dynamic(() => import("./components/SettingsPage"), {
+  loading: () => <PageSkeleton />,
+})
 
 export default async function SettingsRoute() {
-  const hospital = await db.hospitalProfile.findFirst()
-  const hospitalName = hospital?.displayName ?? hospital?.name ?? "Docsile HMS"
-  return <SettingsPage hospitalName={hospitalName} />
+  return <SettingsPage />
 }

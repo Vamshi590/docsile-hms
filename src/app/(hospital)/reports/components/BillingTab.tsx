@@ -146,7 +146,7 @@ export function BillingTab({ patientId, patientInternalId }: { patientId: string
                   </div>
                   {rx.payments.length > 0 && (
                     <div className="flex items-center gap-2 mt-1">
-                      {rx.payments.map((p) => (
+                      {rx.payments.map((p: any) => (
                         <span key={p.id} className="flex items-center gap-1 text-xs text-muted-foreground">
                           <CreditCard className="h-3 w-3" />
                           {formatCurrency(p.amount)} ({p.paymentMode})
@@ -206,7 +206,7 @@ export function BillingTab({ patientId, patientInternalId }: { patientId: string
                   </div>
                   {bill.payments.length > 0 && (
                     <div className="flex items-center gap-2 mt-1">
-                      {bill.payments.map((p) => (
+                      {bill.payments.map((p: any) => (
                         <span key={p.id} className="flex items-center gap-1 text-xs text-muted-foreground">
                           <CreditCard className="h-3 w-3" />
                           {formatCurrency(p.amount)} ({p.paymentMode})

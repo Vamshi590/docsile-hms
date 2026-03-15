@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState } from "react"
 import { Plus, Pencil, Settings2, Trash2, MapPin, FlaskConical } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,43 +14,27 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { SectionHeader } from "@/components/layout/header"
-import { getLabs, deleteLab } from "../actions"
+import { deleteLab } from "../actions"
 import { LabForm } from "./LabForm"
 import { LabInvestigationConfig } from "./LabInvestigationConfig"
 import { toast } from "sonner"
+import type { LabWithCount } from "./LabsPage"
 
-type Lab = {
-  id: string
-  name: string
-  description: string | null
-  location: string | null
-  isActive: boolean
-  _count: { investigations: number }
-}
-
-export function LabConfigTab({ onLabsChanged }: { onLabsChanged?: () => void }) {
-  const [labs, setLabs] = useState<Lab[]>([])
-  const [loading, setLoading] = useState(true)
+export function LabConfigTab({ initialLabs, loading, onLabsChanged }: {
+  initialLabs: LabWithCount[]
+  loading: boolean
+  onLabsChanged?: () => void
+}) {
   const [formOpen, setFormOpen] = useState(false)
-  const [editingLab, setEditingLab] = useState<Lab | null>(null)
+  const [editingLab, setEditingLab] = useState<LabWithCount | null>(null)
   const [configuringLab, setConfiguringLab] = useState<string | null>(null)
-  const [deletingLab, setDeletingLab] = useState<Lab | null>(null)
-
-  const loadLabs = useCallback(async () => {
-    setLoading(true)
-    const data = await getLabs()
-    setLabs(data as Lab[])
-    setLoading(false)
-  }, [])
-
-  useEffect(() => { loadLabs() }, [loadLabs])
+  const [deletingLab, setDeletingLab] = useState<LabWithCount | null>(null)
 
   async function handleDelete() {
     if (!deletingLab) return
     const result = await deleteLab(deletingLab.id)
     if (result.success) {
       toast.success("Lab deleted")
-      loadLabs()
       onLabsChanged?.()
     } else {
       toast.error(result.error)
@@ -63,7 +47,7 @@ export function LabConfigTab({ onLabsChanged }: { onLabsChanged?: () => void }) 
     return (
       <LabInvestigationConfig
         labId={configuringLab}
-        onBack={() => { setConfiguringLab(null); loadLabs() }}
+        onBack={() => { setConfiguringLab(null); onLabsChanged?.() }}
       />
     )
   }
@@ -98,7 +82,7 @@ export function LabConfigTab({ onLabsChanged }: { onLabsChanged?: () => void }) 
                   ))}
                 </TableRow>
               ))
-            ) : labs.length === 0 ? (
+            ) : initialLabs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-16 text-muted-foreground">
                   <FlaskConical className="h-9 w-9 mx-auto mb-3 opacity-40" />
@@ -107,7 +91,7 @@ export function LabConfigTab({ onLabsChanged }: { onLabsChanged?: () => void }) 
                 </TableCell>
               </TableRow>
             ) : (
-              labs.map((lab) => (
+              initialLabs.map((lab) => (
                 <TableRow key={lab.id}>
                   <TableCell>
                     <span className="font-medium">{lab.name}</span>
@@ -168,10 +152,10 @@ export function LabConfigTab({ onLabsChanged }: { onLabsChanged?: () => void }) 
             )}
           </TableBody>
         </Table>
-        {!loading && labs.length > 0 && (
+        {!loading && initialLabs.length > 0 && (
           <div className="px-4 py-2 border-t border-border bg-muted/20">
             <span className="text-xs text-muted-foreground">
-              {labs.length} lab{labs.length !== 1 ? "s" : ""}
+              {initialLabs.length} lab{initialLabs.length !== 1 ? "s" : ""}
             </span>
           </div>
         )}
@@ -185,7 +169,6 @@ export function LabConfigTab({ onLabsChanged }: { onLabsChanged?: () => void }) 
         onSuccess={() => {
           setFormOpen(false)
           setEditingLab(null)
-          loadLabs()
           onLabsChanged?.()
         }}
       />

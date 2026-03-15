@@ -136,7 +136,7 @@ const MODULE_COLORS: Record<string, string> = {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function StaffPage({ hospitalName }: { hospitalName: string }) {
+export default function StaffPage() {
   const [activeTab, setActiveTab] = useState("staff")
   const [loading, setLoading] = useState(true)
 
@@ -344,7 +344,7 @@ export default function StaffPage({ hospitalName }: { hospitalName: string }) {
   if (loading) {
     return (
       <div className="space-y-5">
-        <PageHeader title="Staff Management" description={hospitalName} />
+        <PageHeader title="Staff Management" />
         <div className="p-4 space-y-4">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-[400px] w-full" />
@@ -356,7 +356,7 @@ export default function StaffPage({ hospitalName }: { hospitalName: string }) {
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <div className="space-y-5">
-        <PageHeader title="Staff Management" description={hospitalName}>
+        <PageHeader title="Staff Management">
           <TabsList>
             <TabsTrigger value="staff" className="gap-2">
               <UserCog className="h-4 w-4" /> Staff Members

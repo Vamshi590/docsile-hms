@@ -12,7 +12,8 @@ import { Label } from "@/components/ui/label"
 import { createExpense, updateExpense } from "../actions"
 import { toast } from "sonner"
 import { todayISO } from "@/lib/utils"
-import type { ExpenseCategory } from "@prisma/client"
+import type { Database } from "@/lib/supabase/types"
+type ExpenseCategory = Database["public"]["Tables"]["ExpenseCategory"]["Row"]
 
 type ExpenseData = {
   id: string

@@ -173,7 +173,7 @@ export function PurchaseOrdersTab() {
   const openReceive = (po: PO) => {
     setSelectedPO(po)
     setReceiveItems(
-      po.items.map((item) => ({
+      po.items.map((item: any) => ({
         itemId: item.id,
         medicineName: item.medicine.name,
         orderedQty: item.quantity,
@@ -310,7 +310,7 @@ export function PurchaseOrdersTab() {
                       </tr>
                     </thead>
                     <tbody>
-                      {po.items.map((item) => (
+                      {po.items.map((item: any) => (
                         <tr key={item.id} className="border-b">
                           <td className="p-2 text-xs font-medium">{item.medicine.name}</td>
                           <td className="p-2 text-xs text-right">{item.quantity}</td>

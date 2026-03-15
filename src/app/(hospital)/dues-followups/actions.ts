@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -64,6 +64,7 @@ export async function getDues(filters: {
   sortBy?: "amount_desc" | "amount_asc" | "date_desc" | "date_asc"
 }) {
   await requireAuth()
+  const supabase = await createClient()
 
   const { search, type = "ALL", dateFrom, dateTo, sortBy = "date_desc" } = filters
 
@@ -71,47 +72,38 @@ export async function getDues(filters: {
 
   // ── OPD Dues: Prescriptions with balanceDue > 0 ──
   if (type === "ALL" || type === "OPD") {
-    const opdWhere: Record<string, unknown> = { balanceDue: { gt: 0 } }
+    let query = supabase
+      .from("Prescription")
+      .select("*, patient:Patient!patientId(patientId, firstName, lastName, phone), items:InvoiceItem(*)")
+      .gt("balanceDue", 0)
+      .order("prescriptionDate", { ascending: false })
 
-    if (dateFrom || dateTo) {
-      opdWhere.prescriptionDate = {
-        ...(dateFrom ? { gte: new Date(dateFrom + "T00:00:00") } : {}),
-        ...(dateTo ? { lte: new Date(dateTo + "T23:59:59") } : {}),
-      }
-    }
+    if (dateFrom) query = query.gte("prescriptionDate", dateFrom + "T00:00:00")
+    if (dateTo) query = query.lte("prescriptionDate", dateTo + "T23:59:59")
 
     if (search) {
-      opdWhere.OR = [
-        { patient: { firstName: { contains: search, mode: "insensitive" } } },
-        { patient: { lastName: { contains: search, mode: "insensitive" } } },
-        { patient: { phone: { contains: search } } },
-        { patient: { patientId: { contains: search, mode: "insensitive" } } },
-        { prescriptionNumber: { contains: search, mode: "insensitive" } },
-      ]
+      query = query.or(
+        `prescriptionNumber.ilike.%${search}%,patient.firstName.ilike.%${search}%,patient.lastName.ilike.%${search}%,patient.phone.ilike.%${search}%,patient.patientId.ilike.%${search}%`
+      )
     }
 
-    const prescriptions = await db.prescription.findMany({
-      where: opdWhere,
-      include: {
-        patient: { select: { patientId: true, firstName: true, lastName: true, phone: true } },
-        items: { select: { description: true } },
-      },
-      orderBy: { prescriptionDate: "desc" },
-    })
+    const { data: prescriptions } = await query
 
-    for (const rx of prescriptions) {
+    for (const rx of prescriptions ?? []) {
+      const patient = rx.patient as { patientId: string; firstName: string; lastName: string; phone: string }
+      const items = (rx.items ?? []) as { description: string }[]
       dues.push({
         id: rx.id,
         type: "OPD",
-        patientId: rx.patient.patientId,
-        patientName: [rx.patient.firstName, rx.patient.lastName].filter(Boolean).join(" "),
-        uhid: rx.patient.patientId,
-        phone: rx.patient.phone,
-        services: rx.items.map((i) => i.description).join(", ") || "Consultation",
+        patientId: patient.patientId,
+        patientName: [patient.firstName, patient.lastName].filter(Boolean).join(" "),
+        uhid: patient.patientId,
+        phone: patient.phone,
+        services: items.map((i) => i.description).join(", ") || "Consultation",
         totalAmount: rx.total,
         amountPaid: rx.amountPaid,
         balanceDue: rx.balanceDue,
-        date: rx.prescriptionDate.toISOString(),
+        date: new Date(rx.prescriptionDate).toISOString(),
         prescriptionNumber: rx.prescriptionNumber ?? undefined,
       })
     }
@@ -119,92 +111,77 @@ export async function getDues(filters: {
 
   // ── IPD Dues: InPatients with balanceAmount > 0 ──
   if (type === "ALL" || type === "IPD") {
-    const ipdWhere: Record<string, unknown> = { balanceAmount: { gt: 0 } }
+    let query = supabase
+      .from("InPatient")
+      .select("*, patient:Patient!patientId(patientId)")
+      .gt("balanceAmount", 0)
+      .order("admissionDate", { ascending: false })
 
-    if (dateFrom || dateTo) {
-      ipdWhere.admissionDate = {
-        ...(dateFrom ? { gte: new Date(dateFrom + "T00:00:00") } : {}),
-        ...(dateTo ? { lte: new Date(dateTo + "T23:59:59") } : {}),
-      }
-    }
+    if (dateFrom) query = query.gte("admissionDate", dateFrom + "T00:00:00")
+    if (dateTo) query = query.lte("admissionDate", dateTo + "T23:59:59")
 
     if (search) {
-      ipdWhere.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search } },
-        { ipNumber: { contains: search, mode: "insensitive" } },
-      ]
+      query = query.or(
+        `name.ilike.%${search}%,phone.ilike.%${search}%,ipNumber.ilike.%${search}%`
+      )
     }
 
-    const inpatients = await db.inPatient.findMany({
-      where: ipdWhere,
-      include: {
-        patient: { select: { patientId: true } },
-      },
-      orderBy: { admissionDate: "desc" },
-    })
+    const { data: inpatients } = await query
 
-    for (const ip of inpatients) {
+    for (const ip of inpatients ?? []) {
+      const patient = ip.patient as { patientId: string }
       dues.push({
         id: ip.id,
         type: "IPD",
-        patientId: ip.patient.patientId,
+        patientId: patient.patientId,
         patientName: ip.name,
-        uhid: ip.patient.patientId,
+        uhid: patient.patientId,
         phone: ip.phone,
         services: ip.operationName || "In-Patient Package",
         totalAmount: ip.netAmount,
         amountPaid: ip.totalReceivedAmount,
         balanceDue: ip.balanceAmount,
-        date: ip.admissionDate.toISOString(),
+        date: new Date(ip.admissionDate).toISOString(),
       })
     }
   }
 
   // ── LAB Dues: LabBills with balanceDue > 0 ──
   if (type === "ALL" || type === "LAB") {
-    const labWhere: Record<string, unknown> = { balanceDue: { gt: 0 }, status: { not: "CANCELLED" } }
+    let query = supabase
+      .from("LabBill")
+      .select("*, patient:Patient!patientId(patientId, firstName, lastName, phone), lab:Lab!labId(name), items:LabBillItem(*)")
+      .gt("balanceDue", 0)
+      .neq("status", "CANCELLED")
+      .order("createdAt", { ascending: false })
 
-    if (dateFrom || dateTo) {
-      labWhere.createdAt = {
-        ...(dateFrom ? { gte: new Date(dateFrom + "T00:00:00") } : {}),
-        ...(dateTo ? { lte: new Date(dateTo + "T23:59:59") } : {}),
-      }
-    }
+    if (dateFrom) query = query.gte("createdAt", dateFrom + "T00:00:00")
+    if (dateTo) query = query.lte("createdAt", dateTo + "T23:59:59")
 
     if (search) {
-      labWhere.OR = [
-        { patient: { firstName: { contains: search, mode: "insensitive" } } },
-        { patient: { lastName: { contains: search, mode: "insensitive" } } },
-        { patient: { phone: { contains: search } } },
-        { patient: { patientId: { contains: search, mode: "insensitive" } } },
-        { billNumber: { contains: search, mode: "insensitive" } },
-      ]
+      query = query.or(
+        `billNumber.ilike.%${search}%,patient.firstName.ilike.%${search}%,patient.lastName.ilike.%${search}%,patient.phone.ilike.%${search}%,patient.patientId.ilike.%${search}%`
+      )
     }
 
-    const labBills = await db.labBill.findMany({
-      where: labWhere,
-      include: {
-        patient: { select: { patientId: true, firstName: true, lastName: true, phone: true } },
-        lab: { select: { name: true } },
-        items: { select: { name: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    })
+    const { data: labBills } = await query
 
-    for (const lb of labBills) {
+    for (const lb of labBills ?? []) {
+      const patient = lb.patient as { patientId: string; firstName: string; lastName: string; phone: string }
+      const lab = lb.lab as { name: string }
+      const items = (lb.items ?? []) as { name: string }[]
       dues.push({
         id: lb.id,
         type: "LAB",
-        patientId: lb.patient.patientId,
-        patientName: [lb.patient.firstName, lb.patient.lastName].filter(Boolean).join(" "),
-        uhid: lb.patient.patientId,
-        phone: lb.patient.phone,
-        services: `${lb.lab.name}: ${lb.items.map((i) => i.name).join(", ")}`,
+        patientId: patient.patientId,
+        patientName: [patient.firstName, patient.lastName].filter(Boolean).join(" "),
+        uhid: patient.patientId,
+        phone: patient.phone,
+        services: `${lab.name}: ${items.map((i) => i.name).join(", ")}`,
         totalAmount: lb.total,
         amountPaid: lb.amountPaid,
         balanceDue: lb.balanceDue,
-        date: lb.createdAt.toISOString(),
+        date: new Date(lb.createdAt).toISOString(),
         labBillNumber: lb.billNumber,
       })
     }
@@ -251,6 +228,7 @@ export async function getFollowUps(filters: {
   includeOverdue?: boolean
 }) {
   await requireAuth()
+  const supabase = await createClient()
 
   const { search, type = "ALL", doctor, department, includeOverdue = false } = filters
 
@@ -271,43 +249,38 @@ export async function getFollowUps(filters: {
 
   // ── OPD Follow-ups: from Prescription.followUpDate ──
   if (type === "ALL" || type === "OPD") {
-    const where: Record<string, unknown> = {
-      followUpDate: { gte: dateFrom, lte: dateTo },
-    }
+    let query = supabase
+      .from("Prescription")
+      .select("*, patient:Patient!patientId(patientId, firstName, lastName, phone)")
+      .gte("followUpDate", dateFrom.toISOString())
+      .lte("followUpDate", dateTo.toISOString())
+      .order("followUpDate", { ascending: true })
 
     if (search) {
-      where.OR = [
-        { patient: { firstName: { contains: search, mode: "insensitive" } } },
-        { patient: { lastName: { contains: search, mode: "insensitive" } } },
-        { patient: { phone: { contains: search } } },
-        { patient: { patientId: { contains: search, mode: "insensitive" } } },
-      ]
+      query = query.or(
+        `patient.firstName.ilike.%${search}%,patient.lastName.ilike.%${search}%,patient.phone.ilike.%${search}%,patient.patientId.ilike.%${search}%`
+      )
     }
-    if (doctor) where.doctorName = { contains: doctor, mode: "insensitive" }
-    if (department) where.department = department
+    if (doctor) query = query.ilike("doctorName", `%${doctor}%`)
+    if (department) query = query.eq("department", department)
 
-    const prescriptions = await db.prescription.findMany({
-      where,
-      include: {
-        patient: { select: { patientId: true, firstName: true, lastName: true, phone: true } },
-      },
-      orderBy: { followUpDate: "asc" },
-    })
+    const { data: prescriptions } = await query
 
-    for (const rx of prescriptions) {
-      const fuDate = rx.followUpDate!
+    for (const rx of prescriptions ?? []) {
+      const patient = rx.patient as { patientId: string; firstName: string; lastName: string; phone: string }
+      const fuDate = new Date(rx.followUpDate!)
       followUps.push({
         id: rx.id,
         type: "OPD",
-        patientId: rx.patient.patientId,
-        patientName: [rx.patient.firstName, rx.patient.lastName].filter(Boolean).join(" "),
-        uhid: rx.patient.patientId,
-        phone: rx.patient.phone,
+        patientId: patient.patientId,
+        patientName: [patient.firstName, patient.lastName].filter(Boolean).join(" "),
+        uhid: patient.patientId,
+        phone: patient.phone,
         followUpDate: fuDate.toISOString(),
         doctorName: rx.doctorName ?? "—",
         department: rx.department ?? "—",
         diagnosis: rx.diagnosis ?? "—",
-        lastVisitDate: rx.prescriptionDate.toISOString(),
+        lastVisitDate: new Date(rx.prescriptionDate).toISOString(),
         isOverdue: fuDate < today,
       })
     }
@@ -315,30 +288,26 @@ export async function getFollowUps(filters: {
 
   // ── IPD Follow-ups: from InPatient.followUpDate ──
   if (type === "ALL" || type === "IPD") {
-    const ipdWhere: Record<string, unknown> = {
-      followUpDate: { gte: dateFrom, lte: dateTo },
-    }
+    let query = supabase
+      .from("InPatient")
+      .select("*, patient:Patient!patientId(patientId)")
+      .gte("followUpDate", dateFrom.toISOString())
+      .lte("followUpDate", dateTo.toISOString())
+      .order("followUpDate", { ascending: true })
 
     if (search) {
-      ipdWhere.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search } },
-        { ipNumber: { contains: search, mode: "insensitive" } },
-      ]
+      query = query.or(
+        `name.ilike.%${search}%,phone.ilike.%${search}%,ipNumber.ilike.%${search}%`
+      )
     }
-    if (doctor) ipdWhere.doctorNames = { contains: doctor }
-    if (department) ipdWhere.department = department
+    if (doctor) query = query.ilike("doctorNames", `%${doctor}%`)
+    if (department) query = query.eq("department", department)
 
-    const inpatients = await db.inPatient.findMany({
-      where: ipdWhere,
-      include: {
-        patient: { select: { patientId: true } },
-      },
-      orderBy: { followUpDate: "asc" },
-    })
+    const { data: inpatients } = await query
 
-    for (const ip of inpatients) {
-      const fuDate = ip.followUpDate!
+    for (const ip of inpatients ?? []) {
+      const patient = ip.patient as { patientId: string }
+      const fuDate = new Date(ip.followUpDate!)
       let doctorName = "—"
       try {
         const names = JSON.parse(ip.doctorNames) as string[]
@@ -350,15 +319,15 @@ export async function getFollowUps(filters: {
       followUps.push({
         id: ip.id,
         type: "IPD",
-        patientId: ip.patient.patientId,
+        patientId: patient.patientId,
         patientName: ip.name,
-        uhid: ip.patient.patientId,
+        uhid: patient.patientId,
         phone: ip.phone,
         followUpDate: fuDate.toISOString(),
         doctorName,
         department: ip.department ?? "—",
         diagnosis: ip.provisionDiagnosis ?? ip.operationName ?? "—",
-        lastVisitDate: (ip.dischargeDate ?? ip.admissionDate).toISOString(),
+        lastVisitDate: new Date(ip.dischargeDate ?? ip.admissionDate).toISOString(),
         isOverdue: fuDate < today,
       })
     }
@@ -391,54 +360,67 @@ export async function getFollowUps(filters: {
 
 export async function markDueAsPaid(id: string, type: "OPD" | "IPD" | "LAB") {
   const user = await requireAuth()
+  const supabase = await createClient()
 
   try {
     if (type === "LAB") {
-      const labBill = await db.labBill.findUnique({ where: { id } })
+      const { data: labBill } = await supabase
+        .from("LabBill")
+        .select("*")
+        .eq("id", id)
+        .single()
       if (!labBill) return { success: false as const, error: "Lab bill not found" }
 
-      await db.labBill.update({
-        where: { id },
-        data: {
+      await supabase
+        .from("LabBill")
+        .update({
           amountPaid: labBill.total,
           balanceDue: 0,
           status: "PAID",
           paymentMode: labBill.paymentMode || "CASH",
-          paymentDate: new Date(),
-        },
-      })
+          paymentDate: new Date().toISOString(),
+        })
+        .eq("id", id)
 
-      await db.labPayment.create({
-        data: {
+      await supabase
+        .from("LabPayment")
+        .insert({
           labBillId: id,
           amount: labBill.balanceDue,
           paymentMode: labBill.paymentMode || "CASH",
           receivedBy: user.id,
-        },
-      })
+        })
     } else if (type === "OPD") {
-      const prescription = await db.prescription.findUnique({ where: { id } })
+      const { data: prescription } = await supabase
+        .from("Prescription")
+        .select("*")
+        .eq("id", id)
+        .single()
       if (!prescription) return { success: false as const, error: "Prescription not found" }
 
-      await db.prescription.update({
-        where: { id },
-        data: {
+      await supabase
+        .from("Prescription")
+        .update({
           amountPaid: prescription.total,
           balanceDue: 0,
           updatedBy: user.id,
-        },
-      })
+        })
+        .eq("id", id)
 
-      await db.payment.create({
-        data: {
+      await supabase
+        .from("Payment")
+        .insert({
           prescriptionId: id,
           amount: prescription.balanceDue,
           paymentMode: "CASH",
           receivedBy: user.id,
-        },
-      })
+        })
     } else {
-      const inpatient = await db.inPatient.findUnique({ where: { id } })
+      const { data: inpatient } = await supabase
+        .from("InPatient")
+        .select("*")
+        .eq("id", id)
+        .single()
       if (!inpatient) return { success: false as const, error: "InPatient not found" }
 
       const existingRecords: { date: string; amountType: string; paymentMode: string; amount: number; notes?: string }[] = (() => {
@@ -454,15 +436,15 @@ export async function markDueAsPaid(id: string, type: "OPD" | "IPD" | "LAB") {
         notes: "Marked as paid from Dues module",
       })
 
-      await db.inPatient.update({
-        where: { id },
-        data: {
+      await supabase
+        .from("InPatient")
+        .update({
           totalReceivedAmount: inpatient.netAmount,
           balanceAmount: 0,
           paymentRecords: JSON.stringify(existingRecords),
           updatedBy: user.id,
-        },
-      })
+        })
+        .eq("id", id)
     }
 
     revalidatePath("/dues-followups")
@@ -476,21 +458,25 @@ export async function markDueAsPaid(id: string, type: "OPD" | "IPD" | "LAB") {
 // ─── Get Doctor List (for filter dropdown) ───────────────────────────────────
 
 export async function getDoctorList() {
-  const doctors = await db.prescription.findMany({
-    where: { doctorName: { not: null } },
-    select: { doctorName: true },
-    distinct: ["doctorName"],
-  })
-  return doctors.map((d) => d.doctorName!).filter(Boolean).sort()
+  const supabase = await createClient()
+  const { data: doctors } = await supabase
+    .from("Prescription")
+    .select("doctorName")
+    .not("doctorName", "is", null)
+
+  const uniqueNames = [...new Set((doctors ?? []).map((d) => d.doctorName!))]
+  return uniqueNames.filter(Boolean).sort()
 }
 
 // ─── Get Department List (for filter dropdown) ───────────────────────────────
 
 export async function getDepartmentList() {
-  const departments = await db.prescription.findMany({
-    where: { department: { not: null } },
-    select: { department: true },
-    distinct: ["department"],
-  })
-  return departments.map((d) => d.department!).filter(Boolean).sort()
+  const supabase = await createClient()
+  const { data: departments } = await supabase
+    .from("Prescription")
+    .select("department")
+    .not("department", "is", null)
+
+  const uniqueDepts = [...new Set((departments ?? []).map((d) => d.department!))]
+  return uniqueDepts.filter(Boolean).sort()
 }

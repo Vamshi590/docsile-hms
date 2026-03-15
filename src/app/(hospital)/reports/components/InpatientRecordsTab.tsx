@@ -403,7 +403,7 @@ export function InpatientRecordsTab({ patientInternalId }: { patientInternalId: 
 
           {showInsurance && (
             <div className="border-t border-gray-100 divide-y divide-gray-50">
-              {record.insuranceClaims.map((claim) => (
+              {record.insuranceClaims.map((claim: any) => (
                 <div key={claim.id} className="px-5 py-3">
                   <div className="flex items-center justify-between">
                     <div>

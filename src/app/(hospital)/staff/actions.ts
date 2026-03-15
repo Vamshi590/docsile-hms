@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient, createServiceClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/auth"
 import { z } from "zod"
 import { DEFAULT_ROLE_PERMISSIONS, getAllPermissionKeys } from "@/lib/permissions"
@@ -28,56 +28,25 @@ const StaffSchema = z.object({
 
 export async function getStaffMembers() {
   await requireAdmin()
-  return db.user.findMany({
-    orderBy: { fullName: "asc" },
-    select: {
-      id: true,
-      email: true,
-      fullName: true,
-      phone: true,
-      role: true,
-      department: true,
-      designation: true,
-      employeeId: true,
-      qualifications: true,
-      joiningDate: true,
-      address: true,
-      emergencyContact: true,
-      bloodGroup: true,
-      salary: true,
-      salaryType: true,
-      isActive: true,
-      lastLogin: true,
-      createdAt: true,
-    },
-  })
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("User")
+    .select("id, email, fullName, phone, role, department, designation, employeeId, qualifications, joiningDate, address, emergencyContact, bloodGroup, salary, salaryType, isActive, lastLogin, createdAt")
+    .order("fullName", { ascending: true })
+  if (error) throw error
+  return data
 }
 
 export async function getStaffMember(id: string) {
   await requireAdmin()
-  return db.user.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      email: true,
-      fullName: true,
-      phone: true,
-      role: true,
-      department: true,
-      designation: true,
-      employeeId: true,
-      qualifications: true,
-      joiningDate: true,
-      address: true,
-      emergencyContact: true,
-      bloodGroup: true,
-      salary: true,
-      salaryType: true,
-      isActive: true,
-      lastLogin: true,
-      createdAt: true,
-    },
-  })
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("User")
+    .select("id, email, fullName, phone, role, department, designation, employeeId, qualifications, joiningDate, address, emergencyContact, bloodGroup, salary, salaryType, isActive, lastLogin, createdAt")
+    .eq("id", id)
+    .single()
+  if (error) return null
+  return data
 }
 
 export async function createStaffMember(data: z.infer<typeof StaffSchema>) {
@@ -90,35 +59,47 @@ export async function createStaffMember(data: z.infer<typeof StaffSchema>) {
     return { success: false, error: "Password is required for new staff" }
   }
 
-  const { hashPassword } = await import("@/lib/auth")
+  const supabase = await createClient()
   try {
-    const existing = await db.user.findUnique({ where: { email: validated.data.email } })
+    // Check email uniqueness
+    const { data: existing } = await supabase.from("User").select("id").eq("email", validated.data.email).single()
     if (existing) return { success: false, error: "Email already registered" }
 
     if (validated.data.employeeId) {
-      const existingEmp = await db.user.findUnique({ where: { employeeId: validated.data.employeeId } })
+      const { data: existingEmp } = await supabase.from("User").select("id").eq("employeeId", validated.data.employeeId).single()
       if (existingEmp) return { success: false, error: "Employee ID already exists" }
     }
 
-    await db.user.create({
-      data: {
-        email: validated.data.email,
-        passwordHash: hashPassword(validated.data.password),
-        fullName: validated.data.fullName,
-        phone: validated.data.phone || null,
-        role: validated.data.role,
-        department: validated.data.department || null,
-        designation: validated.data.designation || null,
-        employeeId: validated.data.employeeId || null,
-        qualifications: validated.data.qualifications || null,
-        joiningDate: validated.data.joiningDate ? new Date(validated.data.joiningDate) : null,
-        address: validated.data.address || null,
-        emergencyContact: validated.data.emergencyContact || null,
-        bloodGroup: validated.data.bloodGroup || null,
-        salary: validated.data.salary ?? null,
-        salaryType: validated.data.salaryType || null,
-        isActive: true,
-      },
+    // Create Supabase Auth user
+    const adminSupabase = await createServiceClient()
+    const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
+      email: validated.data.email,
+      password: validated.data.password,
+      email_confirm: true,
+    })
+    if (authError) throw authError
+
+    const now = new Date().toISOString()
+    await supabase.from("User").insert({
+      id: authData.user.id,
+      email: validated.data.email,
+      passwordHash: "supabase-auth",
+      fullName: validated.data.fullName,
+      phone: validated.data.phone || null,
+      role: validated.data.role,
+      department: validated.data.department || null,
+      designation: validated.data.designation || null,
+      employeeId: validated.data.employeeId || null,
+      qualifications: validated.data.qualifications || null,
+      joiningDate: validated.data.joiningDate ? new Date(validated.data.joiningDate).toISOString() : null,
+      address: validated.data.address || null,
+      emergencyContact: validated.data.emergencyContact || null,
+      bloodGroup: validated.data.bloodGroup || null,
+      salary: validated.data.salary ?? null,
+      salaryType: validated.data.salaryType || null,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
     })
     revalidatePath("/staff")
     return { success: true }
@@ -132,8 +113,9 @@ export async function updateStaffMember(
   data: Partial<z.infer<typeof StaffSchema>>
 ) {
   await requireAdmin()
+  const supabase = await createClient()
   try {
-    const updateData: Record<string, unknown> = {}
+    const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
     if (data.fullName !== undefined) updateData.fullName = data.fullName
     if (data.email !== undefined) updateData.email = data.email
     if (data.phone !== undefined) updateData.phone = data.phone || null
@@ -142,7 +124,7 @@ export async function updateStaffMember(
     if (data.designation !== undefined) updateData.designation = data.designation || null
     if (data.employeeId !== undefined) updateData.employeeId = data.employeeId || null
     if (data.qualifications !== undefined) updateData.qualifications = data.qualifications || null
-    if (data.joiningDate !== undefined) updateData.joiningDate = data.joiningDate ? new Date(data.joiningDate) : null
+    if (data.joiningDate !== undefined) updateData.joiningDate = data.joiningDate ? new Date(data.joiningDate).toISOString() : null
     if (data.address !== undefined) updateData.address = data.address || null
     if (data.emergencyContact !== undefined) updateData.emergencyContact = data.emergencyContact || null
     if (data.bloodGroup !== undefined) updateData.bloodGroup = data.bloodGroup || null
@@ -150,11 +132,11 @@ export async function updateStaffMember(
     if (data.salaryType !== undefined) updateData.salaryType = data.salaryType || null
 
     if (data.password) {
-      const { hashPassword } = await import("@/lib/auth")
-      updateData.passwordHash = hashPassword(data.password)
+      const adminSupabase = await createServiceClient()
+      await adminSupabase.auth.admin.updateUserById(id, { password: data.password })
     }
 
-    await db.user.update({ where: { id }, data: updateData })
+    await supabase.from("User").update(updateData).eq("id", id)
     revalidatePath("/staff")
     return { success: true }
   } catch {
@@ -167,10 +149,11 @@ export async function toggleStaffActive(id: string) {
   if (admin.id === id) {
     return { success: false, error: "You cannot deactivate yourself" }
   }
+  const supabase = await createClient()
   try {
-    const user = await db.user.findUnique({ where: { id }, select: { isActive: true } })
+    const { data: user } = await supabase.from("User").select("isActive").eq("id", id).single()
     if (!user) return { success: false, error: "Staff member not found" }
-    await db.user.update({ where: { id }, data: { isActive: !user.isActive } })
+    await supabase.from("User").update({ isActive: !user.isActive, updatedAt: new Date().toISOString() }).eq("id", id)
     revalidatePath("/staff")
     return { success: true }
   } catch {
@@ -181,12 +164,10 @@ export async function toggleStaffActive(id: string) {
 export async function resetStaffPassword(id: string, newPassword: string) {
   await requireAdmin()
   if (newPassword.length < 6) return { success: false, error: "Password must be at least 6 characters" }
-  const { hashPassword } = await import("@/lib/auth")
   try {
-    await db.user.update({
-      where: { id },
-      data: { passwordHash: hashPassword(newPassword) },
-    })
+    const adminSupabase = await createServiceClient()
+    const { error } = await adminSupabase.auth.admin.updateUserById(id, { password: newPassword })
+    if (error) throw error
     return { success: true }
   } catch {
     return { success: false, error: "Failed to reset password" }
@@ -197,9 +178,10 @@ export async function resetStaffPassword(id: string, newPassword: string) {
 
 export async function getRoles() {
   await requireAdmin()
-  return db.role.findMany({
-    orderBy: { name: "asc" },
-  })
+  const supabase = await createClient()
+  const { data, error } = await supabase.from("Role").select("*").order("name", { ascending: true })
+  if (error) throw error
+  return data
 }
 
 export async function createRole(data: {
@@ -209,22 +191,25 @@ export async function createRole(data: {
   permissions: string[]
 }) {
   await requireAdmin()
+  const supabase = await createClient()
   if (!data.name.trim()) return { success: false, error: "Role name required" }
   if (!data.displayName.trim()) return { success: false, error: "Display name required" }
 
   try {
-    const existing = await db.role.findUnique({ where: { name: data.name.trim().toUpperCase() } })
+    const name = data.name.trim().toUpperCase()
+    const { data: existing } = await supabase.from("Role").select("id").eq("name", name).single()
     if (existing) return { success: false, error: "Role name already exists" }
 
-    await db.role.create({
-      data: {
-        name: data.name.trim().toUpperCase(),
-        displayName: data.displayName.trim(),
-        description: data.description?.trim() || null,
-        permissions: JSON.stringify(data.permissions),
-        isSystem: false,
-        isActive: true,
-      },
+    const now = new Date().toISOString()
+    await supabase.from("Role").insert({
+      name,
+      displayName: data.displayName.trim(),
+      description: data.description?.trim() || null,
+      permissions: JSON.stringify(data.permissions),
+      isSystem: false,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
     })
     revalidatePath("/staff")
     return { success: true }
@@ -235,11 +220,12 @@ export async function createRole(data: {
 
 export async function updateRolePermissions(id: string, permissions: string[]) {
   await requireAdmin()
+  const supabase = await createClient()
   try {
-    await db.role.update({
-      where: { id },
-      data: { permissions: JSON.stringify(permissions) },
-    })
+    await supabase
+      .from("Role")
+      .update({ permissions: JSON.stringify(permissions), updatedAt: new Date().toISOString() })
+      .eq("id", id)
     revalidatePath("/staff")
     return { success: true }
   } catch {
@@ -252,18 +238,17 @@ export async function updateRole(
   data: { displayName?: string; description?: string; isActive?: boolean }
 ) {
   await requireAdmin()
+  const supabase = await createClient()
   try {
-    const role = await db.role.findUnique({ where: { id } })
+    const { data: role } = await supabase.from("Role").select("id").eq("id", id).single()
     if (!role) return { success: false, error: "Role not found" }
 
-    await db.role.update({
-      where: { id },
-      data: {
-        ...(data.displayName !== undefined && { displayName: data.displayName.trim() }),
-        ...(data.description !== undefined && { description: data.description.trim() || null }),
-        ...(data.isActive !== undefined && { isActive: data.isActive }),
-      },
-    })
+    const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+    if (data.displayName !== undefined) updateData.displayName = data.displayName.trim()
+    if (data.description !== undefined) updateData.description = data.description.trim() || null
+    if (data.isActive !== undefined) updateData.isActive = data.isActive
+
+    await supabase.from("Role").update(updateData).eq("id", id)
     revalidatePath("/staff")
     return { success: true }
   } catch {
@@ -273,18 +258,18 @@ export async function updateRole(
 
 export async function deleteRole(id: string) {
   await requireAdmin()
+  const supabase = await createClient()
   try {
-    const role = await db.role.findUnique({ where: { id } })
+    const { data: role } = await supabase.from("Role").select("id, name, isSystem").eq("id", id).single()
     if (!role) return { success: false, error: "Role not found" }
     if (role.isSystem) return { success: false, error: "System roles cannot be deleted" }
 
-    // Check if any users are using this role
-    const usersWithRole = await db.user.count({ where: { role: role.name } })
-    if (usersWithRole > 0) {
-      return { success: false, error: `Cannot delete: ${usersWithRole} staff member(s) use this role` }
+    const { count } = await supabase.from("User").select("*", { count: "exact", head: true }).eq("role", role.name)
+    if ((count ?? 0) > 0) {
+      return { success: false, error: `Cannot delete: ${count} staff member(s) use this role` }
     }
 
-    await db.role.delete({ where: { id } })
+    await supabase.from("Role").delete().eq("id", id)
     revalidatePath("/staff")
     return { success: true }
   } catch {
@@ -296,6 +281,7 @@ export async function deleteRole(id: string) {
 
 export async function seedSystemRoles() {
   await requireAdmin()
+  const supabase = await createClient()
   try {
     const systemRoles = [
       { name: "ADMIN", displayName: "Administrator", description: "Full system access", permissions: getAllPermissionKeys() },
@@ -305,24 +291,29 @@ export async function seedSystemRoles() {
       { name: "NURSE", displayName: "Nurse", description: "Patient care and clinical support", permissions: DEFAULT_ROLE_PERMISSIONS.NURSE },
     ]
 
+    const now = new Date().toISOString()
     for (const role of systemRoles) {
-      await db.role.upsert({
-        where: { name: role.name },
-        update: {
+      const { data: existing } = await supabase.from("Role").select("id").eq("name", role.name).single()
+      if (existing) {
+        await supabase.from("Role").update({
           displayName: role.displayName,
           description: role.description,
           permissions: JSON.stringify(role.permissions),
           isSystem: true,
-        },
-        create: {
+          updatedAt: now,
+        }).eq("id", existing.id)
+      } else {
+        await supabase.from("Role").insert({
           name: role.name,
           displayName: role.displayName,
           description: role.description,
           permissions: JSON.stringify(role.permissions),
           isSystem: true,
           isActive: true,
-        },
-      })
+          createdAt: now,
+          updatedAt: now,
+        })
+      }
     }
 
     revalidatePath("/staff")

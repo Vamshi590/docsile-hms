@@ -1,28 +1,30 @@
 "use server"
 
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 
 // ─── PRODUCT MASTER CRUD ─────────────────────────────
 
 export async function getOpticalProducts(search?: string) {
-  const products = await db.opticalProduct.findMany({
-    where: {
-      isActive: true,
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { brand: { contains: search, mode: "insensitive" } },
-              { modelNumber: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    },
-    orderBy: [{ category: "asc" }, { name: "asc" }],
-    take: 100,
-  })
+  const supabase = await createClient()
+
+  let query = supabase
+    .from("OpticalProduct")
+    .select("*")
+    .eq("isActive", true)
+    .order("category", { ascending: true })
+    .order("name", { ascending: true })
+    .limit(100)
+
+  if (search) {
+    query = query.or(
+      `name.ilike.%${search}%,brand.ilike.%${search}%,modelNumber.ilike.%${search}%`
+    )
+  }
+
+  const { data: products, error } = await query
+  if (error) throw error
   return products
 }
 
@@ -41,10 +43,22 @@ export async function createOpticalProduct(data: {
   gstPercent?: number
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const product = await db.opticalProduct.create({
-      data: { ...data, gstPercent: data.gstPercent ?? 12, createdBy: user.id },
-    })
+    const now = new Date().toISOString()
+    const { data: product, error } = await supabase
+      .from("OpticalProduct")
+      .insert({
+        ...data,
+        gstPercent: data.gstPercent ?? 12,
+        createdBy: user.id,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
     revalidatePath("/optical")
     return { success: true as const, data: product }
   } catch (e: unknown) {
@@ -59,8 +73,16 @@ export async function updateOpticalProduct(id: string, data: Partial<{
   color: string; size: string; coating: string; index: string; modelNumber: string
   hsnCode: string; gstPercent: number; isActive: boolean
 }>) {
+  const supabase = await createClient()
   try {
-    const product = await db.opticalProduct.update({ where: { id }, data })
+    const { data: product, error } = await supabase
+      .from("OpticalProduct")
+      .update({ ...data, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single()
+
+    if (error) throw error
     revalidatePath("/optical")
     return { success: true as const, data: product }
   } catch {
@@ -69,8 +91,14 @@ export async function updateOpticalProduct(id: string, data: Partial<{
 }
 
 export async function deleteOpticalProduct(id: string) {
+  const supabase = await createClient()
   try {
-    await db.opticalProduct.update({ where: { id }, data: { isActive: false } })
+    const { error } = await supabase
+      .from("OpticalProduct")
+      .update({ isActive: false, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+
+    if (error) throw error
     revalidatePath("/optical")
     return { success: true as const }
   } catch {
@@ -85,29 +113,47 @@ export async function getOpticalStock(filters?: {
   category?: string
   lowStock?: boolean
 }) {
-  const stock = await db.opticalStock.findMany({
-    where: {
-      isActive: true,
-      product: { isActive: true },
-      ...(filters?.category ? { product: { category: filters.category, isActive: true } } : {}),
-      ...(filters?.lowStock ? { quantity: { lte: 5, gt: 0 } } : {}),
-    },
-    include: { product: true },
-    orderBy: [{ product: { category: "asc" } }, { product: { name: "asc" } }],
-    take: 200,
-  })
+  const supabase = await createClient()
+
+  let query = supabase
+    .from("OpticalStock")
+    .select("*, product:OpticalProduct(*)")
+    .eq("isActive", true)
+    .eq("product.isActive", true)
+
+  if (filters?.category) {
+    query = query.eq("product.category", filters.category)
+  }
+
+  if (filters?.lowStock) {
+    query = query.lte("quantity", 5).gt("quantity", 0)
+  }
+
+  query = query.order("product(category)", { ascending: true })
+    .order("product(name)", { ascending: true })
+    .limit(200)
+
+  const { data: stock, error } = await query
+  if (error) throw error
+
+  // Filter out rows where the inner join on product returned null
+  const filtered = (stock ?? []).filter((item: Record<string, unknown>) => item.product != null)
 
   if (filters?.search) {
     const s = filters.search.toLowerCase()
-    return stock.filter(
-      (item) =>
-        item.product.name.toLowerCase().includes(s) ||
-        item.product.brand?.toLowerCase().includes(s) ||
-        item.product.modelNumber?.toLowerCase().includes(s) ||
-        item.batchNumber?.toLowerCase().includes(s)
+    return filtered.filter(
+      (item: Record<string, unknown>) => {
+        const product = item.product as Record<string, string | null>
+        return (
+          (product.name ?? "").toLowerCase().includes(s) ||
+          (product.brand ?? "").toLowerCase().includes(s) ||
+          (product.modelNumber ?? "").toLowerCase().includes(s) ||
+          ((item.batchNumber as string) ?? "").toLowerCase().includes(s)
+        )
+      }
     )
   }
-  return stock
+  return filtered
 }
 
 export async function addOpticalStock(data: {
@@ -121,27 +167,48 @@ export async function addOpticalStock(data: {
   supplierId?: string
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
     // Check if this product + batch + power already exists
-    const existing = await db.opticalStock.findFirst({
-      where: {
-        productId: data.productId,
-        batchNumber: data.batchNumber ?? null,
-        power: data.power ?? null,
-      },
-    })
+    let existingQuery = supabase
+      .from("OpticalStock")
+      .select("*")
+      .eq("productId", data.productId)
+
+    if (data.batchNumber != null) {
+      existingQuery = existingQuery.eq("batchNumber", data.batchNumber)
+    } else {
+      existingQuery = existingQuery.is("batchNumber", null)
+    }
+
+    if (data.power != null) {
+      existingQuery = existingQuery.eq("power", data.power)
+    } else {
+      existingQuery = existingQuery.is("power", null)
+    }
+
+    const { data: existingRows, error: findError } = await existingQuery.limit(1)
+    if (findError) throw findError
+
+    const existing = existingRows?.[0] ?? null
 
     if (existing) {
-      const updated = await db.opticalStock.update({
-        where: { id: existing.id },
-        data: { quantity: existing.quantity + data.quantity },
-      })
+      const { data: updated, error: updateError } = await supabase
+        .from("OpticalStock")
+        .update({ quantity: existing.quantity + data.quantity, updatedAt: new Date().toISOString() })
+        .eq("id", existing.id)
+        .select()
+        .single()
+
+      if (updateError) throw updateError
       revalidatePath("/optical")
       return { success: true as const, data: updated }
     }
 
-    const stock = await db.opticalStock.create({
-      data: {
+    const now = new Date().toISOString()
+    const { data: stock, error: createError } = await supabase
+      .from("OpticalStock")
+      .insert({
         productId: data.productId,
         batchNumber: data.batchNumber ?? null,
         quantity: data.quantity,
@@ -151,8 +218,13 @@ export async function addOpticalStock(data: {
         power: data.power ?? null,
         supplierId: data.supplierId ?? null,
         createdBy: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+
+    if (createError) throw createError
     revalidatePath("/optical")
     return { success: true as const, data: stock }
   } catch {
@@ -161,8 +233,14 @@ export async function addOpticalStock(data: {
 }
 
 export async function updateOpticalStock(id: string, data: Partial<{ quantity: number; mrp: number; costPrice: number }>) {
+  const supabase = await createClient()
   try {
-    await db.opticalStock.update({ where: { id }, data })
+    const { error } = await supabase
+      .from("OpticalStock")
+      .update({ ...data, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+
+    if (error) throw error
     revalidatePath("/optical")
     return { success: true as const }
   } catch {
@@ -171,75 +249,106 @@ export async function updateOpticalStock(id: string, data: Partial<{ quantity: n
 }
 
 export async function getStockSummary() {
-  const [totalItems, lowStock] = await Promise.all([
-    db.opticalStock.count({ where: { isActive: true, quantity: { gt: 0 }, product: { isActive: true } } }),
-    db.opticalStock.count({ where: { isActive: true, quantity: { lte: 5, gt: 0 }, product: { isActive: true } } }),
+  const supabase = await createClient()
+
+  const [totalItemsResult, lowStockResult] = await Promise.all([
+    supabase
+      .from("OpticalStock")
+      .select("id, product:OpticalProduct!inner(isActive)", { count: "exact", head: true })
+      .eq("isActive", true)
+      .gt("quantity", 0)
+      .eq("product.isActive", true),
+    supabase
+      .from("OpticalStock")
+      .select("id, product:OpticalProduct!inner(isActive)", { count: "exact", head: true })
+      .eq("isActive", true)
+      .lte("quantity", 5)
+      .gt("quantity", 0)
+      .eq("product.isActive", true),
   ])
-  return { totalItems, lowStock }
+
+  return {
+    totalItems: totalItemsResult.count ?? 0,
+    lowStock: lowStockResult.count ?? 0,
+  }
 }
 
 // Search stock for billing autocomplete
 export async function searchOpticalStock(search: string) {
   if (!search || search.length < 2) return []
 
-  const stock = await db.opticalStock.findMany({
-    where: {
-      isActive: true,
-      quantity: { gt: 0 },
-      product: { isActive: true },
-    },
-    include: { product: true },
-    orderBy: { product: { name: "asc" } },
-    take: 30,
-  })
+  const supabase = await createClient()
+
+  const { data: stock, error } = await supabase
+    .from("OpticalStock")
+    .select("*, product:OpticalProduct!inner(*)")
+    .eq("isActive", true)
+    .gt("quantity", 0)
+    .eq("product.isActive", true)
+    .order("product(name)", { ascending: true })
+    .limit(30)
+
+  if (error) throw error
 
   const s = search.toLowerCase()
-  return stock
+  return (stock ?? [])
     .filter(
-      (item) =>
-        item.product.name.toLowerCase().includes(s) ||
-        item.product.brand?.toLowerCase().includes(s) ||
-        item.product.modelNumber?.toLowerCase().includes(s)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (item: any) => {
+        const product = item.product
+        return (
+          (product.name ?? "").toLowerCase().includes(s) ||
+          (product.brand ?? "").toLowerCase().includes(s) ||
+          (product.modelNumber ?? "").toLowerCase().includes(s)
+        )
+      }
     )
     .slice(0, 20)
-    .map((item) => ({
-      stockId: item.id,
-      productId: item.product.id,
-      name: item.product.name,
-      brand: item.product.brand,
-      category: item.product.category,
-      type: item.product.type,
-      modelNumber: item.product.modelNumber,
-      batchNumber: item.batchNumber,
-      quantity: item.quantity,
-      mrp: item.mrp,
-      gstPercent: item.gstPercent,
-      power: item.power,
-    }))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((item: any) => {
+      const product = item.product
+      return {
+        stockId: item.id,
+        productId: product.id,
+        name: product.name,
+        brand: product.brand,
+        category: product.category,
+        type: product.type,
+        modelNumber: product.modelNumber,
+        batchNumber: item.batchNumber,
+        quantity: item.quantity,
+        mrp: item.mrp,
+        gstPercent: item.gstPercent,
+        power: item.power,
+      }
+    })
 }
 
 // ─── PATIENT LOOKUP WITH AR READINGS ─────────────────
 
 export async function getPatientWithARReading(patientId: string) {
-  const patient = await db.patient.findUnique({
-    where: { patientId },
-    include: {
-      eyeReadings: {
-        orderBy: { readingDate: "desc" },
-        take: 1,
-      },
-      prescriptions: {
-        where: { status: { in: ["COMPLETED", "DRAFT"] } },
-        orderBy: { prescriptionDate: "desc" },
-        take: 1,
-      },
-    },
-  })
+  const supabase = await createClient()
 
-  if (!patient) return null
+  const { data: patient, error } = await supabase
+    .from("Patient")
+    .select("*, eyeReadings:EyeReading(*), prescriptions:Prescription(*)")
+    .eq("patientId", patientId)
+    .single()
 
-  const latestReading = patient.eyeReadings[0] ?? null
-  const latestPrescription = patient.prescriptions[0] ?? null
+  if (error || !patient) return null
+
+  // Sort and pick latest eye reading
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const eyeReadings = ((patient.eyeReadings ?? []) as any[])
+    .sort((a, b) => new Date(b.readingDate).getTime() - new Date(a.readingDate).getTime())
+  const latestReading = eyeReadings[0] ?? null
+
+  // Filter and sort prescriptions
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const prescriptions = ((patient.prescriptions ?? []) as any[])
+    .filter((p: any) => p.status === "COMPLETED" || p.status === "DRAFT")
+    .sort((a: any, b: any) => new Date(b.prescriptionDate).getTime() - new Date(a.prescriptionDate).getTime())
+  const latestPrescription = prescriptions[0] ?? null
 
   return {
     patientId: patient.patientId,
@@ -249,9 +358,9 @@ export async function getPatientWithARReading(patientId: string) {
     phone: patient.phone,
     doctorName: patient.doctorName,
     // AR reading data (parsed from JSON)
-    autoRefractometer: latestReading?.autoRefractometer ? JSON.parse(latestReading.autoRefractometer) : null,
-    glassesReading: latestReading?.glassesReading ? JSON.parse(latestReading.glassesReading) : null,
-    presentPrescription: latestReading?.presentPrescription ? JSON.parse(latestReading.presentPrescription) : null,
+    autoRefractometer: latestReading?.autoRefractometer ? JSON.parse(String(latestReading.autoRefractometer)) : null,
+    glassesReading: latestReading?.glassesReading ? JSON.parse(String(latestReading.glassesReading)) : null,
+    presentPrescription: latestReading?.presentPrescription ? JSON.parse(String(latestReading.presentPrescription)) : null,
     readingDate: latestReading?.readingDate ?? null,
     prescriptionId: latestPrescription?.id ?? null,
   }
@@ -260,12 +369,18 @@ export async function getPatientWithARReading(patientId: string) {
 // ─── BILLING ─────────────────────────────────────────
 
 async function getNextOpticalBillNumber(): Promise<string> {
+  const supabase = await createClient()
   const today = new Date()
   const prefix = `OPT-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`
-  const last = await db.opticalBill.findFirst({
-    where: { billNumber: { startsWith: prefix } },
-    orderBy: { billNumber: "desc" },
-  })
+
+  const { data: last } = await supabase
+    .from("OpticalBill")
+    .select("billNumber")
+    .like("billNumber", `${prefix}%`)
+    .order("billNumber", { ascending: false })
+    .limit(1)
+    .single()
+
   const seq = last ? parseInt(last.billNumber.split("-").pop() || "0") + 1 : 1
   return `${prefix}-${String(seq).padStart(4, "0")}`
 }
@@ -301,79 +416,101 @@ export async function createOpticalBill(data: {
   }[]
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
 
   try {
     const billNumber = await getNextOpticalBillNumber()
 
-    const result = await db.$transaction(async (tx) => {
-      const subtotal = data.items.reduce((s, i) => s + i.total, 0)
-      const gstAmount = data.items.reduce((s, i) => (s + (i.amount * i.gstPercent) / (100 + i.gstPercent)), 0)
-      const discountAmount = subtotal * (data.discountPercent / 100)
-      const netAmount = subtotal - discountAmount
-      const billAmount = Math.round(netAmount + data.roundOff)
-      const balanceDue = billAmount - data.paidAmount
+    const subtotal = data.items.reduce((s, i) => s + i.total, 0)
+    const gstAmount = data.items.reduce((s, i) => (s + (i.amount * i.gstPercent) / (100 + i.gstPercent)), 0)
+    const discountAmount = subtotal * (data.discountPercent / 100)
+    const netAmount = subtotal - discountAmount
+    const billAmount = Math.round(netAmount + data.roundOff)
+    const balanceDue = billAmount - data.paidAmount
 
-      const bill = await tx.opticalBill.create({
-        data: {
-          billNumber,
-          patientId: data.patientId ?? null,
-          patientName: data.patientName,
-          patientPhone: data.patientPhone ?? null,
-          gender: data.gender ?? null,
-          referredDoctor: data.referredDoctor ?? null,
-          prescriptionId: data.prescriptionId ?? null,
-          lensPrescription: data.lensPrescription ? JSON.stringify(data.lensPrescription) : null,
-          subtotal,
-          discountPercent: data.discountPercent,
-          discountAmount,
-          gstAmount,
-          netAmount,
-          roundOff: data.roundOff,
-          billAmount,
-          paidAmount: data.paidAmount,
-          balanceDue,
-          paymentMode: data.paymentMode,
-          paymentRef: data.paymentRef ?? null,
-          deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
-          orderNotes: data.orderNotes ?? null,
-          status: data.status ?? "COMPLETED",
-          createdBy: user.id,
-        },
+    const now = new Date().toISOString()
+
+    // Insert bill
+    const { data: bill, error: billError } = await supabase
+      .from("OpticalBill")
+      .insert({
+        billNumber,
+        patientId: data.patientId ?? null,
+        patientName: data.patientName,
+        patientPhone: data.patientPhone ?? null,
+        gender: data.gender ?? null,
+        referredDoctor: data.referredDoctor ?? null,
+        prescriptionId: data.prescriptionId ?? null,
+        lensPrescription: data.lensPrescription ? JSON.stringify(data.lensPrescription) : null,
+        subtotal,
+        discountPercent: data.discountPercent,
+        discountAmount,
+        gstAmount,
+        netAmount,
+        roundOff: data.roundOff,
+        billAmount,
+        paidAmount: data.paidAmount,
+        balanceDue,
+        paymentMode: data.paymentMode,
+        paymentRef: data.paymentRef ?? null,
+        deliveryDate: data.deliveryDate ? new Date(data.deliveryDate).toISOString() : null,
+        orderNotes: data.orderNotes ?? null,
+        status: data.status ?? "COMPLETED",
+        createdBy: user.id,
+        createdAt: now,
+        updatedAt: now,
       })
+      .select()
+      .single()
 
-      // Create bill items & decrement stock
-      for (const item of data.items) {
-        await tx.opticalBillItem.create({
-          data: {
-            billId: bill.id,
-            stockId: item.stockId ?? null,
-            itemName: item.itemName,
-            category: item.category,
-            eye: item.eye ?? null,
-            quantity: item.quantity,
-            mrp: item.mrp,
-            price: item.price,
-            total: item.total,
-            discountPercent: item.discountPercent,
-            amount: item.amount,
-            gstPercent: item.gstPercent,
-          },
+    if (billError) throw billError
+
+    // Create bill items & decrement stock
+    for (const item of data.items) {
+      const { error: itemError } = await supabase
+        .from("OpticalBillItem")
+        .insert({
+          billId: bill.id,
+          stockId: item.stockId ?? null,
+          itemName: item.itemName,
+          category: item.category,
+          eye: item.eye ?? null,
+          quantity: item.quantity,
+          mrp: item.mrp,
+          price: item.price,
+          total: item.total,
+          discountPercent: item.discountPercent,
+          amount: item.amount,
+          gstPercent: item.gstPercent,
         })
 
-        // Decrement stock if linked
-        if (item.stockId) {
-          await tx.opticalStock.update({
-            where: { id: item.stockId },
-            data: { quantity: { decrement: item.quantity } },
-          })
-        }
-      }
+      if (itemError) throw itemError
 
-      return bill
-    })
+      // Decrement stock if linked
+      if (item.stockId) {
+        // Fetch current quantity then update
+        const { data: currentStock, error: fetchError } = await supabase
+          .from("OpticalStock")
+          .select("quantity")
+          .eq("id", item.stockId)
+          .single()
+
+        if (fetchError) throw fetchError
+
+        const { error: stockError } = await supabase
+          .from("OpticalStock")
+          .update({
+            quantity: currentStock.quantity - item.quantity,
+            updatedAt: now,
+          })
+          .eq("id", item.stockId)
+
+        if (stockError) throw stockError
+      }
+    }
 
     revalidatePath("/optical")
-    return { success: true as const, data: { billNumber: result.billNumber, billAmount: result.billAmount } }
+    return { success: true as const, data: { billNumber: bill.billNumber, billAmount: bill.billAmount } }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Failed to create bill"
     return { success: false as const, error: msg }
@@ -386,38 +523,50 @@ export async function getOpticalBills(filters?: {
   search?: string
   status?: string
 }) {
-  const bills = await db.opticalBill.findMany({
-    where: {
-      ...(filters?.status ? { status: filters.status } : {}),
-      ...(filters?.dateFrom || filters?.dateTo
-        ? {
-            billDate: {
-              ...(filters.dateFrom ? { gte: new Date(filters.dateFrom + "T00:00:00") } : {}),
-              ...(filters.dateTo ? { lte: new Date(filters.dateTo + "T23:59:59") } : {}),
-            },
-          }
-        : {}),
-    },
-    include: { items: true },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  })
+  const supabase = await createClient()
+
+  let query = supabase
+    .from("OpticalBill")
+    .select("*, items:OpticalBillItem(*)")
+    .order("createdAt", { ascending: false })
+    .limit(100)
+
+  if (filters?.status) {
+    query = query.eq("status", filters.status)
+  }
+
+  if (filters?.dateFrom) {
+    query = query.gte("billDate", new Date(filters.dateFrom + "T00:00:00").toISOString())
+  }
+
+  if (filters?.dateTo) {
+    query = query.lte("billDate", new Date(filters.dateTo + "T23:59:59").toISOString())
+  }
+
+  const { data: bills, error } = await query
+  if (error) throw error
 
   if (filters?.search) {
     const s = filters.search.toLowerCase()
-    return bills.filter(
-      (b) =>
-        b.patientName.toLowerCase().includes(s) ||
-        b.billNumber.toLowerCase().includes(s) ||
-        b.patientPhone?.toLowerCase().includes(s)
+    return (bills ?? []).filter(
+      (b: Record<string, unknown>) =>
+        (b.patientName as string).toLowerCase().includes(s) ||
+        (b.billNumber as string).toLowerCase().includes(s) ||
+        ((b.patientPhone as string) ?? "").toLowerCase().includes(s)
     )
   }
   return bills
 }
 
 export async function updateOpticalBillStatus(billId: string, status: string) {
+  const supabase = await createClient()
   try {
-    await db.opticalBill.update({ where: { id: billId }, data: { status } })
+    const { error } = await supabase
+      .from("OpticalBill")
+      .update({ status, updatedAt: new Date().toISOString() })
+      .eq("id", billId)
+
+    if (error) throw error
     revalidatePath("/optical")
     return { success: true as const }
   } catch {

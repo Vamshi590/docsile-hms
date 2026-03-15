@@ -1,11 +1,10 @@
-import { requireAuth } from "@/lib/auth"
-import { db } from "@/lib/db"
-import AnalyticsPage from "./components/AnalyticsPage"
+import dynamic from "next/dynamic"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
+
+const AnalyticsPage = dynamic(() => import("./components/AnalyticsPage"), {
+  loading: () => <PageSkeleton />,
+})
 
 export default async function AnalyticsRoute() {
-  await requireAuth()
-  const hospital = await db.hospitalProfile.findFirst()
-  const hospitalName = hospital?.displayName ?? hospital?.name ?? "Docsile HMS"
-
-  return <AnalyticsPage hospitalName={hospitalName} />
+  return <AnalyticsPage />
 }

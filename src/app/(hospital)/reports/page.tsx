@@ -1,8 +1,10 @@
-import { db } from "@/lib/db"
-import ReportsPage from "./components/ReportsPage"
+import dynamic from "next/dynamic"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
+
+const ReportsPage = dynamic(() => import("./components/ReportsPage"), {
+  loading: () => <PageSkeleton />,
+})
 
 export default async function ReportsRoute() {
-  const hospital = await db.hospitalProfile.findFirst()
-  const hospitalName = hospital?.displayName ?? hospital?.name ?? "Docsile HMS"
-  return <ReportsPage hospitalName={hospitalName} />
+  return <ReportsPage />
 }

@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 import { z } from "zod"
 import { getNextInsClaimNumber } from "@/lib/id-generators"
@@ -33,14 +33,24 @@ const InsuranceCompanySchema = z.object({
 // ─── Insurance Company CRUD ──────────────────────────────────────────────────
 
 export async function getInsuranceCompanies() {
-  return db.insuranceCompany.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-  })
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("InsuranceCompany")
+    .select("*")
+    .eq("isActive", true)
+    .order("name", { ascending: true })
+  if (error) throw error
+  return data
 }
 
 export async function getAllInsuranceCompanies() {
-  return db.insuranceCompany.findMany({ orderBy: { name: "asc" } })
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("InsuranceCompany")
+    .select("*")
+    .order("name", { ascending: true })
+  if (error) throw error
+  return data
 }
 
 export async function createInsuranceCompany(data: z.infer<typeof InsuranceCompanySchema>) {
@@ -49,7 +59,14 @@ export async function createInsuranceCompany(data: z.infer<typeof InsuranceCompa
     return { success: false as const, error: validated.error.issues[0]?.message ?? "Invalid data" }
   }
   try {
-    const company = await db.insuranceCompany.create({ data: validated.data })
+    const supabase = await createClient()
+    const now = new Date().toISOString()
+    const { data: company, error } = await supabase
+      .from("InsuranceCompany")
+      .insert({ ...validated.data, createdAt: now, updatedAt: now })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/insurance")
     return { success: true as const, data: company }
   } catch {
@@ -59,17 +76,22 @@ export async function createInsuranceCompany(data: z.infer<typeof InsuranceCompa
 
 export async function updateInsuranceCompany(id: string, data: z.infer<typeof InsuranceCompanySchema> & { isActive?: boolean }) {
   try {
-    const company = await db.insuranceCompany.update({
-      where: { id },
-      data: {
+    const supabase = await createClient()
+    const { data: company, error } = await supabase
+      .from("InsuranceCompany")
+      .update({
         name: data.name,
         tpaName: data.tpaName ?? null,
         contactNumber: data.contactNumber ?? null,
         email: data.email ?? null,
         address: data.address ?? null,
         isActive: data.isActive,
-      },
-    })
+        updatedAt: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/insurance")
     return { success: true as const, data: company }
   } catch {
@@ -79,7 +101,12 @@ export async function updateInsuranceCompany(id: string, data: z.infer<typeof In
 
 export async function deleteInsuranceCompany(id: string) {
   try {
-    await db.insuranceCompany.update({ where: { id }, data: { isActive: false } })
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("InsuranceCompany")
+      .update({ isActive: false, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+    if (error) throw error
     revalidatePath("/insurance")
     return { success: true as const }
   } catch {
@@ -98,53 +125,47 @@ export async function getInsuranceClaims(filters: {
   showClosed?: boolean
 }) {
   const { search, statuses, insuranceCompany, dateFrom, dateTo, showClosed } = filters
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
+
+  // Build filtered query
+  let query = supabase.from("InsuranceClaim").select("*")
 
   if (!showClosed) {
-    where.status = { notIn: ["CLOSED"] }
+    query = query.neq("status", "CLOSED")
   }
 
   if (statuses && statuses.length > 0) {
-    where.status = { in: statuses }
+    query = query.in("status", statuses)
   }
 
   if (insuranceCompany) {
-    where.insuranceCompanyName = insuranceCompany
+    query = query.eq("insuranceCompanyName", insuranceCompany)
   }
 
-  if (dateFrom || dateTo) {
-    where.createdAt = {
-      ...(dateFrom ? { gte: new Date(dateFrom + "T00:00:00") } : {}),
-      ...(dateTo ? { lte: new Date(dateTo + "T23:59:59") } : {}),
-    }
+  if (dateFrom) {
+    query = query.gte("createdAt", dateFrom + "T00:00:00")
+  }
+  if (dateTo) {
+    query = query.lte("createdAt", dateTo + "T23:59:59")
   }
 
   if (search) {
-    where.OR = [
-      { claimNumber: { contains: search, mode: "insensitive" } },
-      { patientName: { contains: search, mode: "insensitive" } },
-      { ipNumber: { contains: search, mode: "insensitive" } },
-      { phone: { contains: search } },
-      { insuranceCompanyName: { contains: search, mode: "insensitive" } },
-    ]
+    query = query.or(
+      `claimNumber.ilike.%${search}%,patientName.ilike.%${search}%,ipNumber.ilike.%${search}%,phone.like.%${search}%,insuranceCompanyName.ilike.%${search}%`
+    )
   }
 
-  const claims = await db.insuranceClaim.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-  })
+  query = query.order("createdAt", { ascending: false })
+
+  const { data: claims, error: claimsError } = await query
+  if (claimsError) throw claimsError
 
   // Stats
-  const all = await db.insuranceClaim.findMany({
-    where: { status: { notIn: ["CLOSED"] } },
-    select: {
-      status: true,
-      totalApprovedAmount: true,
-      finalSettledAmount: true,
-      patientBalance: true,
-      createdAt: true,
-    },
-  })
+  const { data: all, error: statsError } = await supabase
+    .from("InsuranceClaim")
+    .select("status, totalApprovedAmount, finalSettledAmount, patientBalance, createdAt")
+    .neq("status", "CLOSED")
+  if (statsError) throw statsError
 
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -157,14 +178,21 @@ export async function getInsuranceClaims(filters: {
     totalApprovedAmount: all.reduce((s, c) => s + c.totalApprovedAmount, 0),
     totalSettledAmount: all.reduce((s, c) => s + c.finalSettledAmount, 0),
     totalPatientPending: all.reduce((s, c) => s + c.patientBalance, 0),
-    claimsThisMonth: all.filter(c => c.createdAt >= monthStart).length,
+    claimsThisMonth: all.filter(c => new Date(c.createdAt) >= monthStart).length,
   }
 
   return { data: claims, stats }
 }
 
 export async function getInsuranceClaimById(id: string) {
-  return db.insuranceClaim.findUnique({ where: { id } })
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("InsuranceClaim")
+    .select("*")
+    .eq("id", id)
+    .single()
+  if (error) return null
+  return data
 }
 
 export async function createInsuranceClaim(data: z.infer<typeof InsuranceClaimSchema>) {
@@ -176,8 +204,13 @@ export async function createInsuranceClaim(data: z.infer<typeof InsuranceClaimSc
 
   const pd = validated.data
   try {
-    const ip = await db.inPatient.findUnique({ where: { id: pd.inPatientId } })
-    if (!ip) return { success: false as const, error: "InPatient not found" }
+    const supabase = await createClient()
+    const { data: ip, error: ipError } = await supabase
+      .from("InPatient")
+      .select("*")
+      .eq("id", pd.inPatientId)
+      .single()
+    if (ipError || !ip) return { success: false as const, error: "InPatient not found" }
 
     const claimNumber = await getNextInsClaimNumber()
     const totalBillAmount = ip.netAmount
@@ -190,8 +223,10 @@ export async function createInsuranceClaim(data: z.infer<typeof InsuranceClaimSc
       updatedBy: user.fullName,
     }]
 
-    const claim = await db.insuranceClaim.create({
-      data: {
+    const now = new Date().toISOString()
+    const { data: claim, error: createError } = await supabase
+      .from("InsuranceClaim")
+      .insert({
         claimNumber,
         inPatientId: ip.id,
         insuranceCompanyId: pd.insuranceCompanyId ?? null,
@@ -221,13 +256,17 @@ export async function createInsuranceClaim(data: z.infer<typeof InsuranceClaimSc
         patientBalance: Math.max(0, patientPayable),
         discount: ip.discount,
         status: "PREAUTH_SUBMITTED",
-        preauthSubmittedDate: new Date(),
+        preauthSubmittedDate: now,
         statusHistory: JSON.stringify(initialHistory),
         notes: pd.notes ?? null,
         packageInclusions: ip.packageInclusions,
         createdById: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (createError) throw createError
 
     revalidatePath("/insurance")
     revalidatePath("/inpatients")
@@ -251,8 +290,13 @@ export async function updateInsuranceClaimStatus(
 ) {
   const user = await requireAuth()
   try {
-    const claim = await db.insuranceClaim.findUnique({ where: { id } })
-    if (!claim) return { success: false as const, error: "Claim not found" }
+    const supabase = await createClient()
+    const { data: claim, error: fetchError } = await supabase
+      .from("InsuranceClaim")
+      .select("*")
+      .eq("id", id)
+      .single()
+    if (fetchError || !claim) return { success: false as const, error: "Claim not found" }
 
     const history: InsuranceStatusHistoryEntry[] = claim.statusHistory
       ? JSON.parse(claim.statusHistory)
@@ -269,6 +313,7 @@ export async function updateInsuranceClaimStatus(
       status: newStatus,
       statusHistory: JSON.stringify(history),
       updatedBy: user.id,
+      updatedAt: new Date().toISOString(),
     }
 
     switch (newStatus) {
@@ -276,7 +321,7 @@ export async function updateInsuranceClaimStatus(
         updateData.preauthQueryNotes = data.notes ?? null
         break
       case "PREAUTH_APPROVED":
-        updateData.preauthApprovedDate = new Date()
+        updateData.preauthApprovedDate = new Date().toISOString()
         if (data.amount !== undefined) {
           updateData.preauthAmount = data.amount
           updateData.totalApprovedAmount = data.amount + claim.enhancementApproved
@@ -288,7 +333,7 @@ export async function updateInsuranceClaimStatus(
         updateData.preauthRejectionReason = data.rejectionReason ?? data.notes ?? null
         break
       case "ENHANCEMENT_CLAIMED":
-        updateData.enhancementClaimedDate = new Date()
+        updateData.enhancementClaimedDate = new Date().toISOString()
         if (data.amount !== undefined) {
           updateData.enhancementAmount = data.amount
         }
@@ -297,7 +342,7 @@ export async function updateInsuranceClaimStatus(
         updateData.enhancementQueryNotes = data.notes ?? null
         break
       case "ENHANCEMENT_APPROVED":
-        updateData.enhancementApprovedDate = new Date()
+        updateData.enhancementApprovedDate = new Date().toISOString()
         if (data.amount !== undefined) {
           updateData.enhancementApproved = data.amount
           updateData.totalApprovedAmount = claim.preauthAmount + data.amount
@@ -309,11 +354,11 @@ export async function updateInsuranceClaimStatus(
         updateData.enhancementRejectionReason = data.rejectionReason ?? data.notes ?? null
         break
       case "FINAL_BILL_SUBMITTED":
-        updateData.finalBillSubmittedDate = new Date()
+        updateData.finalBillSubmittedDate = new Date().toISOString()
         break
       case "SETTLED":
       case "PARTIALLY_SETTLED": {
-        updateData.settlementDate = new Date()
+        updateData.settlementDate = new Date().toISOString()
         updateData.settlementReference = data.settlementReference ?? null
         const settled = data.amount ?? claim.totalApprovedAmount
         const ded = data.deductions ?? 0
@@ -324,17 +369,22 @@ export async function updateInsuranceClaimStatus(
 
         // Update linked inpatient balance to reflect insurance settlement
         if (claim.inPatientId) {
-          const ip = await db.inPatient.findUnique({ where: { id: claim.inPatientId } })
+          const { data: ip } = await supabase
+            .from("InPatient")
+            .select("*")
+            .eq("id", claim.inPatientId)
+            .single()
           if (ip) {
             const newTotalReceived = ip.totalReceivedAmount + settled
             const newBalance = Math.max(0, ip.netAmount - newTotalReceived)
-            await db.inPatient.update({
-              where: { id: claim.inPatientId },
-              data: {
+            await supabase
+              .from("InPatient")
+              .update({
                 totalReceivedAmount: newTotalReceived,
                 balanceAmount: newBalance,
-              },
-            })
+                updatedAt: new Date().toISOString(),
+              })
+              .eq("id", claim.inPatientId)
             revalidatePath("/inpatients")
           }
         }
@@ -346,7 +396,11 @@ export async function updateInsuranceClaimStatus(
         break
     }
 
-    await db.insuranceClaim.update({ where: { id }, data: updateData })
+    const { error: updateError } = await supabase
+      .from("InsuranceClaim")
+      .update(updateData)
+      .eq("id", id)
+    if (updateError) throw updateError
     revalidatePath("/insurance")
     return { success: true as const }
   } catch {
@@ -367,13 +421,16 @@ export async function updateInsuranceClaimDetails(id: string, data: {
 }) {
   const user = await requireAuth()
   try {
-    await db.insuranceClaim.update({
-      where: { id },
-      data: {
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("InsuranceClaim")
+      .update({
         ...data,
         updatedBy: user.id,
-      },
-    })
+        updatedAt: new Date().toISOString(),
+      })
+      .eq("id", id)
+    if (error) throw error
     revalidatePath("/insurance")
     return { success: true as const }
   } catch {
@@ -389,8 +446,13 @@ export async function addInsurancePatientPayment(data: {
 }) {
   const user = await requireAuth()
   try {
-    const claim = await db.insuranceClaim.findUnique({ where: { id: data.claimId } })
-    if (!claim) return { success: false as const, error: "Claim not found" }
+    const supabase = await createClient()
+    const { data: claim, error: fetchError } = await supabase
+      .from("InsuranceClaim")
+      .select("*")
+      .eq("id", data.claimId)
+      .single()
+    if (fetchError || !claim) return { success: false as const, error: "Claim not found" }
 
     const newPaid = claim.patientPaidAmount + data.amount
     const newBalance = Math.max(0, claim.patientPayableAmount - newPaid)
@@ -406,29 +468,36 @@ export async function addInsurancePatientPayment(data: {
       updatedBy: user.fullName,
     })
 
-    await db.insuranceClaim.update({
-      where: { id: data.claimId },
-      data: {
+    const { error: updateError } = await supabase
+      .from("InsuranceClaim")
+      .update({
         patientPaidAmount: newPaid,
         patientBalance: newBalance,
         statusHistory: JSON.stringify(history),
         updatedBy: user.id,
-      },
-    })
+        updatedAt: new Date().toISOString(),
+      })
+      .eq("id", data.claimId)
+    if (updateError) throw updateError
 
     // Update linked inpatient balance to reflect patient payment
     if (claim.inPatientId) {
-      const ip = await db.inPatient.findUnique({ where: { id: claim.inPatientId } })
+      const { data: ip } = await supabase
+        .from("InPatient")
+        .select("*")
+        .eq("id", claim.inPatientId)
+        .single()
       if (ip) {
         const newTotalReceived = ip.totalReceivedAmount + data.amount
         const newIpBalance = Math.max(0, ip.netAmount - newTotalReceived)
-        await db.inPatient.update({
-          where: { id: claim.inPatientId },
-          data: {
+        await supabase
+          .from("InPatient")
+          .update({
             totalReceivedAmount: newTotalReceived,
             balanceAmount: newIpBalance,
-          },
-        })
+            updatedAt: new Date().toISOString(),
+          })
+          .eq("id", claim.inPatientId)
         revalidatePath("/inpatients")
       }
     }
@@ -443,28 +512,13 @@ export async function addInsurancePatientPayment(data: {
 // Search inpatients for claim form
 export async function searchInPatientsForInsurance(search: string) {
   if (!search || search.length < 2) return []
-  return db.inPatient.findMany({
-    where: {
-      OR: [
-        { ipNumber: { contains: search, mode: "insensitive" } },
-        { name: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search } },
-      ],
-    },
-    select: {
-      id: true,
-      ipNumber: true,
-      name: true,
-      age: true,
-      gender: true,
-      phone: true,
-      department: true,
-      packageAmount: true,
-      netAmount: true,
-      admissionDate: true,
-      operationName: true,
-    },
-    take: 10,
-    orderBy: { admissionDate: "desc" },
-  })
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("InPatient")
+    .select("id, ipNumber, name, age, gender, phone, department, packageAmount, netAmount, admissionDate, operationName")
+    .or(`ipNumber.ilike.%${search}%,name.ilike.%${search}%,phone.like.%${search}%`)
+    .order("admissionDate", { ascending: false })
+    .limit(10)
+  if (error) throw error
+  return data
 }

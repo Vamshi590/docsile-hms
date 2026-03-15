@@ -71,7 +71,7 @@ export function PatientActionsModal({ patientId, open, onClose, onUpdate }: Prop
     const result = await updatePatientStatus(patient.patientId, status)
     if (result.success) {
       toast.success("Status updated")
-      setPatient(prev => prev ? { ...prev, status } : prev)
+      setPatient((prev: any) => prev ? { ...prev, status } : prev)
       onUpdate()
     } else {
       toast.error(result.error)
@@ -371,8 +371,8 @@ export function PatientActionsModal({ patientId, open, onClose, onUpdate }: Prop
 
               {/* Receipts tab */}
               <TabsContent value="receipts" className="space-y-3">
-                {patient.prescriptions && patient.prescriptions.filter(p => p.total > 0).length > 0 ? (
-                  patient.prescriptions.filter(p => p.total > 0).map(prescription => (
+                {patient.prescriptions && patient.prescriptions.filter((p: any) => p.total > 0).length > 0 ? (
+                  patient.prescriptions.filter((p: any) => p.total > 0).map((prescription: any) => (
                     <div key={prescription.id} className="rounded-xl border border-border bg-card overflow-hidden">
                       <div className="px-4 py-2.5 bg-surface flex justify-between items-center border-b border-border">
                         <span className="text-xs font-mono font-medium">
@@ -383,7 +383,7 @@ export function PatientActionsModal({ patientId, open, onClose, onUpdate }: Prop
                         </span>
                       </div>
                       <div className="p-3 space-y-1">
-                        {prescription.items && prescription.items.map(item => (
+                        {prescription.items && prescription.items.map((item: any) => (
                           <div key={item.id} className="flex justify-between text-xs">
                             <span className="text-foreground">{item.description}</span>
                             <span className="text-muted-foreground">{formatCurrency(item.amount)}</span>
@@ -417,7 +417,7 @@ export function PatientActionsModal({ patientId, open, onClose, onUpdate }: Prop
               {/* History tab */}
               <TabsContent value="history" className="space-y-2">
                 {patient.prescriptions && patient.prescriptions.length > 0 ? (
-                  patient.prescriptions.map(p => (
+                  patient.prescriptions.map((p: any) => (
                     <div key={p.id} className="flex items-start gap-3 text-sm">
                       <div className="h-1.5 w-1.5 rounded-full bg-border shrink-0 mt-1.5" />
                       <div>

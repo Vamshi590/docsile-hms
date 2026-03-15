@@ -133,7 +133,7 @@ function CustomTooltip({ active, payload, label, currency = false }: {
 
 // ─── MAIN COMPONENT ──────────────────────────────────
 
-export default function AnalyticsPage({ hospitalName }: { hospitalName: string }) {
+export default function AnalyticsPage() {
   const [tab, setTab] = useState<Tab>("overview")
   const [filter, setFilter] = useState<TimeFilter>("month")
   const [customRange, setCustomRange] = useState({ start: "", end: "" })
@@ -284,7 +284,7 @@ export default function AnalyticsPage({ hospitalName }: { hospitalName: string }
 
         {/* Revenue Breakdown Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <StatCard title="Consultation" value={fmt(overview.totalRevenue)}
+          <StatCard title="Consultation" value={fmt(overview.totalConsultationRevenue)}
             icon={<Stethoscope className="h-4 w-4" />} iconBg="bg-blue-50" iconColor="text-blue-500" />
           <StatCard title="Labs" value={fmt(overview.totalLabRevenue)}
             icon={<FlaskConical className="h-4 w-4" />} iconBg="bg-teal-50" iconColor="text-teal-500" />
@@ -292,7 +292,7 @@ export default function AnalyticsPage({ hospitalName }: { hospitalName: string }
             icon={<Pill className="h-4 w-4" />} iconBg="bg-emerald-50" iconColor="text-emerald-500" />
           <StatCard title="Optical" value={fmt(overview.totalOpticalRevenue)}
             icon={<Glasses className="h-4 w-4" />} iconBg="bg-purple-50" iconColor="text-purple-500" />
-          <StatCard title="In-Patient" value={fmt(overview.totalInpatients > 0 ? overview.totalRevenue * 0.2 : 0)}
+          <StatCard title="In-Patient" value={fmt(overview.totalInpatientRevenue)}
             icon={<BedDouble className="h-4 w-4" />} iconBg="bg-amber-50" iconColor="text-amber-500" />
         </div>
 
@@ -841,7 +841,7 @@ export default function AnalyticsPage({ hospitalName }: { hospitalName: string }
   return (
     <div className="space-y-0 animate-fade-in bg-gray-50 min-h-screen">
       {/* Header */}
-      <PageHeader title="Analytics Dashboard" description={hospitalName}>
+      <PageHeader title="Analytics Dashboard">
         {/* Time Filter Controls */}
         <div className="flex items-center gap-2">
           <div className="bg-muted rounded-lg p-0.5 flex">

@@ -181,6 +181,42 @@ input[type="number"] {
   to { transform: scale(1); opacity: 1; }
 }
 
+/* ─── Enhanced Filter Chips ──────────────────────────── */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 1.75rem;
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--color-muted-foreground);
+  background: transparent;
+}
+
+.filter-chip:hover {
+  color: var(--color-foreground);
+  background: var(--color-muted);
+}
+
+.filter-chip.active {
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.06);
+  font-weight: 600;
+}
+
+/* ─── Separator line for filter groups ────────────────── */
+.filter-divider {
+  width: 1px;
+  height: 1.25rem;
+  background: var(--color-border);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
 /* ─── Utility Classes ────────────────────────────────── */
 .animate-fade-in {
   animation: fade-in 0.15s ease-out;

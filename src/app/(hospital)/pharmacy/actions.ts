@@ -1,32 +1,38 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function getNextBillNumber(): Promise<string> {
+  const supabase = await createClient()
   const today = new Date()
   const prefix = `PH-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`
-  const last = await db.pharmacyBill.findFirst({
-    where: { billNumber: { startsWith: prefix } },
-    orderBy: { billNumber: "desc" },
-    select: { billNumber: true },
-  })
+  const { data: last } = await supabase
+    .from("PharmacyBill")
+    .select("billNumber")
+    .like("billNumber", `${prefix}%`)
+    .order("billNumber", { ascending: false })
+    .limit(1)
+    .single()
   if (!last) return `${prefix}-0001`
   const lastNum = parseInt(last.billNumber.split("-").pop() ?? "0", 10)
   return `${prefix}-${String(lastNum + 1).padStart(4, "0")}`
 }
 
 async function getNextPONumber(): Promise<string> {
+  const supabase = await createClient()
   const today = new Date()
   const prefix = `PO-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}`
-  const last = await db.purchaseOrder.findFirst({
-    where: { orderNumber: { startsWith: prefix } },
-    orderBy: { orderNumber: "desc" },
-    select: { orderNumber: true },
-  })
+  const { data: last } = await supabase
+    .from("PurchaseOrder")
+    .select("orderNumber")
+    .like("orderNumber", `${prefix}%`)
+    .order("orderNumber", { ascending: false })
+    .limit(1)
+    .single()
   if (!last) return `${prefix}-0001`
   const lastNum = parseInt(last.orderNumber.split("-").pop() ?? "0", 10)
   return `${prefix}-${String(lastNum + 1).padStart(4, "0")}`
@@ -35,19 +41,23 @@ async function getNextPONumber(): Promise<string> {
 // ─── Medicine Master CRUD ─────────────────────────────────────────────────────
 
 export async function getMedicines(search?: string) {
-  const where: Record<string, unknown> = { isActive: true }
+  const supabase = await createClient()
+  let query = supabase
+    .from("PharmacyMedicine")
+    .select("*")
+    .eq("isActive", true)
+    .order("name", { ascending: true })
+    .limit(100)
+
   if (search) {
-    where.OR = [
-      { name: { contains: search, mode: "insensitive" } },
-      { genericName: { contains: search, mode: "insensitive" } },
-      { manufacturer: { contains: search, mode: "insensitive" } },
-    ]
+    query = query.or(
+      `name.ilike.%${search}%,genericName.ilike.%${search}%,manufacturer.ilike.%${search}%`
+    )
   }
-  return db.pharmacyMedicine.findMany({
-    where,
-    orderBy: { name: "asc" },
-    take: 100,
-  })
+
+  const { data, error } = await query
+  if (error) throw error
+  return data
 }
 
 export async function createMedicine(data: {
@@ -64,9 +74,12 @@ export async function createMedicine(data: {
   scheduleType?: string
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const med = await db.pharmacyMedicine.create({
-      data: {
+    const now = new Date().toISOString()
+    const { data: med, error } = await supabase
+      .from("PharmacyMedicine")
+      .insert({
         name: data.name,
         genericName: data.genericName || null,
         manufacturer: data.manufacturer || null,
@@ -79,8 +92,12 @@ export async function createMedicine(data: {
         gstPercent: data.gstPercent ?? 12,
         scheduleType: data.scheduleType || null,
         createdBy: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/pharmacy")
     return { success: true as const, data: med }
   } catch (error: unknown) {
@@ -106,8 +123,15 @@ export async function updateMedicine(id: string, data: {
   isActive?: boolean
 }) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const med = await db.pharmacyMedicine.update({ where: { id }, data })
+    const { data: med, error } = await supabase
+      .from("PharmacyMedicine")
+      .update({ ...data, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/pharmacy")
     return { success: true as const, data: med }
   } catch {
@@ -117,8 +141,13 @@ export async function updateMedicine(id: string, data: {
 
 export async function deleteMedicine(id: string) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.pharmacyMedicine.update({ where: { id }, data: { isActive: false } })
+    const { error } = await supabase
+      .from("PharmacyMedicine")
+      .update({ isActive: false, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+    if (error) throw error
     revalidatePath("/pharmacy")
     return { success: true as const }
   } catch {
@@ -134,36 +163,36 @@ export async function getStock(filters?: {
   nearExpiry?: boolean
   medicineId?: string
 }) {
-  const where: Record<string, unknown> = { isActive: true, quantity: { gt: 0 } }
+  const supabase = await createClient()
+  let query = supabase
+    .from("PharmacyStock")
+    .select("*, medicine:PharmacyMedicine(name, genericName, manufacturer, category, gstPercent, unitOfMeasure), supplier:PharmacySupplier(name)")
+    .eq("isActive", true)
+    .gt("quantity", 0)
+    .order("expiryDate", { ascending: true })
+    .limit(200)
 
   if (filters?.medicineId) {
-    where.medicineId = filters.medicineId
+    query = query.eq("medicineId", filters.medicineId)
   }
 
   if (filters?.nearExpiry) {
     const threeMonths = new Date()
     threeMonths.setMonth(threeMonths.getMonth() + 3)
-    where.expiryDate = { lte: threeMonths }
+    query = query.lte("expiryDate", threeMonths.toISOString())
   }
 
   if (filters?.lowStock) {
-    where.quantity = { lte: 10, gt: 0 }
+    query = query.lte("quantity", 10)
   }
 
-  const stock = await db.pharmacyStock.findMany({
-    where,
-    include: {
-      medicine: { select: { name: true, genericName: true, manufacturer: true, category: true, gstPercent: true, unitOfMeasure: true } },
-      supplier: { select: { name: true } },
-    },
-    orderBy: [{ expiryDate: "asc" }, { medicine: { name: "asc" } }],
-    take: 200,
-  })
+  const { data: stock, error } = await query
+  if (error) throw error
 
   if (filters?.search) {
     const s = filters.search.toLowerCase()
     return stock.filter(
-      (item) =>
+      (item: any) =>
         item.medicine.name.toLowerCase().includes(s) ||
         item.medicine.genericName?.toLowerCase().includes(s) ||
         item.medicine.manufacturer?.toLowerCase().includes(s) ||
@@ -188,29 +217,39 @@ export async function addStock(data: {
   purchaseOrderId?: string
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
     // Check if batch already exists for this medicine
-    const existing = await db.pharmacyStock.findUnique({
-      where: { medicineId_batchNumber: { medicineId: data.medicineId, batchNumber: data.batchNumber } },
-    })
+    const { data: existing } = await supabase
+      .from("PharmacyStock")
+      .select("*")
+      .eq("medicineId", data.medicineId)
+      .eq("batchNumber", data.batchNumber)
+      .single()
 
     if (existing) {
       // Update existing batch quantity
-      const updated = await db.pharmacyStock.update({
-        where: { id: existing.id },
-        data: {
+      const { data: updated, error } = await supabase
+        .from("PharmacyStock")
+        .update({
           quantity: existing.quantity + data.quantity,
           mrp: data.mrp,
           costPrice: data.costPrice,
           gstPercent: data.gstPercent,
-        },
-      })
+          updatedAt: new Date().toISOString(),
+        })
+        .eq("id", existing.id)
+        .select()
+        .single()
+      if (error) throw error
       revalidatePath("/pharmacy")
       return { success: true as const, data: updated }
     }
 
-    const stock = await db.pharmacyStock.create({
-      data: {
+    const now = new Date().toISOString()
+    const { data: stock, error } = await supabase
+      .from("PharmacyStock")
+      .insert({
         medicineId: data.medicineId,
         batchNumber: data.batchNumber,
         quantity: data.quantity,
@@ -218,13 +257,17 @@ export async function addStock(data: {
         costPrice: data.costPrice,
         gstPercent: data.gstPercent,
         unitsPerPack: data.unitsPerPack,
-        expiryDate: new Date(data.expiryDate),
-        manufacturingDate: data.manufacturingDate ? new Date(data.manufacturingDate) : null,
+        expiryDate: new Date(data.expiryDate).toISOString(),
+        manufacturingDate: data.manufacturingDate ? new Date(data.manufacturingDate).toISOString() : null,
         supplierId: data.supplierId || null,
         purchaseOrderId: data.purchaseOrderId || null,
         createdBy: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/pharmacy")
     return { success: true as const, data: stock }
   } catch (error: unknown) {
@@ -242,15 +285,18 @@ export async function updateStock(id: string, data: {
   expiryDate?: string
 }) {
   await requireAuth()
+  const supabase = await createClient()
   try {
     const { expiryDate, ...rest } = data
-    await db.pharmacyStock.update({
-      where: { id },
-      data: {
+    const { error } = await supabase
+      .from("PharmacyStock")
+      .update({
         ...rest,
-        ...(expiryDate ? { expiryDate: new Date(expiryDate) } : {}),
-      },
-    })
+        ...(expiryDate ? { expiryDate: new Date(expiryDate).toISOString() } : {}),
+        updatedAt: new Date().toISOString(),
+      })
+      .eq("id", id)
+    if (error) throw error
     revalidatePath("/pharmacy")
     return { success: true as const }
   } catch {
@@ -259,22 +305,48 @@ export async function updateStock(id: string, data: {
 }
 
 export async function getStockSummary() {
+  const supabase = await createClient()
   const now = new Date()
   const threeMonths = new Date()
   threeMonths.setMonth(threeMonths.getMonth() + 3)
 
-  const [totalItems, lowStock, nearExpiry, expired, totalValue] = await Promise.all([
-    db.pharmacyStock.count({ where: { isActive: true, quantity: { gt: 0 } } }),
-    db.pharmacyStock.count({ where: { isActive: true, quantity: { gt: 0, lte: 10 } } }),
-    db.pharmacyStock.count({ where: { isActive: true, quantity: { gt: 0 }, expiryDate: { gt: now, lte: threeMonths } } }),
-    db.pharmacyStock.count({ where: { isActive: true, quantity: { gt: 0 }, expiryDate: { lte: now } } }),
-    db.pharmacyStock.findMany({
-      where: { isActive: true, quantity: { gt: 0 } },
-      select: { quantity: true, mrp: true },
-    }),
+  const [totalItemsRes, lowStockRes, nearExpiryRes, expiredRes, totalValueRes] = await Promise.all([
+    supabase
+      .from("PharmacyStock")
+      .select("*", { count: "exact", head: true })
+      .eq("isActive", true)
+      .gt("quantity", 0),
+    supabase
+      .from("PharmacyStock")
+      .select("*", { count: "exact", head: true })
+      .eq("isActive", true)
+      .gt("quantity", 0)
+      .lte("quantity", 10),
+    supabase
+      .from("PharmacyStock")
+      .select("*", { count: "exact", head: true })
+      .eq("isActive", true)
+      .gt("quantity", 0)
+      .gt("expiryDate", now.toISOString())
+      .lte("expiryDate", threeMonths.toISOString()),
+    supabase
+      .from("PharmacyStock")
+      .select("*", { count: "exact", head: true })
+      .eq("isActive", true)
+      .gt("quantity", 0)
+      .lte("expiryDate", now.toISOString()),
+    supabase
+      .from("PharmacyStock")
+      .select("quantity, mrp")
+      .eq("isActive", true)
+      .gt("quantity", 0),
   ])
 
-  const stockValue = totalValue.reduce((sum, s) => sum + s.quantity * s.mrp, 0)
+  const totalItems = totalItemsRes.count ?? 0
+  const lowStock = lowStockRes.count ?? 0
+  const nearExpiry = nearExpiryRes.count ?? 0
+  const expired = expiredRes.count ?? 0
+  const stockValue = (totalValueRes.data ?? []).reduce((sum: number, s: any) => sum + s.quantity * s.mrp, 0)
 
   return { totalItems, lowStock, nearExpiry, expired, stockValue }
 }
@@ -284,26 +356,31 @@ export async function getStockSummary() {
 export async function searchMedicineStock(search: string) {
   if (!search || search.length < 2) return []
 
-  const stock = await db.pharmacyStock.findMany({
-    where: {
-      isActive: true,
-      quantity: { gt: 0 },
-      expiryDate: { gt: new Date() },
-      medicine: {
-        OR: [
-          { name: { contains: search, mode: "insensitive" } },
-          { genericName: { contains: search, mode: "insensitive" } },
-        ],
-      },
-    },
-    include: {
-      medicine: { select: { name: true, genericName: true, gstPercent: true } },
-    },
-    orderBy: { expiryDate: "asc" }, // FEFO
-    take: 20,
-  })
+  const supabase = await createClient()
 
-  return stock.map((s) => ({
+  // First find matching medicine IDs
+  const { data: medicines } = await supabase
+    .from("PharmacyMedicine")
+    .select("id")
+    .or(`name.ilike.%${search}%,genericName.ilike.%${search}%`)
+
+  if (!medicines || medicines.length === 0) return []
+
+  const medicineIds = medicines.map((m: any) => m.id)
+
+  const { data: stock, error } = await supabase
+    .from("PharmacyStock")
+    .select("*, medicine:PharmacyMedicine(name, genericName, gstPercent)")
+    .eq("isActive", true)
+    .gt("quantity", 0)
+    .gt("expiryDate", new Date().toISOString())
+    .in("medicineId", medicineIds)
+    .order("expiryDate", { ascending: true })
+    .limit(20)
+
+  if (error) throw error
+
+  return (stock ?? []).map((s: any) => ({
     stockId: s.id,
     medicineId: s.medicineId,
     name: s.medicine.name,
@@ -319,39 +396,26 @@ export async function searchMedicineStock(search: string) {
 // ─── Prescription Lookup for Billing ──────────────────────────────────────────
 
 export async function getPatientPrescription(patientId: string) {
-  const patient = await db.patient.findUnique({
-    where: { patientId },
-    select: {
-      id: true,
-      patientId: true,
-      firstName: true,
-      lastName: true,
-      age: true,
-      gender: true,
-      phone: true,
-      email: true,
-      doctorName: true,
-      prescriptions: {
-        where: {
-          status: { in: ["COMPLETED", "DRAFT"] },
-          medicines: { not: "[]" },
-        },
-        orderBy: { prescriptionDate: "desc" },
-        take: 1,
-        select: {
-          id: true,
-          prescriptionNumber: true,
-          medicines: true,
-          doctorName: true,
-          prescriptionDate: true,
-        },
-      },
-    },
-  })
+  const supabase = await createClient()
 
-  if (!patient) return { success: false as const, error: "Patient not found" }
+  const { data: patient, error } = await supabase
+    .from("Patient")
+    .select("id, patientId, firstName, lastName, age, gender, phone, email, doctorName")
+    .eq("patientId", patientId)
+    .single()
 
-  const prescription = patient.prescriptions[0]
+  if (error || !patient) return { success: false as const, error: "Patient not found" }
+
+  const { data: prescriptions } = await supabase
+    .from("Prescription")
+    .select("id, prescriptionNumber, medicines, doctorName, prescriptionDate")
+    .eq("patientId", patient.id)
+    .in("status", ["COMPLETED", "DRAFT"])
+    .neq("medicines", "[]")
+    .order("prescriptionDate", { ascending: false })
+    .limit(1)
+
+  const prescription = prescriptions?.[0] ?? null
   let medicines: { name: string; days?: string; timing?: string; note?: string }[] = []
   if (prescription) {
     try {
@@ -415,6 +479,7 @@ export async function createPharmacyBill(data: {
   }[]
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
     const billNumber = await getNextBillNumber()
     const subtotal = data.items.reduce((sum, item) => sum + item.amount, 0)
@@ -428,60 +493,80 @@ export async function createPharmacyBill(data: {
     const billAmount = Math.round(netAmount + data.roundOff)
     const balanceDue = billAmount - data.paidAmount
 
-    const bill = await db.$transaction(async (tx) => {
-      // Create bill
-      const newBill = await tx.pharmacyBill.create({
-        data: {
-          billNumber,
-          patientId: data.patientId || null,
-          patientName: data.patientName,
-          patientPhone: data.patientPhone || null,
-          gender: data.gender || null,
-          email: data.email || null,
-          referredDoctor: data.referredDoctor || null,
-          prescriptionId: data.prescriptionId || null,
-          subtotal,
-          discountPercent: data.discountPercent,
-          discountAmount,
-          gstAmount,
-          netAmount,
-          roundOff: data.roundOff,
-          billAmount,
-          paidAmount: data.paidAmount,
-          balanceDue,
-          paymentMode: data.paymentMode,
-          paymentRef: data.paymentRef || null,
-          createdBy: user.id,
-          items: {
-            create: data.items.map((item) => ({
-              stockId: item.stockId,
-              medicineName: item.medicineName,
-              batchNumber: item.batchNumber,
-              quantity: item.quantity,
-              mrp: item.mrp,
-              price: item.price,
-              total: item.total,
-              discountPercent: item.discountPercent,
-              amount: item.amount,
-              gstPercent: item.gstPercent,
-            })),
-          },
-        },
+    const now = new Date().toISOString()
+
+    // Create bill
+    const { data: newBill, error: billError } = await supabase
+      .from("PharmacyBill")
+      .insert({
+        billNumber,
+        patientId: data.patientId || null,
+        patientName: data.patientName,
+        patientPhone: data.patientPhone || null,
+        gender: data.gender || null,
+        email: data.email || null,
+        referredDoctor: data.referredDoctor || null,
+        prescriptionId: data.prescriptionId || null,
+        subtotal,
+        discountPercent: data.discountPercent,
+        discountAmount,
+        gstAmount,
+        netAmount,
+        roundOff: data.roundOff,
+        billAmount,
+        paidAmount: data.paidAmount,
+        balanceDue,
+        paymentMode: data.paymentMode,
+        paymentRef: data.paymentRef || null,
+        createdBy: user.id,
+        createdAt: now,
+        updatedAt: now,
       })
+      .select()
+      .single()
+    if (billError) throw billError
 
-      // Deduct stock quantities
-      for (const item of data.items) {
-        await tx.pharmacyStock.update({
-          where: { id: item.stockId },
-          data: { quantity: { decrement: item.quantity } },
+    // Create bill items
+    const billItems = data.items.map((item) => ({
+      billId: newBill.id,
+      stockId: item.stockId,
+      medicineName: item.medicineName,
+      batchNumber: item.batchNumber,
+      quantity: item.quantity,
+      mrp: item.mrp,
+      price: item.price,
+      total: item.total,
+      discountPercent: item.discountPercent,
+      amount: item.amount,
+      gstPercent: item.gstPercent,
+    }))
+    const { error: itemsError } = await supabase
+      .from("PharmacyBillItem")
+      .insert(billItems)
+    if (itemsError) throw itemsError
+
+    // Deduct stock quantities
+    for (const item of data.items) {
+      // Fetch current stock to compute new quantity
+      const { data: currentStock, error: fetchError } = await supabase
+        .from("PharmacyStock")
+        .select("quantity")
+        .eq("id", item.stockId)
+        .single()
+      if (fetchError) throw fetchError
+
+      const { error: stockError } = await supabase
+        .from("PharmacyStock")
+        .update({
+          quantity: currentStock.quantity - item.quantity,
+          updatedAt: new Date().toISOString(),
         })
-      }
-
-      return newBill
-    })
+        .eq("id", item.stockId)
+      if (stockError) throw stockError
+    }
 
     revalidatePath("/pharmacy")
-    return { success: true as const, data: { id: bill.id, billNumber: bill.billNumber, billAmount: bill.billAmount } }
+    return { success: true as const, data: { id: newBill.id, billNumber: newBill.billNumber, billAmount: newBill.billAmount } }
   } catch (error) {
     console.error("Error creating pharmacy bill:", error)
     return { success: false as const, error: "Failed to create bill" }
@@ -494,29 +579,30 @@ export async function getPharmacyBills(filters?: {
   search?: string
   status?: string
 }) {
-  const where: Record<string, unknown> = {}
+  const supabase = await createClient()
+  let query = supabase
+    .from("PharmacyBill")
+    .select("*, items:PharmacyBillItem(*)")
+    .order("createdAt", { ascending: false })
+    .limit(100)
 
-  if (filters?.dateFrom || filters?.dateTo) {
-    const dateFilter: Record<string, Date> = {}
-    if (filters.dateFrom) dateFilter.gte = new Date(filters.dateFrom + "T00:00:00")
-    if (filters.dateTo) dateFilter.lte = new Date(filters.dateTo + "T23:59:59")
-    where.billDate = dateFilter
+  if (filters?.dateFrom) {
+    query = query.gte("billDate", new Date(filters.dateFrom + "T00:00:00").toISOString())
   }
-  if (filters?.status) where.status = filters.status
+  if (filters?.dateTo) {
+    query = query.lte("billDate", new Date(filters.dateTo + "T23:59:59").toISOString())
+  }
+  if (filters?.status) {
+    query = query.eq("status", filters.status)
+  }
 
-  const bills = await db.pharmacyBill.findMany({
-    where,
-    include: {
-      items: true,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  })
+  const { data: bills, error } = await query
+  if (error) throw error
 
   if (filters?.search) {
     const s = filters.search.toLowerCase()
-    return bills.filter(
-      (b) =>
+    return (bills ?? []).filter(
+      (b: any) =>
         b.patientName.toLowerCase().includes(s) ||
         b.billNumber.toLowerCase().includes(s) ||
         b.patientPhone?.toLowerCase().includes(s)
@@ -529,21 +615,54 @@ export async function getPharmacyBills(filters?: {
 // ─── Suppliers CRUD ───────────────────────────────────────────────────────────
 
 export async function getSuppliers(search?: string) {
-  const where: Record<string, unknown> = { isActive: true }
+  const supabase = await createClient()
+  let query = supabase
+    .from("PharmacySupplier")
+    .select("*")
+    .eq("isActive", true)
+    .order("name", { ascending: true })
+
   if (search) {
-    where.OR = [
-      { name: { contains: search, mode: "insensitive" } },
-      { contactPerson: { contains: search, mode: "insensitive" } },
-      { phone: { contains: search, mode: "insensitive" } },
-    ]
+    query = query.or(
+      `name.ilike.%${search}%,contactPerson.ilike.%${search}%,phone.ilike.%${search}%`
+    )
   }
-  return db.pharmacySupplier.findMany({
-    where,
-    orderBy: { name: "asc" },
-    include: {
-      _count: { select: { purchaseOrders: true, stockEntries: true } },
+
+  const { data: suppliers, error } = await query
+  if (error) throw error
+
+  // Get counts for each supplier (replaces _count include)
+  const supplierIds = (suppliers ?? []).map((s: any) => s.id)
+
+  if (supplierIds.length === 0) return []
+
+  const [poCountRes, stockCountRes] = await Promise.all([
+    supabase
+      .from("PurchaseOrder")
+      .select("supplierId")
+      .in("supplierId", supplierIds),
+    supabase
+      .from("PharmacyStock")
+      .select("supplierId")
+      .in("supplierId", supplierIds),
+  ])
+
+  const poCounts: Record<string, number> = {}
+  for (const row of poCountRes.data ?? []) {
+    poCounts[row.supplierId] = (poCounts[row.supplierId] || 0) + 1
+  }
+  const stockCounts: Record<string, number> = {}
+  for (const row of stockCountRes.data ?? []) {
+    stockCounts[row.supplierId] = (stockCounts[row.supplierId] || 0) + 1
+  }
+
+  return (suppliers ?? []).map((s: any) => ({
+    ...s,
+    _count: {
+      purchaseOrders: poCounts[s.id] || 0,
+      stockEntries: stockCounts[s.id] || 0,
     },
-  })
+  }))
 }
 
 export async function createSupplier(data: {
@@ -557,14 +676,21 @@ export async function createSupplier(data: {
   creditDays?: number
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const supplier = await db.pharmacySupplier.create({
-      data: {
+    const now = new Date().toISOString()
+    const { data: supplier, error } = await supabase
+      .from("PharmacySupplier")
+      .insert({
         ...data,
         creditDays: data.creditDays ?? 30,
         createdBy: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/pharmacy")
     return { success: true as const, data: supplier }
   } catch (error: unknown) {
@@ -587,8 +713,15 @@ export async function updateSupplier(id: string, data: {
   isActive?: boolean
 }) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const supplier = await db.pharmacySupplier.update({ where: { id }, data })
+    const { data: supplier, error } = await supabase
+      .from("PharmacySupplier")
+      .update({ ...data, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/pharmacy")
     return { success: true as const, data: supplier }
   } catch {
@@ -598,8 +731,13 @@ export async function updateSupplier(id: string, data: {
 
 export async function deleteSupplier(id: string) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.pharmacySupplier.update({ where: { id }, data: { isActive: false } })
+    const { error } = await supabase
+      .from("PharmacySupplier")
+      .update({ isActive: false, updatedAt: new Date().toISOString() })
+      .eq("id", id)
+    if (error) throw error
     revalidatePath("/pharmacy")
     return { success: true as const }
   } catch {
@@ -615,27 +753,21 @@ export async function getPurchaseOrders(filters?: {
   dateFrom?: string
   dateTo?: string
 }) {
-  const where: Record<string, unknown> = {}
-  if (filters?.status) where.status = filters.status
-  if (filters?.supplierId) where.supplierId = filters.supplierId
-  if (filters?.dateFrom || filters?.dateTo) {
-    const dateFilter: Record<string, Date> = {}
-    if (filters.dateFrom) dateFilter.gte = new Date(filters.dateFrom + "T00:00:00")
-    if (filters.dateTo) dateFilter.lte = new Date(filters.dateTo + "T23:59:59")
-    where.orderDate = dateFilter
-  }
+  const supabase = await createClient()
+  let query = supabase
+    .from("PurchaseOrder")
+    .select("*, supplier:PharmacySupplier(name, phone), items:PurchaseOrderItem(*, medicine:PharmacyMedicine(name))")
+    .order("createdAt", { ascending: false })
+    .limit(100)
 
-  return db.purchaseOrder.findMany({
-    where,
-    include: {
-      supplier: { select: { name: true, phone: true } },
-      items: {
-        include: { medicine: { select: { name: true } } },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  })
+  if (filters?.status) query = query.eq("status", filters.status)
+  if (filters?.supplierId) query = query.eq("supplierId", filters.supplierId)
+  if (filters?.dateFrom) query = query.gte("orderDate", new Date(filters.dateFrom + "T00:00:00").toISOString())
+  if (filters?.dateTo) query = query.lte("orderDate", new Date(filters.dateTo + "T23:59:59").toISOString())
+
+  const { data, error } = await query
+  if (error) throw error
+  return data
 }
 
 export async function createPurchaseOrder(data: {
@@ -658,6 +790,7 @@ export async function createPurchaseOrder(data: {
   }[]
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
     const orderNumber = await getNextPONumber()
 
@@ -671,13 +804,17 @@ export async function createPurchaseOrder(data: {
     const totalAmount = subtotal + gstAmount - data.discount
     const balanceDue = totalAmount - data.amountPaid
 
-    const po = await db.purchaseOrder.create({
-      data: {
+    const now = new Date().toISOString()
+
+    // Create purchase order
+    const { data: po, error: poError } = await supabase
+      .from("PurchaseOrder")
+      .insert({
         orderNumber,
         supplierId: data.supplierId,
-        expectedDate: data.expectedDate ? new Date(data.expectedDate) : null,
+        expectedDate: data.expectedDate ? new Date(data.expectedDate).toISOString() : null,
         invoiceNumber: data.invoiceNumber || null,
-        invoiceDate: data.invoiceDate ? new Date(data.invoiceDate) : null,
+        invoiceDate: data.invoiceDate ? new Date(data.invoiceDate).toISOString() : null,
         subtotal,
         gstAmount,
         discount: data.discount,
@@ -688,20 +825,29 @@ export async function createPurchaseOrder(data: {
         notes: data.notes || null,
         status: "ORDERED",
         createdBy: user.id,
-        items: {
-          create: itemsWithAmount.map((item) => ({
-            medicineId: item.medicineId,
-            batchNumber: item.batchNumber || null,
-            quantity: item.quantity,
-            costPrice: item.costPrice,
-            mrp: item.mrp,
-            gstPercent: item.gstPercent,
-            expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
-            amount: item.amount,
-          })),
-        },
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (poError) throw poError
+
+    // Create purchase order items
+    const poItems = itemsWithAmount.map((item) => ({
+      purchaseOrderId: po.id,
+      medicineId: item.medicineId,
+      batchNumber: item.batchNumber || null,
+      quantity: item.quantity,
+      costPrice: item.costPrice,
+      mrp: item.mrp,
+      gstPercent: item.gstPercent,
+      expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString() : null,
+      amount: item.amount,
+    }))
+    const { error: itemsError } = await supabase
+      .from("PurchaseOrderItem")
+      .insert(poItems)
+    if (itemsError) throw itemsError
 
     revalidatePath("/pharmacy")
     return { success: true as const, data: { id: po.id, orderNumber: po.orderNumber } }
@@ -716,69 +862,93 @@ export async function receivePurchaseOrder(
   items: { itemId: string; receivedQty: number; batchNumber: string; expiryDate: string; mrp: number; costPrice: number }[]
 ) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.$transaction(async (tx) => {
-      const po = await tx.purchaseOrder.findUnique({
-        where: { id: poId },
-        include: { items: { include: { medicine: true } } },
-      })
-      if (!po) throw new Error("Purchase order not found")
+    // Fetch the PO with its items and medicine data
+    const { data: po, error: poError } = await supabase
+      .from("PurchaseOrder")
+      .select("*, items:PurchaseOrderItem(*, medicine:PharmacyMedicine(*))")
+      .eq("id", poId)
+      .single()
+    if (poError || !po) throw new Error("Purchase order not found")
 
-      for (const receivedItem of items) {
-        const poItem = po.items.find((i) => i.id === receivedItem.itemId)
-        if (!poItem) continue
+    for (const receivedItem of items) {
+      const poItem = po.items.find((i: any) => i.id === receivedItem.itemId)
+      if (!poItem) continue
 
-        // Update received quantity on PO item
-        const newReceivedQty = poItem.receivedQty + receivedItem.receivedQty
-        await tx.purchaseOrderItem.update({
-          where: { id: receivedItem.itemId },
-          data: {
-            receivedQty: newReceivedQty,
-            batchNumber: receivedItem.batchNumber,
-            expiryDate: new Date(receivedItem.expiryDate),
+      // Update received quantity on PO item
+      const newReceivedQty = poItem.receivedQty + receivedItem.receivedQty
+      const { error: updateItemError } = await supabase
+        .from("PurchaseOrderItem")
+        .update({
+          receivedQty: newReceivedQty,
+          batchNumber: receivedItem.batchNumber,
+          expiryDate: new Date(receivedItem.expiryDate).toISOString(),
+          mrp: receivedItem.mrp,
+          costPrice: receivedItem.costPrice,
+        })
+        .eq("id", receivedItem.itemId)
+      if (updateItemError) throw updateItemError
+
+      // Add to pharmacy stock - check if batch exists
+      const { data: existingStock } = await supabase
+        .from("PharmacyStock")
+        .select("*")
+        .eq("medicineId", poItem.medicineId)
+        .eq("batchNumber", receivedItem.batchNumber)
+        .single()
+
+      if (existingStock) {
+        const { error: stockUpdateError } = await supabase
+          .from("PharmacyStock")
+          .update({
+            quantity: existingStock.quantity + receivedItem.receivedQty,
             mrp: receivedItem.mrp,
             costPrice: receivedItem.costPrice,
-          },
-        })
-
-        // Add to pharmacy stock
-        const existingStock = await tx.pharmacyStock.findUnique({
-          where: { medicineId_batchNumber: { medicineId: poItem.medicineId, batchNumber: receivedItem.batchNumber } },
-        })
-
-        if (existingStock) {
-          await tx.pharmacyStock.update({
-            where: { id: existingStock.id },
-            data: { quantity: existingStock.quantity + receivedItem.receivedQty, mrp: receivedItem.mrp, costPrice: receivedItem.costPrice },
+            updatedAt: new Date().toISOString(),
           })
-        } else {
-          await tx.pharmacyStock.create({
-            data: {
-              medicineId: poItem.medicineId,
-              batchNumber: receivedItem.batchNumber,
-              quantity: receivedItem.receivedQty,
-              mrp: receivedItem.mrp,
-              costPrice: receivedItem.costPrice,
-              gstPercent: poItem.gstPercent,
-              unitsPerPack: 1,
-              expiryDate: new Date(receivedItem.expiryDate),
-              supplierId: po.supplierId,
-              purchaseOrderId: po.id,
-              createdBy: user.id,
-            },
+          .eq("id", existingStock.id)
+        if (stockUpdateError) throw stockUpdateError
+      } else {
+        const now = new Date().toISOString()
+        const { error: stockCreateError } = await supabase
+          .from("PharmacyStock")
+          .insert({
+            medicineId: poItem.medicineId,
+            batchNumber: receivedItem.batchNumber,
+            quantity: receivedItem.receivedQty,
+            mrp: receivedItem.mrp,
+            costPrice: receivedItem.costPrice,
+            gstPercent: poItem.gstPercent,
+            unitsPerPack: 1,
+            expiryDate: new Date(receivedItem.expiryDate).toISOString(),
+            supplierId: po.supplierId,
+            purchaseOrderId: po.id,
+            createdBy: user.id,
+            createdAt: now,
+            updatedAt: now,
           })
-        }
+        if (stockCreateError) throw stockCreateError
       }
+    }
 
-      // Check ALL PO items (not just those in this batch) to determine final status
-      const updatedItems = await tx.purchaseOrderItem.findMany({ where: { purchaseOrderId: poId } })
-      const allReceived = updatedItems.every((i) => i.receivedQty >= i.quantity)
+    // Check ALL PO items to determine final status
+    const { data: updatedItems, error: fetchItemsError } = await supabase
+      .from("PurchaseOrderItem")
+      .select("*")
+      .eq("purchaseOrderId", poId)
+    if (fetchItemsError) throw fetchItemsError
 
-      await tx.purchaseOrder.update({
-        where: { id: poId },
-        data: { status: allReceived ? "RECEIVED" : "PARTIALLY_RECEIVED" },
+    const allReceived = (updatedItems ?? []).every((i: any) => i.receivedQty >= i.quantity)
+
+    const { error: statusError } = await supabase
+      .from("PurchaseOrder")
+      .update({
+        status: allReceived ? "RECEIVED" : "PARTIALLY_RECEIVED",
+        updatedAt: new Date().toISOString(),
       })
-    })
+      .eq("id", poId)
+    if (statusError) throw statusError
 
     revalidatePath("/pharmacy")
     return { success: true as const }
@@ -790,8 +960,13 @@ export async function receivePurchaseOrder(
 
 export async function updatePOStatus(poId: string, status: string) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.purchaseOrder.update({ where: { id: poId }, data: { status } })
+    const { error } = await supabase
+      .from("PurchaseOrder")
+      .update({ status, updatedAt: new Date().toISOString() })
+      .eq("id", poId)
+    if (error) throw error
     revalidatePath("/pharmacy")
     return { success: true as const }
   } catch {

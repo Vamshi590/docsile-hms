@@ -2,7 +2,7 @@
   "name": "Docsile HMS",
   "short_name": "Docsile",
   "description": "Hospital Management System",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f0f2f5",

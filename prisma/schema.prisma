@@ -6,7 +6,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ─── AUTH & USERS ───────────────────────────────────
@@ -31,15 +30,15 @@ model User {
   emergencyContact String?
   bloodGroup       String?
   salary           Float?
-  salaryType       String?   // MONTHLY, DAILY, PER_VISIT
+  salaryType       String? // MONTHLY, DAILY, PER_VISIT
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  createdPatients Patient[]      @relation("CreatedBy")
+  createdPatients Patient[]        @relation("CreatedBy")
   prescriptions   Prescription[]
-  eyeReadings     EyeReading[]   @relation("CreatedByUser")
-  inpatients      InPatient[]    @relation("InPatientCreatedBy")
+  eyeReadings     EyeReading[]     @relation("CreatedByUser")
+  inpatients      InPatient[]      @relation("InPatientCreatedBy")
   insuranceClaims InsuranceClaim[] @relation("InsuranceCreatedBy")
 
   @@index([role])
@@ -51,7 +50,7 @@ model User {
 
 model Role {
   id          String   @id @default(cuid())
-  name        String   @unique  // e.g. ADMIN, DOCTOR, RECEPTIONIST
+  name        String   @unique // e.g. ADMIN, DOCTOR, RECEPTIONIST
   displayName String
   description String?
   permissions String   @default("[]") @db.Text // JSON array of permission strings
@@ -148,45 +147,45 @@ model Patient {
 // ─── PRESCRIPTIONS (combines medical + billing) ─────
 
 model Prescription {
-  id                 String    @id @default(cuid())
-  prescriptionNumber String?   @unique
+  id                 String  @id @default(cuid())
+  prescriptionNumber String? @unique
   patientId          String
-  patient            Patient   @relation(fields: [patientId], references: [patientId])
-  patientType        String    @default("OPD")
+  patient            Patient @relation(fields: [patientId], references: [patientId])
+  patientType        String  @default("OPD")
 
   // Doctor / medical fields
-  doctorId           String?
-  doctor             User?     @relation(fields: [doctorId], references: [id])
-  doctorName         String?
-  department         String?
-  temperature        Float?
-  pulseRate          Int?
-  spo2               Int?
-  presentComplaint   String?   @db.Text
-  previousHistory    String?   @db.Text
-  diagnosis          String?   @db.Text
-  additionalNotes    String?   @db.Text
-  medicines          String    @default("[]") @db.Text
-  investigations     String    @default("[]") @db.Text
-  followUpDate       DateTime?
-  notes              String?   @db.Text
+  doctorId         String?
+  doctor           User?     @relation(fields: [doctorId], references: [id])
+  doctorName       String?
+  department       String?
+  temperature      Float?
+  pulseRate        Int?
+  spo2             Int?
+  presentComplaint String?   @db.Text
+  previousHistory  String?   @db.Text
+  diagnosis        String?   @db.Text
+  additionalNotes  String?   @db.Text
+  medicines        String    @default("[]") @db.Text
+  investigations   String    @default("[]") @db.Text
+  followUpDate     DateTime?
+  notes            String?   @db.Text
 
   // Billing / invoice fields (merged from Invoice)
-  subtotal           Float     @default(0)
-  discount           Float     @default(0)
-  discountReason     String?
-  total              Float     @default(0)
-  amountPaid         Float     @default(0)
-  balanceDue         Float     @default(0)
-  paymentMode        String?
-  paymentDate        DateTime?
+  subtotal       Float     @default(0)
+  discount       Float     @default(0)
+  discountReason String?
+  total          Float     @default(0)
+  amountPaid     Float     @default(0)
+  balanceDue     Float     @default(0)
+  paymentMode    String?
+  paymentDate    DateTime?
 
-  status             String    @default("DRAFT")
-  prescriptionDate   DateTime
-  createdBy          String
-  updatedBy          String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  status           String   @default("DRAFT")
+  prescriptionDate DateTime
+  createdBy        String
+  updatedBy        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   items      InvoiceItem[]
   payments   Payment[]
@@ -303,10 +302,10 @@ model InvestigationMaster {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  labInvestigations LabInvestigation[]
+
   @@index([category])
   @@index([isActive])
-
-  labInvestigations LabInvestigation[]
 }
 
 model DropdownOption {
@@ -325,7 +324,7 @@ model DropdownOption {
 model PredefinedPackage {
   id          String   @id @default(cuid())
   name        String   @unique
-  inclusions  String   @default("[]") @db.Text  // JSON array of PackageInclusion
+  inclusions  String   @default("[]") @db.Text // JSON array of PackageInclusion
   totalAmount Float    @default(0)
   discount    Float    @default(0)
   isActive    Boolean  @default(true)
@@ -339,57 +338,57 @@ model PredefinedPackage {
 // ─── INPATIENTS ─────────────────────────────────────
 
 model InPatient {
-  id                  String    @id @default(cuid())
-  patientId           String    @unique
-  patient             Patient   @relation(fields: [patientId], references: [id])
-  ipNumber            String    @unique
+  id        String  @id @default(cuid())
+  patientId String  @unique
+  patient   Patient @relation(fields: [patientId], references: [id])
+  ipNumber  String  @unique
 
-  name                String
-  age                 Int
-  gender              String
-  phone               String
-  address             String?   @db.Text
-  dateOfBirth         DateTime?
-  guardianName        String?
+  name         String
+  age          Int
+  gender       String
+  phone        String
+  address      String?   @db.Text
+  dateOfBirth  DateTime?
+  guardianName String?
 
-  admissionDate       DateTime
-  admissionNotes      String?   @db.Text
-  referredBy          String?
-  department          String?
-  doctorNames         String    @default("[]") @db.Text
-  onDutyDoctor        String?
+  admissionDate  DateTime
+  admissionNotes String?  @db.Text
+  referredBy     String?
+  department     String?
+  doctorNames    String   @default("[]") @db.Text
+  onDutyDoctor   String?
 
-  operationName       String?
-  operationDate       DateTime?
-  operationProcedure  String?
-  operationDetails    String?   @db.Text
-  provisionDiagnosis  String?
+  operationName      String?
+  operationDate      DateTime?
+  operationProcedure String?
+  operationDetails   String?   @db.Text
+  provisionDiagnosis String?
 
-  medicalValues       String?   @db.Text
+  medicalValues String? @db.Text
 
-  packageAmount       Float     @default(0)
-  packageInclusions   String?   @db.Text
-  discount            Float     @default(0)
-  netAmount           Float     @default(0)
-  totalReceivedAmount Float     @default(0)
-  balanceAmount       Float     @default(0)
-  paymentRecords      String?   @db.Text
+  packageAmount       Float   @default(0)
+  packageInclusions   String? @db.Text
+  discount            Float   @default(0)
+  netAmount           Float   @default(0)
+  totalReceivedAmount Float   @default(0)
+  balanceAmount       Float   @default(0)
+  paymentRecords      String? @db.Text
 
-  prescriptions       String?   @db.Text
-  followUpDate        DateTime?
+  prescriptions String?   @db.Text
+  followUpDate  DateTime?
 
-  status              String    @default("ADMITTED")
-  dischargeDate       DateTime?
-  dischargeNotes      String?   @db.Text
+  status         String    @default("ADMITTED")
+  dischargeDate  DateTime?
+  dischargeNotes String?   @db.Text
 
-  bedNumber           String?
-  wardName            String?
+  bedNumber String?
+  wardName  String?
 
-  createdById         String?
-  createdBy           User?     @relation("InPatientCreatedBy", fields: [createdById], references: [id])
-  updatedBy           String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdById String?
+  createdBy   User?    @relation("InPatientCreatedBy", fields: [createdById], references: [id])
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   insuranceClaims InsuranceClaim[]
 
@@ -419,76 +418,76 @@ model InsuranceCompany {
 // ─── INSURANCE CLAIMS ──────────────────────────────
 
 model InsuranceClaim {
-  id                    String    @id @default(cuid())
-  claimNumber           String    @unique
-  inPatientId           String
-  inPatient             InPatient @relation(fields: [inPatientId], references: [id])
-  insuranceCompanyId    String?
-  insuranceCompany      InsuranceCompany? @relation(fields: [insuranceCompanyId], references: [id])
+  id                 String            @id @default(cuid())
+  claimNumber        String            @unique
+  inPatientId        String
+  inPatient          InPatient         @relation(fields: [inPatientId], references: [id])
+  insuranceCompanyId String?
+  insuranceCompany   InsuranceCompany? @relation(fields: [insuranceCompanyId], references: [id])
 
   // Patient info (snapshot)
-  patientName           String
-  ipNumber              String
-  age                   Int
-  gender                String
-  phone                 String
-  guardianName          String?
-  department            String?
-  doctorNames           String    @default("[]") @db.Text
-  operationName         String?
-  provisionDiagnosis    String?
-  admissionDate         DateTime
-  dischargeDate         DateTime?
+  patientName        String
+  ipNumber           String
+  age                Int
+  gender             String
+  phone              String
+  guardianName       String?
+  department         String?
+  doctorNames        String    @default("[]") @db.Text
+  operationName      String?
+  provisionDiagnosis String?
+  admissionDate      DateTime
+  dischargeDate      DateTime?
 
   // Insurance details
-  insuranceCompanyName  String
-  tpaName               String?
-  policyNumber          String?
-  policyHolderName      String?
-  insuranceCardNumber   String?
-  relationToInsured     String?
+  insuranceCompanyName String
+  tpaName              String?
+  policyNumber         String?
+  policyHolderName     String?
+  insuranceCardNumber  String?
+  relationToInsured    String?
 
   // Financial
-  packageAmount         Float     @default(0)
-  totalBillAmount       Float     @default(0)
-  preauthAmount         Float     @default(0)
-  enhancementAmount     Float     @default(0)
-  enhancementApproved   Float     @default(0)
-  totalApprovedAmount   Float     @default(0)
-  finalSettledAmount    Float     @default(0)
-  deductions            Float     @default(0)
-  discount              Float     @default(0)
-  patientPayableAmount  Float     @default(0)
-  patientPaidAmount     Float     @default(0)
-  patientBalance        Float     @default(0)
+  packageAmount        Float @default(0)
+  totalBillAmount      Float @default(0)
+  preauthAmount        Float @default(0)
+  enhancementAmount    Float @default(0)
+  enhancementApproved  Float @default(0)
+  totalApprovedAmount  Float @default(0)
+  finalSettledAmount   Float @default(0)
+  deductions           Float @default(0)
+  discount             Float @default(0)
+  patientPayableAmount Float @default(0)
+  patientPaidAmount    Float @default(0)
+  patientBalance       Float @default(0)
 
   // Status
-  status                String    @default("PREAUTH_SUBMITTED")
+  status String @default("PREAUTH_SUBMITTED")
 
   // Tracking
-  preauthSubmittedDate  DateTime?
-  preauthApprovedDate   DateTime?
-  preauthRejectionReason String?  @db.Text
-  preauthQueryNotes     String?   @db.Text
-  enhancementClaimedDate  DateTime?
-  enhancementApprovedDate DateTime?
-  enhancementRejectionReason String? @db.Text
-  enhancementQueryNotes String?   @db.Text
-  finalBillSubmittedDate DateTime?
-  settlementDate        DateTime?
-  settlementReference   String?
+  preauthSubmittedDate       DateTime?
+  preauthApprovedDate        DateTime?
+  preauthRejectionReason     String?   @db.Text
+  preauthQueryNotes          String?   @db.Text
+  enhancementClaimedDate     DateTime?
+  enhancementApprovedDate    DateTime?
+  enhancementRejectionReason String?   @db.Text
+  enhancementQueryNotes      String?   @db.Text
+  finalBillSubmittedDate     DateTime?
+  settlementDate             DateTime?
+  settlementReference        String?
 
   // JSON fields
-  statusHistory         String?   @db.Text
-  notes                 String?   @db.Text
-  packageInclusions     String?   @db.Text
+  statusHistory     String? @db.Text
+  notes             String? @db.Text
+  packageInclusions String? @db.Text
 
   // Audit
-  createdById           String?
-  createdBy             User?     @relation("InsuranceCreatedBy", fields: [createdById], references: [id])
-  updatedBy             String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdById String?
+  createdBy   User?    @relation("InsuranceCreatedBy", fields: [createdById], references: [id])
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([status])
   @@index([insuranceCompanyName])
@@ -520,41 +519,41 @@ model LabInvestigation {
   isDefault       Boolean @default(false)
   isActive        Boolean @default(true)
 
-  lab             Lab                 @relation(fields: [labId], references: [id], onDelete: Cascade)
-  investigation   InvestigationMaster @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  lab           Lab                 @relation(fields: [labId], references: [id], onDelete: Cascade)
+  investigation InvestigationMaster @relation(fields: [investigationId], references: [id], onDelete: Cascade)
 
   @@unique([labId, investigationId])
   @@index([investigationId])
 }
 
 model LabBill {
-  id               String    @id @default(cuid())
-  billNumber       String    @unique
-  labId            String
-  patientId        String
-  prescriptionId   String
+  id             String @id @default(cuid())
+  billNumber     String @unique
+  labId          String
+  patientId      String
+  prescriptionId String
 
-  subtotal         Float     @default(0)
-  discount         Float     @default(0)
-  discountReason   String?
-  total            Float     @default(0)
-  amountPaid       Float     @default(0)
-  balanceDue       Float     @default(0)
+  subtotal       Float   @default(0)
+  discount       Float   @default(0)
+  discountReason String?
+  total          Float   @default(0)
+  amountPaid     Float   @default(0)
+  balanceDue     Float   @default(0)
 
-  paymentMode      String?
-  paymentDate      DateTime?
-  status           String    @default("PENDING")
+  paymentMode String?
+  paymentDate DateTime?
+  status      String    @default("PENDING")
 
-  notes            String?
-  createdBy        String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  notes     String?
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  lab              Lab          @relation(fields: [labId], references: [id])
-  patient          Patient      @relation(fields: [patientId], references: [patientId])
-  prescription     Prescription @relation(fields: [prescriptionId], references: [id])
-  items            LabBillItem[]
-  payments         LabPayment[]
+  lab          Lab           @relation(fields: [labId], references: [id])
+  patient      Patient       @relation(fields: [patientId], references: [patientId])
+  prescription Prescription  @relation(fields: [prescriptionId], references: [id])
+  items        LabBillItem[]
+  payments     LabPayment[]
 
   @@index([patientId])
   @@index([labId])
@@ -570,7 +569,7 @@ model LabBillItem {
   amount          Float
   sortOrder       Int     @default(0)
 
-  labBill         LabBill @relation(fields: [labBillId], references: [id], onDelete: Cascade)
+  labBill LabBill @relation(fields: [labBillId], references: [id], onDelete: Cascade)
 }
 
 model LabPayment {
@@ -583,7 +582,7 @@ model LabPayment {
   paymentDate DateTime @default(now())
   notes       String?
 
-  labBill     LabBill  @relation(fields: [labBillId], references: [id], onDelete: Cascade)
+  labBill LabBill @relation(fields: [labBillId], references: [id], onDelete: Cascade)
 }
 
 // ─── EXPENSES MODULE ─────────────────────────────────
@@ -607,17 +606,17 @@ model ExpenseCategory {
 }
 
 model Expense {
-  id          String   @id @default(cuid())
+  id          String          @id @default(cuid())
   title       String
   categoryId  String
   category    ExpenseCategory @relation(fields: [categoryId], references: [id])
   amount      Float
   date        DateTime
-  reason      String?  @db.Text
+  reason      String?         @db.Text
   paymentMode String?
   createdBy   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@index([categoryId])
   @@index([date])
@@ -627,24 +626,24 @@ model Expense {
 // ─── PHARMACY MODULE ─────────────────────────────────
 
 model PharmacyMedicine {
-  id             String   @id @default(cuid())
-  name           String
-  genericName    String?
-  manufacturer   String?
-  composition    String?
-  category       String?  // Tablet, Capsule, Syrup, Injection, etc.
-  dosageForm     String?
-  strength       String?
-  unitOfMeasure  String   @default("Nos") // Nos, Strip, Bottle, Vial, etc.
-  hsnCode        String?
-  gstPercent     Float    @default(12)
-  scheduleType   String?  // H, H1, X, OTC
-  isActive       Boolean  @default(true)
-  createdBy      String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  genericName   String?
+  manufacturer  String?
+  composition   String?
+  category      String? // Tablet, Capsule, Syrup, Injection, etc.
+  dosageForm    String?
+  strength      String?
+  unitOfMeasure String   @default("Nos") // Nos, Strip, Bottle, Vial, etc.
+  hsnCode       String?
+  gstPercent    Float    @default(12)
+  scheduleType  String? // H, H1, X, OTC
+  isActive      Boolean  @default(true)
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  stockEntries      PharmacyStock[]
+  stockEntries       PharmacyStock[]
   purchaseOrderItems PurchaseOrderItem[]
 
   @@unique([name, manufacturer])
@@ -655,26 +654,26 @@ model PharmacyMedicine {
 }
 
 model PharmacyStock {
-  id             String    @id @default(cuid())
-  medicineId     String
-  medicine       PharmacyMedicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
-  batchNumber    String
-  quantity       Int       @default(0)
-  mrp            Float     @default(0)
-  costPrice      Float     @default(0)
-  gstPercent     Float     @default(12)
-  unitsPerPack   Int       @default(1)
-  expiryDate     DateTime
+  id                String            @id @default(cuid())
+  medicineId        String
+  medicine          PharmacyMedicine  @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  batchNumber       String
+  quantity          Int               @default(0)
+  mrp               Float             @default(0)
+  costPrice         Float             @default(0)
+  gstPercent        Float             @default(12)
+  unitsPerPack      Int               @default(1)
+  expiryDate        DateTime
   manufacturingDate DateTime?
-  supplierId     String?
-  supplier       PharmacySupplier? @relation(fields: [supplierId], references: [id])
-  purchaseOrderId String?
-  isActive       Boolean   @default(true)
-  createdBy      String
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  supplierId        String?
+  supplier          PharmacySupplier? @relation(fields: [supplierId], references: [id])
+  purchaseOrderId   String?
+  isActive          Boolean           @default(true)
+  createdBy         String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
-  billItems      PharmacyBillItem[]
+  billItems PharmacyBillItem[]
 
   @@unique([medicineId, batchNumber])
   @@index([medicineId])
@@ -684,49 +683,49 @@ model PharmacyStock {
 }
 
 model PharmacySupplier {
-  id             String   @id @default(cuid())
-  name           String   @unique
-  contactPerson  String?
-  phone          String?
-  email          String?
-  address        String?  @db.Text
-  gstin          String?
-  drugLicenseNo  String?
-  creditDays     Int      @default(30)
-  isActive       Boolean  @default(true)
-  createdBy      String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String   @unique
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?  @db.Text
+  gstin         String?
+  drugLicenseNo String?
+  creditDays    Int      @default(30)
+  isActive      Boolean  @default(true)
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  stockEntries    PharmacyStock[]
-  purchaseOrders  PurchaseOrder[]
+  stockEntries   PharmacyStock[]
+  purchaseOrders PurchaseOrder[]
 
   @@index([isActive])
 }
 
 model PurchaseOrder {
-  id              String   @id @default(cuid())
-  orderNumber     String   @unique
-  supplierId      String
-  supplier        PharmacySupplier @relation(fields: [supplierId], references: [id])
-  orderDate       DateTime @default(now())
-  expectedDate    DateTime?
-  invoiceNumber   String?
-  invoiceDate     DateTime?
-  subtotal        Float    @default(0)
-  gstAmount       Float    @default(0)
-  discount        Float    @default(0)
-  totalAmount     Float    @default(0)
-  amountPaid      Float    @default(0)
-  balanceDue      Float    @default(0)
-  paymentMode     String?
-  status          String   @default("DRAFT") // DRAFT, ORDERED, PARTIALLY_RECEIVED, RECEIVED, CANCELLED
-  notes           String?  @db.Text
-  createdBy       String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String           @id @default(cuid())
+  orderNumber   String           @unique
+  supplierId    String
+  supplier      PharmacySupplier @relation(fields: [supplierId], references: [id])
+  orderDate     DateTime         @default(now())
+  expectedDate  DateTime?
+  invoiceNumber String?
+  invoiceDate   DateTime?
+  subtotal      Float            @default(0)
+  gstAmount     Float            @default(0)
+  discount      Float            @default(0)
+  totalAmount   Float            @default(0)
+  amountPaid    Float            @default(0)
+  balanceDue    Float            @default(0)
+  paymentMode   String?
+  status        String           @default("DRAFT") // DRAFT, ORDERED, PARTIALLY_RECEIVED, RECEIVED, CANCELLED
+  notes         String?          @db.Text
+  createdBy     String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
-  items           PurchaseOrderItem[]
+  items PurchaseOrderItem[]
 
   @@index([supplierId])
   @@index([status])
@@ -734,19 +733,19 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  id              String   @id @default(cuid())
+  id              String           @id @default(cuid())
   purchaseOrderId String
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   medicineId      String
   medicine        PharmacyMedicine @relation(fields: [medicineId], references: [id])
   batchNumber     String?
-  quantity        Int      @default(0)
-  receivedQty     Int      @default(0)
-  costPrice       Float    @default(0)
-  mrp             Float    @default(0)
-  gstPercent      Float    @default(12)
+  quantity        Int              @default(0)
+  receivedQty     Int              @default(0)
+  costPrice       Float            @default(0)
+  mrp             Float            @default(0)
+  gstPercent      Float            @default(12)
   expiryDate      DateTime?
-  amount          Float    @default(0)
+  amount          Float            @default(0)
 
   @@index([purchaseOrderId])
   @@index([medicineId])
@@ -779,7 +778,7 @@ model PharmacyBill {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  items           PharmacyBillItem[]
+  items PharmacyBillItem[]
 
   @@index([patientId])
   @@index([billDate])
@@ -787,20 +786,20 @@ model PharmacyBill {
 }
 
 model PharmacyBillItem {
-  id              String   @id @default(cuid())
+  id              String        @id @default(cuid())
   billId          String
-  bill            PharmacyBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  bill            PharmacyBill  @relation(fields: [billId], references: [id], onDelete: Cascade)
   stockId         String
   stock           PharmacyStock @relation(fields: [stockId], references: [id])
   medicineName    String
   batchNumber     String
-  quantity        Int      @default(1)
-  mrp             Float    @default(0)
-  price           Float    @default(0)
-  total           Float    @default(0)
-  discountPercent Float    @default(0)
-  amount          Float    @default(0)
-  gstPercent      Float    @default(0)
+  quantity        Int           @default(1)
+  mrp             Float         @default(0)
+  price           Float         @default(0)
+  total           Float         @default(0)
+  discountPercent Float         @default(0)
+  amount          Float         @default(0)
+  gstPercent      Float         @default(0)
 
   @@index([billId])
   @@index([stockId])
@@ -809,20 +808,20 @@ model PharmacyBillItem {
 // ─── LICENSE TRACKER MODULE ─────────────────────────
 
 model License {
-  id             String    @id @default(cuid())
-  name           String
-  licenseNumber  String?
-  issuingBody    String?
-  category       String?   // Medical, Drug, Fire Safety, Trade, NABH, Bio-Medical Waste, etc.
-  issueDate      DateTime?
-  expiryDate     DateTime
-  reminderDays   Int       @default(30) // Days before expiry to start reminding
-  status         String    @default("ACTIVE") // ACTIVE, EXPIRED, RENEWED
-  notes          String?   @db.Text
-  documentUrl    String?
-  createdBy      String
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  name          String
+  licenseNumber String?
+  issuingBody   String?
+  category      String? // Medical, Drug, Fire Safety, Trade, NABH, Bio-Medical Waste, etc.
+  issueDate     DateTime?
+  expiryDate    DateTime
+  reminderDays  Int       @default(30) // Days before expiry to start reminding
+  status        String    @default("ACTIVE") // ACTIVE, EXPIRED, RENEWED
+  notes         String?   @db.Text
+  documentUrl   String?
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([expiryDate])
   @@index([status])
@@ -832,25 +831,25 @@ model License {
 // ─── OPTICAL MODULE ─────────────────────────────────
 
 model OpticalProduct {
-  id             String   @id @default(cuid())
-  name           String
-  brand          String?
-  category       String   // Frame, Lens, Contact Lens, Accessory, Solution, Sunglasses
-  type           String?  // Frame: Full Rim/Half Rim/Rimless; Lens: SV/Bifocal/Progressive; Contact: Daily/Monthly/Yearly
-  material       String?  // Frame: Metal/Plastic/TR90/Titanium; Lens: CR39/Poly/Glass/Trivex
-  color          String?
-  size           String?  // Frame: 50-18-140 (eye-bridge-temple)
-  coating        String?  // Lens: AR/Blue Cut/Photochromic/Hardcoat
-  index          String?  // Lens: 1.5/1.56/1.6/1.67/1.74
-  modelNumber    String?
-  hsnCode        String?
-  gstPercent     Float    @default(12)
-  isActive       Boolean  @default(true)
-  createdBy      String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  brand       String?
+  category    String // Frame, Lens, Contact Lens, Accessory, Solution, Sunglasses
+  type        String? // Frame: Full Rim/Half Rim/Rimless; Lens: SV/Bifocal/Progressive; Contact: Daily/Monthly/Yearly
+  material    String? // Frame: Metal/Plastic/TR90/Titanium; Lens: CR39/Poly/Glass/Trivex
+  color       String?
+  size        String? // Frame: 50-18-140 (eye-bridge-temple)
+  coating     String? // Lens: AR/Blue Cut/Photochromic/Hardcoat
+  index       String? // Lens: 1.5/1.56/1.6/1.67/1.74
+  modelNumber String?
+  hsnCode     String?
+  gstPercent  Float    @default(12)
+  isActive    Boolean  @default(true)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  stockEntries   OpticalStock[]
+  stockEntries OpticalStock[]
 
   @@unique([name, brand])
   @@index([name])
@@ -860,22 +859,22 @@ model OpticalProduct {
 }
 
 model OpticalStock {
-  id             String   @id @default(cuid())
-  productId      String
-  product        OpticalProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-  batchNumber    String?
-  quantity       Int      @default(0)
-  mrp            Float    @default(0)
-  costPrice      Float    @default(0)
-  gstPercent     Float    @default(12)
-  power          String?  // For contact lenses: e.g. "-2.00"
-  supplierId     String?
-  isActive       Boolean  @default(true)
-  createdBy      String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id          String         @id @default(cuid())
+  productId   String
+  product     OpticalProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batchNumber String?
+  quantity    Int            @default(0)
+  mrp         Float          @default(0)
+  costPrice   Float          @default(0)
+  gstPercent  Float          @default(12)
+  power       String? // For contact lenses: e.g. "-2.00"
+  supplierId  String?
+  isActive    Boolean        @default(true)
+  createdBy   String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
-  billItems      OpticalBillItem[]
+  billItems OpticalBillItem[]
 
   @@unique([productId, batchNumber, power])
   @@index([productId])
@@ -883,38 +882,38 @@ model OpticalStock {
 }
 
 model OpticalBill {
-  id              String   @id @default(cuid())
-  billNumber      String   @unique
-  patientId       String?
-  patientName     String
-  patientPhone    String?
-  gender          String?
-  referredDoctor  String?
-  prescriptionId  String?
+  id             String  @id @default(cuid())
+  billNumber     String  @unique
+  patientId      String?
+  patientName    String
+  patientPhone   String?
+  gender         String?
+  referredDoctor String?
+  prescriptionId String?
 
   // Lens prescription (snapshot at billing time)
   lensPrescription String? @db.Text // JSON: { re: {sph,cyl,axis,add,va}, le: {sph,cyl,axis,add,va}, pd }
 
-  billDate        DateTime @default(now())
-  subtotal        Float    @default(0)
-  discountPercent Float    @default(0)
-  discountAmount  Float    @default(0)
-  gstAmount       Float    @default(0)
-  netAmount       Float    @default(0)
-  roundOff        Float    @default(0)
-  billAmount      Float    @default(0)
-  paidAmount      Float    @default(0)
-  balanceDue      Float    @default(0)
-  paymentMode     String   @default("CASH")
+  billDate        DateTime  @default(now())
+  subtotal        Float     @default(0)
+  discountPercent Float     @default(0)
+  discountAmount  Float     @default(0)
+  gstAmount       Float     @default(0)
+  netAmount       Float     @default(0)
+  roundOff        Float     @default(0)
+  billAmount      Float     @default(0)
+  paidAmount      Float     @default(0)
+  balanceDue      Float     @default(0)
+  paymentMode     String    @default("CASH")
   paymentRef      String?
   deliveryDate    DateTime?
-  orderNotes      String?  @db.Text
-  status          String   @default("COMPLETED") // COMPLETED, ORDERED, READY, DELIVERED, CANCELLED
+  orderNotes      String?   @db.Text
+  status          String    @default("COMPLETED") // COMPLETED, ORDERED, READY, DELIVERED, CANCELLED
   createdBy       String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  items           OpticalBillItem[]
+  items OpticalBillItem[]
 
   @@index([patientId])
   @@index([billDate])
@@ -922,21 +921,21 @@ model OpticalBill {
 }
 
 model OpticalBillItem {
-  id              String   @id @default(cuid())
+  id              String        @id @default(cuid())
   billId          String
-  bill            OpticalBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  bill            OpticalBill   @relation(fields: [billId], references: [id], onDelete: Cascade)
   stockId         String?
   stock           OpticalStock? @relation(fields: [stockId], references: [id])
   itemName        String
-  category        String   // Frame, Lens, Contact Lens, Accessory, etc.
-  eye             String?  // RE, LE, BOTH (for lenses)
-  quantity        Int      @default(1)
-  mrp             Float    @default(0)
-  price           Float    @default(0)
-  total           Float    @default(0)
-  discountPercent Float    @default(0)
-  amount          Float    @default(0)
-  gstPercent      Float    @default(0)
+  category        String // Frame, Lens, Contact Lens, Accessory, etc.
+  eye             String? // RE, LE, BOTH (for lenses)
+  quantity        Int           @default(1)
+  mrp             Float         @default(0)
+  price           Float         @default(0)
+  total           Float         @default(0)
+  discountPercent Float         @default(0)
+  amount          Float         @default(0)
+  gstPercent      Float         @default(0)
 
   @@index([billId])
   @@index([stockId])

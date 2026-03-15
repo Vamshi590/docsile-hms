@@ -1,10 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
+import { BreadcrumbHeader, StatBadge, SearchInput } from "@/components/layout/header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -50,7 +48,7 @@ const STATUS_MAP: Record<string, string[]> = {
   closed: ["CLOSED"],
 }
 
-export default function InsurancePage({ hospitalName }: { hospitalName: string }) {
+export default function InsurancePage() {
   const [claims, setClaims] = useState<InsuranceClaim[]>([])
   const [companies, setCompanies] = useState<InsuranceCompany[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
@@ -83,70 +81,40 @@ export default function InsurancePage({ hospitalName }: { hospitalName: string }
   }, [fetchData])
 
   return (
-    <div className="space-y-5">
+    <div>
       {/* Sticky Header with Breadcrumb */}
-      <div className="bg-white border-b border-border shadow-sm px-6 py-4 -mx-6 -mt-6 mb-0 sticky top-0 z-20">
-        <div className="flex items-center justify-between">
-          <div>
-            {selectedClaim ? (
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => { if (billView) { setBillView(null) } else { setSelectedClaim(null) } }}
-                  className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span className="text-[1.2rem] font-semibold">
-                    {billView ? selectedClaim.patientName : "Insurance Claims"}
-                  </span>
-                </button>
-                {!billView && (
-                  <>
-                    <span className="text-muted-foreground text-[1.2rem]">/</span>
-                    <span className="text-[1.2rem] font-semibold text-foreground">
-                      {selectedClaim.patientName}
-                    </span>
-                    <span className="text-xs font-mono text-muted-foreground ml-1 mt-0.5">
-                      · {selectedClaim.claimNumber}
-                    </span>
-                  </>
-                )}
-                {billView && (
-                  <>
-                    <span className="text-muted-foreground text-[1.2rem]">/</span>
-                    <span className="text-[1.2rem] font-semibold text-foreground">
-                      {billView.type === "final" ? "Final Bill" : billView.type === "enhancement" ? "Enhancement Bill" : "Cash Receipt"}
-                    </span>
-                  </>
-                )}
-              </div>
-            ) : (
-              <>
-                <h1 className="text-[1.2rem] font-semibold text-foreground tracking-tight leading-none">Insurance Claims</h1>
-                <p className="text-xs text-muted-foreground mt-1">{hospitalName}</p>
-              </>
-            )}
+      {selectedClaim ? (
+        billView ? (
+          <BreadcrumbHeader
+            onBack={() => setBillView(null)}
+            backLabel={selectedClaim.patientName}
+            currentLabel={billView.type === "final" ? "Final Bill" : billView.type === "enhancement" ? "Enhancement Bill" : "Cash Receipt"}
+          />
+        ) : (
+          <BreadcrumbHeader
+            onBack={() => setSelectedClaim(null)}
+            backLabel="Insurance Claims"
+            currentLabel={selectedClaim.patientName}
+            subtitle={`· ${selectedClaim.claimNumber}`}
+          />
+        )
+      ) : (
+        <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Insurance Claims</h1>
+            <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Preauth, billing & settlement</p>
           </div>
-
           <div className="flex items-center gap-2.5">
-            {!selectedClaim && stats && (
+            {stats && (
               <>
-                <Badge variant="info" className="px-3 py-1.5 gap-1.5 text-sm">
-                  <span className="font-bold">{stats.totalClaims}</span>
-                  <span className="font-normal">Active</span>
-                </Badge>
-                <Badge variant="warning" className="px-3 py-1.5 gap-1.5 text-sm">
-                  <span className="font-bold">{stats.preauthPending}</span>
-                  <span className="font-normal">Preauth Pending</span>
-                </Badge>
-                <Badge variant="success" className="px-3 py-1.5 gap-1.5 text-sm">
-                  <span className="font-bold">{stats.settlementPending}</span>
-                  <span className="font-normal">Awaiting Settlement</span>
-                </Badge>
+                <StatBadge value={stats.totalClaims} label="Active" variant="info" />
+                <StatBadge value={stats.preauthPending} label="Preauth Pending" variant="warning" />
+                <StatBadge value={stats.settlementPending} label="Awaiting Settlement" variant="success" />
               </>
             )}
           </div>
         </div>
-      </div>
+      )}
 
       {selectedClaim && billView ? (
         /* Bill preview/edit page */
@@ -166,54 +134,42 @@ export default function InsurancePage({ hospitalName }: { hospitalName: string }
       ) : (
         /* List view */
         <div className="py-3 space-y-5">
-          {/* Stat Cards */}
-          {stats && (
-            <div className="grid grid-cols-4 gap-4">
-              {[
-                { label: "Total Approved", value: formatCurrency(stats.totalApprovedAmount), color: "text-blue-600" },
-                { label: "Total Settled", value: formatCurrency(stats.totalSettledAmount), color: "text-green-600" },
-                { label: "Patient Balance", value: formatCurrency(stats.totalPatientPending), color: "text-orange-600" },
-                { label: "Claims This Month", value: String(stats.claimsThisMonth), color: "text-foreground" },
-              ].map(card => (
-                <Card key={card.label} className="p-4">
-                  <CardContent className="p-0">
-                    <p className="text-xs text-muted-foreground mb-1">{card.label}</p>
-                    <p className={`text-xl font-bold ${card.color}`}>{card.value}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-
           {/* Filters + Actions */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <Input
-              placeholder="Search claim, patient, IP, phone, company..."
+          <div className="flex items-center gap-3 flex-wrap rounded-xl border border-border/60 bg-white/80 backdrop-blur-sm p-3">
+            <SearchInput
               value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-80"
+              onChange={setSearch}
+              onSubmit={fetchData}
+              placeholder="Search claim, patient, IP, phone, company..."
+              className="w-72"
             />
-            <div className="flex gap-1.5 flex-wrap">
+            <div className="filter-divider" />
+            <div className="flex gap-0.5 bg-muted/40 rounded-lg p-0.5 border border-border/30 flex-wrap">
               {STATUS_FILTER_OPTIONS.map(opt => (
-                <Button
+                <button
                   key={opt.value}
-                  size="sm"
-                  variant={statusFilter === opt.value ? "default" : "ghost"}
-                  className="rounded-full text-xs h-8 px-3"
+                  className={`rounded-md text-xs font-medium h-7 px-3 transition-all ${
+                    statusFilter === opt.value
+                      ? "bg-white text-foreground shadow-sm border border-border/60"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
                   onClick={() => setStatusFilter(opt.value)}
                 >
                   {opt.label}
-                </Button>
+                </button>
               ))}
             </div>
             <div className="ml-auto flex gap-2">
-              <Button variant="ghost" size="sm" onClick={fetchData} className="text-muted-foreground">
+              <button
+                onClick={fetchData}
+                className="h-8 px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              >
                 ↻ Refresh
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setCompanyManagerOpen(true)}>
+              </button>
+              <Button variant="outline" size="sm" className="h-8" onClick={() => setCompanyManagerOpen(true)}>
                 Companies
               </Button>
-              <Button size="sm" onClick={() => setClaimFormOpen(true)}>
+              <Button size="sm" className="h-8" onClick={() => setClaimFormOpen(true)}>
                 + New Claim
               </Button>
             </div>

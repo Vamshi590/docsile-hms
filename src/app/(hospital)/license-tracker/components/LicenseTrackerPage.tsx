@@ -83,11 +83,7 @@ function getLicenseStatus(expiryDate: Date | string, reminderDays: number) {
   };
 }
 
-export default function LicenseTrackerPage({
-  hospitalName,
-}: {
-  hospitalName: string;
-}) {
+export default function LicenseTrackerPage() {
   const [licenses, setLicenses] = useState<License[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -187,7 +183,7 @@ export default function LicenseTrackerPage({
 
   return (
     <div className="space-y-0">
-      <PageHeader title="License Tracker" description={hospitalName}>
+      <PageHeader title="License Tracker">
         <Button size="sm" onClick={() => setShowAddModal(true)}>
           <Plus className="h-4 w-4 mr-1.5" />
           Add License

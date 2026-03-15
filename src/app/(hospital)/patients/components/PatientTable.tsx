@@ -3,9 +3,8 @@
 import { useState } from "react"
 import { ChevronUp, ChevronDown, MoreVertical, Pencil, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { formatCurrency, calculateAge, getInitials } from "@/lib/utils"
+import { formatCurrency, calculateAge } from "@/lib/utils"
 import { PatientStatusBadge } from "./PatientStatusBadge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,23 +25,21 @@ export type PatientRow = {
   firstName: string
   lastName: string | null
   age: number | null
-  dateOfBirth: Date | null
+  dateOfBirth: Date | string | null
   gender: string
   phone: string
   status: string
-  appointmentDate: Date
-  createdAt: Date
+  appointmentDate: Date | string
+  createdAt: Date | string
   doctorName: string | null
   department: string | null
   guardianName?: string | null
   address?: string | null
-  prescriptions?: {
-    total: number
-    amountPaid: number
-    balanceDue: number
-    status: string
-    prescriptionNumber: string | null
-  }[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  prescriptions?: any[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  eyeReadings?: any[]
+  [key: string]: unknown
 }
 
 interface PatientTableProps {
@@ -95,29 +92,31 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
   })
 
   function SortIcon({ k }: { k: SortKey }) {
-    if (sortKey !== k) return <span className="opacity-25 ml-1 text-xs">↕</span>
+    if (sortKey !== k) return <span className="opacity-30 ml-1 text-[10px]">↕</span>
     return sortDir === "asc"
-      ? <ChevronUp className="h-3.5 w-3.5 ml-1 inline" />
-      : <ChevronDown className="h-3.5 w-3.5 ml-1 inline" />
+      ? <ChevronUp className="h-3 w-3 ml-0.5 inline text-primary" />
+      : <ChevronDown className="h-3 w-3 ml-0.5 inline text-primary" />
   }
+
+  const sortableHeadClass = "cursor-pointer select-none hover:text-foreground transition-colors"
 
   const headers = (
     <TableHeader>
-      <TableRow className="bg-gray-100 hover:bg-gray-100">
-        <TableHead className="w-12">Token</TableHead>
-        <TableHead className="cursor-pointer hover:text-foreground w-32" onClick={() => handleSort("createdAt")}>
+      <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
+        <TableHead className="w-12 text-center">Token</TableHead>
+        <TableHead className={cn("w-[4.5rem]", sortableHeadClass)} onClick={() => handleSort("createdAt")}>
           Time <SortIcon k="createdAt" />
         </TableHead>
-        <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort("patientId")}>
+        <TableHead className={sortableHeadClass} onClick={() => handleSort("patientId")}>
           Patient ID <SortIcon k="patientId" />
         </TableHead>
-        <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort("name")}>
+        <TableHead className={sortableHeadClass} onClick={() => handleSort("name")}>
           Name <SortIcon k="name" />
         </TableHead>
         <TableHead>Age / Gender</TableHead>
         <TableHead>Phone</TableHead>
         <TableHead>Doctor</TableHead>
-        <TableHead className="cursor-pointer hover:text-foreground" onClick={() => handleSort("status")}>
+        <TableHead className={sortableHeadClass} onClick={() => handleSort("status")}>
           Status <SortIcon k="status" />
         </TableHead>
         <TableHead>Receipt</TableHead>
@@ -128,24 +127,20 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-border bg-white overflow-hidden">
+      <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
         <Table>
           {headers}
           <TableBody>
             {Array.from({ length: 7 }).map((_, i) => (
               <TableRow key={i} className="hover:bg-transparent">
-                <TableCell><Skeleton className="h-5 w-6 rounded-full" /></TableCell>
+                <TableCell className="text-center"><Skeleton className="h-6 w-7 rounded mx-auto" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2.5">
-                    <Skeleton className="h-4 w-28" />
-                  </div>
-                </TableCell>
+                <TableCell><Skeleton className="h-5 w-16 rounded" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-6" /></TableCell>
               </TableRow>
@@ -158,7 +153,8 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
 
   if (patients.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-white py-20 text-center">
+      <div className="rounded-xl border border-border/60 bg-white py-20 text-center shadow-sm">
+        <div className="text-3xl mb-3">📋</div>
         <p className="text-base font-semibold text-foreground">No patients found</p>
         <p className="text-sm text-muted-foreground mt-1.5">
           Try a different date or use Add Patient to register a new patient
@@ -168,7 +164,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
   }
 
   return (
-    <div className="rounded-xl border border-border bg-white overflow-hidden">
+    <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
       <Table>
         {headers}
         <TableBody>
@@ -182,10 +178,10 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
               <TableRow
                 key={patient.id}
                 onClick={() => onRowClick(patient)}
-                className="cursor-pointer "
+                className="cursor-pointer group hover:bg-primary/[0.02] transition-colors"
               >
-                <TableCell>
-                  <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold px-1.5">
+                <TableCell className="text-center">
+                  <span className="inline-flex items-center justify-center h-6 min-w-7 rounded bg-primary/10 border border-primary/20 border-dashed text-xs font-bold text-primary tabular-nums px-1.5">
                     {tokenMap.get(patient.id)}
                   </span>
                 </TableCell>
@@ -196,19 +192,19 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
                   })}
                 </TableCell>
                 <TableCell>
-                  <span className="font-bold text-foreground">{patient.patientId}</span>
+                  <span className="font-mono text-xs font-semibold text-foreground bg-muted/60 px-2 py-0.5 rounded">
+                    {patient.patientId}
+                  </span>
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-semibold text-foreground">{fullName}</span>
-                  </div>
+                  <span className="font-semibold text-sm text-foreground">{fullName}</span>
                 </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {age} / {genderShort}
+                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                  {age}y / {genderShort}
                 </TableCell>
-                <TableCell className="font-medium text-foreground">{patient.phone}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {patient.doctorName ?? "—"}
+                <TableCell className="text-sm text-foreground tabular-nums">{patient.phone}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {patient.doctorName ?? <span className="text-muted-foreground/50">—</span>}
                 </TableCell>
                 <TableCell>
                   <PatientStatusBadge status={patient.status as never} />
@@ -216,23 +212,23 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
                 <TableCell>
                   {latestInvoice ? (
                     <div>
-                      <span className="font-semibold text-foreground">
+                      <span className="font-semibold text-sm text-foreground tabular-nums">
                         {formatCurrency(latestInvoice.total)}
                       </span>
                       {latestInvoice.balanceDue > 0 && (
-                        <p className="text-xs text-destructive mt-0.5">
+                        <p className="text-[11px] text-orange-600 font-medium mt-0.5 tabular-nums">
                           Due: {formatCurrency(latestInvoice.balanceDue)}
                         </p>
                       )}
                     </div>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-muted-foreground/50">—</span>
                   )}
                 </TableCell>
                 <TableCell onClick={e => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon-sm" className="h-7 w-7">
+                      <Button variant="ghost" size="icon-sm" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -256,6 +252,11 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
           })}
         </TableBody>
       </Table>
+      <div className="px-4 py-2.5 border-t border-border/40 bg-muted/20">
+        <span className="text-xs text-muted-foreground">
+          {patients.length} patient{patients.length !== 1 ? "s" : ""}
+        </span>
+      </div>
     </div>
   )
 }

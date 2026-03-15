@@ -1,10 +1,12 @@
+import dynamic from "next/dynamic"
 import { requireAdmin } from "@/lib/auth"
-import { db } from "@/lib/db"
-import StaffPage from "./components/StaffPage"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
+
+const StaffPage = dynamic(() => import("./components/StaffPage"), {
+  loading: () => <PageSkeleton />,
+})
 
 export default async function StaffRoute() {
   await requireAdmin()
-  const hospital = await db.hospitalProfile.findFirst()
-  const hospitalName = hospital?.displayName ?? hospital?.name ?? "Docsile HMS"
-  return <StaffPage hospitalName={hospitalName} />
+  return <StaffPage />
 }

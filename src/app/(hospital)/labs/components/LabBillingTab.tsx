@@ -13,7 +13,8 @@ import {
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/table"
-import { getPatientInvestigations, createLabBills, getLabBills, getLabs } from "../actions"
+import { getPatientInvestigations, createLabBills, getLabBills } from "../actions"
+import type { LabWithCount } from "./LabsPage"
 import { LabBillCard } from "./LabBillCard"
 import { toast } from "sonner"
 
@@ -85,7 +86,7 @@ const STATUS_COLORS: Record<string, "success" | "warning" | "secondary" | "info"
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function LabBillingTab() {
+export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
   // ── Billing state
   const [searchId, setSearchId] = useState("")
   const [searchLoading, setSearchLoading] = useState(false)
@@ -100,8 +101,8 @@ export function LabBillingTab() {
 
   // ── History state
   const [bills, setBills] = useState<LabBillRow[]>([])
-  const [labs, setLabs] = useState<LabOption[]>([])
-  const [historyLoading, setHistoryLoading] = useState(true)
+  const labs: LabOption[] = parentLabs.map((l) => ({ id: l.id, name: l.name }))
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [filterLabId, setFilterLabId] = useState("")
@@ -109,26 +110,27 @@ export function LabBillingTab() {
   const [filterPatient, setFilterPatient] = useState("")
   const [expandedBill, setExpandedBill] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyLoaded, setHistoryLoaded] = useState(false)
 
-  // ── Load history
+  // ── Load history (only when history panel is opened)
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
-    const [billsData, labsData] = await Promise.all([
-      getLabBills({
-        dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined,
-        labId: filterLabId && filterLabId !== "all" ? filterLabId : undefined,
-        status: filterStatus && filterStatus !== "all" ? filterStatus : undefined,
-        patientId: filterPatient || undefined,
-      }),
-      getLabs(),
-    ])
+    const billsData = await getLabBills({
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      labId: filterLabId && filterLabId !== "all" ? filterLabId : undefined,
+      status: filterStatus && filterStatus !== "all" ? filterStatus : undefined,
+      patientId: filterPatient || undefined,
+    })
     setBills(billsData as LabBillRow[])
-    setLabs(labsData.map((l) => ({ id: l.id, name: l.name })))
     setHistoryLoading(false)
+    setHistoryLoaded(true)
   }, [dateFrom, dateTo, filterLabId, filterStatus, filterPatient])
 
-  useEffect(() => { loadHistory() }, [loadHistory])
+  // Only load history when the panel is first opened or filters change
+  useEffect(() => {
+    if (historyOpen) loadHistory()
+  }, [historyOpen, loadHistory])
 
   // ── Billing handlers
   async function handleSearch() {

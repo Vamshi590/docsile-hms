@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
-import { Search, Loader2, IndianRupee, CheckCircle2 } from "lucide-react"
+import { Loader2, IndianRupee, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FilterBar, SearchInput } from "@/components/layout/header"
 import { Badge } from "@/components/ui/badge"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -77,20 +78,18 @@ export function DuesTab() {
   return (
     <div>
       {/* Filters */}
-      <div className="bg-gray-50 border-b border-border shadow-sm px-6 py-2 -mx-6 mb-5 sticky top-18 z-10">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative max-w-64 flex-1 min-w-48">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search name, phone, ID..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && loadDues()}
-              className="pl-9 text-sm bg-white"
-            />
-          </div>
+      <FilterBar className="top-16">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            onSubmit={loadDues}
+            placeholder="Search name, phone, ID..."
+            className="w-56"
+          />
+          <div className="filter-divider" />
           <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as "ALL" | "OPD" | "IPD" | "LAB")}>
-            <SelectTrigger className="w-28 text-sm bg-white">
+            <SelectTrigger className="w-28 text-sm bg-white h-8 border-border/60">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -101,7 +100,7 @@ export function DuesTab() {
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-            <SelectTrigger className="w-40 text-sm bg-white">
+            <SelectTrigger className="w-40 text-sm bg-white h-8 border-border/60">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -111,25 +110,23 @@ export function DuesTab() {
               <SelectItem value="amount_asc">Lowest Due</SelectItem>
             </SelectContent>
           </Select>
+          <div className="filter-divider" />
           <Input
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="w-36 text-sm bg-white"
+            className="w-36 text-sm bg-white h-8 border-border/60"
             placeholder="From"
           />
           <Input
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="w-36 text-sm bg-white"
+            className="w-36 text-sm bg-white h-8 border-border/60"
             placeholder="To"
           />
-          <Button variant="secondary" size="sm" onClick={loadDues} disabled={loading}>
-            Search
-          </Button>
         </div>
-      </div>
+      </FilterBar>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-4 gap-3 mb-5">

@@ -1,8 +1,11 @@
-import { db } from "@/lib/db"
-import { WorkupPage } from "./components/WorkupPage"
+import dynamic from "next/dynamic"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
+
+const WorkupPage = dynamic(
+  () => import("./components/WorkupPage").then((mod) => ({ default: mod.WorkupPage })),
+  { loading: () => <PageSkeleton /> }
+)
 
 export default async function Page() {
-  const hospital = await db.hospitalProfile.findFirst()
-  const hospitalName = hospital?.displayName ?? hospital?.name ?? "Docsile HMS"
-  return <WorkupPage hospitalName={hospitalName} />
+  return <WorkupPage />
 }

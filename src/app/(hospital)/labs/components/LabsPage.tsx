@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { PageHeader } from "@/components/layout/header"
+import { PageHeader, StatBadge } from "@/components/layout/header"
 import { LabConfigTab } from "./LabConfigTab"
 import { LabBillingTab } from "./LabBillingTab"
 import { getLabs } from "../actions"
@@ -11,27 +10,38 @@ import { getLabs } from "../actions"
 const TAB_CLASS =
   "rounded-none px-3 py-2.5 text-sm font-medium border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
 
-export default function LabsPage({ hospitalName }: { hospitalName: string }) {
-  const [labCount, setLabCount] = useState(0)
+export type LabWithCount = {
+  id: string
+  name: string
+  description: string | null
+  location: string | null
+  isActive: boolean
+  sortOrder: number
+  _count: { investigations: number }
+}
 
-  const refreshCount = useCallback(async () => {
-    const labs = await getLabs()
-    setLabCount(labs.filter((l) => l.isActive).length)
+export default function LabsPage() {
+  const [labs, setLabs] = useState<LabWithCount[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const refreshLabs = useCallback(async () => {
+    const data = await getLabs()
+    setLabs(data as LabWithCount[])
+    setLoading(false)
   }, [])
 
-  useEffect(() => { refreshCount() }, [refreshCount])
+  useEffect(() => { refreshLabs() }, [refreshLabs])
+
+  const activeCount = labs.filter((l) => l.isActive).length
 
   return (
     <div className="space-y-0">
-      <PageHeader title="Labs" description={hospitalName}>
-        <Badge variant="info" className="px-3 py-1.5 gap-1.5 text-sm">
-          <span className="font-bold">{labCount}</span>
-          <span className="font-normal">Labs</span>
-        </Badge>
+      <PageHeader title="Labs" description="Billing, history & configuration">
+        <StatBadge value={activeCount} label="Active Labs" variant="info" />
       </PageHeader>
 
       <Tabs defaultValue="billing" className="w-full">
-        <div className="bg-card border-b border-border px-6 -mx-6 sticky top-18 z-10">
+        <div className="bg-white/60 backdrop-blur-sm border-b border-border/40 px-6 -mx-6 sticky top-16 z-10">
           <TabsList className="bg-transparent h-auto p-0 rounded-none gap-1 -mb-px">
             <TabsTrigger value="billing" className={TAB_CLASS}>
               Lab Billing & History
@@ -43,10 +53,10 @@ export default function LabsPage({ hospitalName }: { hospitalName: string }) {
         </div>
 
         <TabsContent value="billing" className="mt-0 pt-5 space-y-5">
-          <LabBillingTab />
+          <LabBillingTab labs={labs} />
         </TabsContent>
         <TabsContent value="config" className="mt-0 pt-5 space-y-5">
-          <LabConfigTab onLabsChanged={refreshCount} />
+          <LabConfigTab initialLabs={labs} loading={loading} onLabsChanged={refreshLabs} />
         </TabsContent>
       </Tabs>
     </div>

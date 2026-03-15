@@ -1,8 +1,10 @@
-import { db } from "@/lib/db"
-import InsurancePage from "./components/InsurancePage"
+import dynamic from "next/dynamic"
+import { PageSkeleton } from "@/components/layout/PageSkeleton"
+
+const InsurancePage = dynamic(() => import("./components/InsurancePage"), {
+  loading: () => <PageSkeleton />,
+})
 
 export default async function InsuranceRoute() {
-  const hospital = await db.hospitalProfile.findFirst()
-  const hospitalName = hospital?.displayName ?? hospital?.name ?? "Docsile HMS"
-  return <InsurancePage hospitalName={hospitalName} />
+  return <InsurancePage />
 }

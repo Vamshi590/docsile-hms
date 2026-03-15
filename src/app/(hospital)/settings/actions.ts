@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 import { z } from "zod"
 
@@ -17,21 +17,31 @@ const ServiceSchema = z.object({
 })
 
 export async function getServiceTemplates(includeInactive = false) {
-  return db.serviceTemplate.findMany({
-    where: includeInactive ? {} : { isActive: true },
-    orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
-  })
+  const supabase = await createClient()
+  let query = supabase
+    .from("ServiceTemplate")
+    .select("*")
+    .order("category", { ascending: true })
+    .order("sortOrder", { ascending: true })
+    .order("name", { ascending: true })
+  if (!includeInactive) query = query.eq("isActive", true)
+  const { data, error } = await query
+  if (error) throw error
+  return data
 }
 
 export async function createServiceTemplate(data: z.infer<typeof ServiceSchema>) {
   const user = await requireAuth()
+  const supabase = await createClient()
   const validated = ServiceSchema.safeParse(data)
   if (!validated.success) {
     return { success: false, error: validated.error.issues[0]?.message ?? "Invalid data" }
   }
   try {
-    const svc = await db.serviceTemplate.create({
-      data: {
+    const now = new Date().toISOString()
+    const { data: svc, error } = await supabase
+      .from("ServiceTemplate")
+      .insert({
         name: validated.data.name,
         category: validated.data.category,
         description: validated.data.description ?? null,
@@ -40,8 +50,12 @@ export async function createServiceTemplate(data: z.infer<typeof ServiceSchema>)
         sortOrder: validated.data.sortOrder ?? 0,
         isActive: true,
         createdBy: user.id,
-      } as any,
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true, data: svc }
   } catch {
@@ -51,19 +65,24 @@ export async function createServiceTemplate(data: z.infer<typeof ServiceSchema>)
 
 export async function updateServiceTemplate(id: string, data: Partial<z.infer<typeof ServiceSchema>> & { isActive?: boolean }) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const svc = await db.serviceTemplate.update({
-      where: { id },
-      data: {
-        name: data.name,
-        category: data.category,
-        description: data.description,
-        amount: data.amount,
-        discount: data.discount,
-        sortOrder: data.sortOrder,
-        isActive: data.isActive,
-      } as any,
-    })
+    const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+    if (data.name !== undefined) updateData.name = data.name
+    if (data.category !== undefined) updateData.category = data.category
+    if (data.description !== undefined) updateData.description = data.description
+    if (data.amount !== undefined) updateData.amount = data.amount
+    if (data.discount !== undefined) updateData.discount = data.discount
+    if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
+    if (data.isActive !== undefined) updateData.isActive = data.isActive
+
+    const { data: svc, error } = await supabase
+      .from("ServiceTemplate")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true, data: svc }
   } catch {
@@ -73,8 +92,10 @@ export async function updateServiceTemplate(id: string, data: Partial<z.infer<ty
 
 export async function deleteServiceTemplate(id: string) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.serviceTemplate.delete({ where: { id } })
+    const { error } = await supabase.from("ServiceTemplate").delete().eq("id", id)
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true }
   } catch {
@@ -85,7 +106,9 @@ export async function deleteServiceTemplate(id: string) {
 // ─── Hospital Profile ─────────────────────────────────────────────────────────
 
 export async function getHospitalProfile() {
-  return db.hospitalProfile.findFirst()
+  const supabase = await createClient()
+  const { data } = await supabase.from("HospitalProfile").select("*").limit(1).single()
+  return data
 }
 
 export async function updateHospitalProfile(data: {
@@ -98,34 +121,35 @@ export async function updateHospitalProfile(data: {
   gstin?: string
 }) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const existing = await db.hospitalProfile.findFirst()
+    const now = new Date().toISOString()
+    const { data: existing } = await supabase.from("HospitalProfile").select("id").limit(1).single()
     if (!existing) {
-      await db.hospitalProfile.create({
-        data: {
-          name: data.name ?? "My Hospital",
-          displayName: data.displayName ?? null,
-          phone: data.phone ?? null,
-          email: data.email ?? null,
-          website: data.website ?? null,
-          registrationNo: data.registrationNo ?? null,
-          gstin: data.gstin ?? null,
-        },
+      await supabase.from("HospitalProfile").insert({
+        name: data.name ?? "My Hospital",
+        displayName: data.displayName ?? null,
+        phone: data.phone ?? null,
+        email: data.email ?? null,
+        website: data.website ?? null,
+        registrationNo: data.registrationNo ?? null,
+        gstin: data.gstin ?? null,
+        createdAt: now,
+        updatedAt: now,
       })
     } else {
-      await db.hospitalProfile.update({
-        where: { id: existing.id },
-        data: {
-          name: data.name ?? existing.name,
-          displayName: data.displayName ?? existing.displayName,
-          phone: data.phone ?? existing.phone,
-          email: data.email ?? existing.email,
-          website: data.website ?? existing.website,
-          registrationNo: data.registrationNo ?? existing.registrationNo,
-          gstin: data.gstin ?? existing.gstin,
-        },
-      })
+      const updateData: Record<string, unknown> = { updatedAt: now }
+      if (data.name !== undefined) updateData.name = data.name
+      if (data.displayName !== undefined) updateData.displayName = data.displayName
+      if (data.phone !== undefined) updateData.phone = data.phone
+      if (data.email !== undefined) updateData.email = data.email
+      if (data.website !== undefined) updateData.website = data.website
+      if (data.registrationNo !== undefined) updateData.registrationNo = data.registrationNo
+      if (data.gstin !== undefined) updateData.gstin = data.gstin
+      await supabase.from("HospitalProfile").update(updateData).eq("id", existing.id)
     }
+    const { invalidateHospitalCache } = await import("@/lib/db")
+    invalidateHospitalCache()
     revalidatePath("/settings")
     revalidatePath("/")
     return { success: true }
@@ -137,13 +161,13 @@ export async function updateHospitalProfile(data: {
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export async function getUsers() {
-  return db.user.findMany({
-    orderBy: { fullName: "asc" },
-    select: {
-      id: true, email: true, fullName: true, phone: true,
-      role: true, department: true, designation: true, isActive: true, lastLogin: true, createdAt: true,
-    },
-  })
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("User")
+    .select("id, email, fullName, phone, role, department, designation, isActive, lastLogin, createdAt")
+    .order("fullName", { ascending: true })
+  if (error) throw error
+  return data
 }
 
 export async function createUser(data: {
@@ -156,25 +180,39 @@ export async function createUser(data: {
   designation?: string
 }) {
   await requireAuth()
-  // Import hashPassword
-  const { hashPassword } = await import("@/lib/auth")
+  const supabase = await createClient()
   try {
-    const existing = await db.user.findUnique({ where: { email: data.email } })
+    // Check if email exists
+    const { data: existing } = await supabase.from("User").select("id").eq("email", data.email).single()
     if (existing) return { success: false, error: "Email already registered" }
-    const user = await db.user.create({
-      data: {
-        email: data.email,
-        passwordHash: hashPassword(data.password),
-        fullName: data.fullName,
-        role: data.role,
-        phone: data.phone ?? null,
-        department: data.department ?? null,
-        designation: data.designation ?? null,
-        isActive: true,
-      },
+
+    // Create auth user via Supabase Auth (admin API)
+    const { createServiceClient } = await import("@/lib/supabase/server")
+    const adminSupabase = await createServiceClient()
+    const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
+      email: data.email,
+      password: data.password,
+      email_confirm: true,
     })
+    if (authError) throw authError
+
+    const now = new Date().toISOString()
+    await supabase.from("User").insert({
+      id: authData.user.id,
+      email: data.email,
+      passwordHash: "supabase-auth",
+      fullName: data.fullName,
+      role: data.role,
+      phone: data.phone ?? null,
+      department: data.department ?? null,
+      designation: data.designation ?? null,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+
     revalidatePath("/settings")
-    return { success: true, data: { id: user.id, email: user.email, fullName: user.fullName } }
+    return { success: true, data: { id: authData.user.id, email: data.email, fullName: data.fullName } }
   } catch {
     return { success: false, error: "Failed to create user" }
   }
@@ -182,10 +220,11 @@ export async function createUser(data: {
 
 export async function toggleUserActive(id: string) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const user = await db.user.findUnique({ where: { id }, select: { isActive: true } })
+    const { data: user } = await supabase.from("User").select("isActive").eq("id", id).single()
     if (!user) return { success: false, error: "User not found" }
-    await db.user.update({ where: { id }, data: { isActive: !user.isActive } })
+    await supabase.from("User").update({ isActive: !user.isActive, updatedAt: new Date().toISOString() }).eq("id", id)
     revalidatePath("/settings")
     return { success: true }
   } catch {
@@ -196,10 +235,12 @@ export async function toggleUserActive(id: string) {
 // ─── Prescription Templates ───────────────────────────────────────────────────
 
 export async function getPrescriptionTemplates(includeInactive = false) {
-  return db.predefinedTemplate.findMany({
-    where: includeInactive ? {} : { isActive: true },
-    orderBy: [{ code: "asc" }],
-  })
+  const supabase = await createClient()
+  let query = supabase.from("PredefinedTemplate").select("*").order("code", { ascending: true })
+  if (!includeInactive) query = query.eq("isActive", true)
+  const { data, error } = await query
+  if (error) throw error
+  return data
 }
 
 export async function createPrescriptionTemplate(data: {
@@ -214,12 +255,17 @@ export async function createPrescriptionTemplate(data: {
   additionalNotes?: string
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const existing = await db.predefinedTemplate.findUnique({ where: { code: data.code.trim().toUpperCase() } })
+    const code = data.code.trim().toUpperCase()
+    const { data: existing } = await supabase.from("PredefinedTemplate").select("id").eq("code", code).single()
     if (existing) return { success: false, error: "Template code already exists" }
-    const tmpl = await db.predefinedTemplate.create({
-      data: {
-        code: data.code.trim().toUpperCase(),
+
+    const now = new Date().toISOString()
+    const { data: tmpl, error } = await supabase
+      .from("PredefinedTemplate")
+      .insert({
+        code,
         name: data.name.trim(),
         presentComplaint: data.presentComplaint?.trim() || null,
         previousHistory: data.previousHistory?.trim() || null,
@@ -230,8 +276,12 @@ export async function createPrescriptionTemplate(data: {
         additionalNotes: data.additionalNotes?.trim() || null,
         isActive: true,
         createdBy: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true, data: tmpl }
   } catch {
@@ -255,22 +305,27 @@ export async function updatePrescriptionTemplate(
   }
 ) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const tmpl = await db.predefinedTemplate.update({
-      where: { id },
-      data: {
-        ...(data.code !== undefined && { code: data.code.trim().toUpperCase() }),
-        ...(data.name !== undefined && { name: data.name.trim() }),
-        ...(data.presentComplaint !== undefined && { presentComplaint: data.presentComplaint.trim() || null }),
-        ...(data.previousHistory !== undefined && { previousHistory: data.previousHistory.trim() || null }),
-        ...(data.provisionalDiagnosis !== undefined && { provisionalDiagnosis: data.provisionalDiagnosis.trim() || null }),
-        ...(data.medicines !== undefined && { medicines: data.medicines }),
-        ...(data.investigations !== undefined && { investigations: data.investigations }),
-        ...(data.followUpDays !== undefined && { followUpDays: data.followUpDays }),
-        ...(data.additionalNotes !== undefined && { additionalNotes: data.additionalNotes.trim() || null }),
-        ...(data.isActive !== undefined && { isActive: data.isActive }),
-      },
-    })
+    const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+    if (data.code !== undefined) updateData.code = data.code.trim().toUpperCase()
+    if (data.name !== undefined) updateData.name = data.name.trim()
+    if (data.presentComplaint !== undefined) updateData.presentComplaint = data.presentComplaint.trim() || null
+    if (data.previousHistory !== undefined) updateData.previousHistory = data.previousHistory.trim() || null
+    if (data.provisionalDiagnosis !== undefined) updateData.provisionalDiagnosis = data.provisionalDiagnosis.trim() || null
+    if (data.medicines !== undefined) updateData.medicines = data.medicines
+    if (data.investigations !== undefined) updateData.investigations = data.investigations
+    if (data.followUpDays !== undefined) updateData.followUpDays = data.followUpDays
+    if (data.additionalNotes !== undefined) updateData.additionalNotes = data.additionalNotes.trim() || null
+    if (data.isActive !== undefined) updateData.isActive = data.isActive
+
+    const { data: tmpl, error } = await supabase
+      .from("PredefinedTemplate")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true, data: tmpl }
   } catch {
@@ -280,8 +335,10 @@ export async function updatePrescriptionTemplate(
 
 export async function deletePrescriptionTemplate(id: string) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.predefinedTemplate.delete({ where: { id } })
+    const { error } = await supabase.from("PredefinedTemplate").delete().eq("id", id)
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true }
   } catch {
@@ -292,10 +349,12 @@ export async function deletePrescriptionTemplate(id: string) {
 // ─── Predefined Packages ─────────────────────────────────────────────────────
 
 export async function getPredefinedPackages(includeInactive = false) {
-  return db.predefinedPackage.findMany({
-    where: includeInactive ? {} : { isActive: true },
-    orderBy: { name: "asc" },
-  })
+  const supabase = await createClient()
+  let query = supabase.from("PredefinedPackage").select("*").order("name", { ascending: true })
+  if (!includeInactive) query = query.eq("isActive", true)
+  const { data, error } = await query
+  if (error) throw error
+  return data
 }
 
 export async function createPredefinedPackage(data: {
@@ -305,19 +364,27 @@ export async function createPredefinedPackage(data: {
   discount: number
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const existing = await db.predefinedPackage.findUnique({ where: { name: data.name.trim() } })
+    const { data: existing } = await supabase.from("PredefinedPackage").select("id").eq("name", data.name.trim()).single()
     if (existing) return { success: false, error: "Package name already exists" }
-    const pkg = await db.predefinedPackage.create({
-      data: {
+
+    const now = new Date().toISOString()
+    const { data: pkg, error } = await supabase
+      .from("PredefinedPackage")
+      .insert({
         name: data.name.trim(),
         inclusions: data.inclusions,
         totalAmount: data.totalAmount,
         discount: data.discount,
         isActive: true,
         createdBy: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true, data: pkg }
   } catch {
@@ -336,17 +403,22 @@ export async function updatePredefinedPackage(
   }
 ) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const pkg = await db.predefinedPackage.update({
-      where: { id },
-      data: {
-        ...(data.name !== undefined && { name: data.name.trim() }),
-        ...(data.inclusions !== undefined && { inclusions: data.inclusions }),
-        ...(data.totalAmount !== undefined && { totalAmount: data.totalAmount }),
-        ...(data.discount !== undefined && { discount: data.discount }),
-        ...(data.isActive !== undefined && { isActive: data.isActive }),
-      },
-    })
+    const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+    if (data.name !== undefined) updateData.name = data.name.trim()
+    if (data.inclusions !== undefined) updateData.inclusions = data.inclusions
+    if (data.totalAmount !== undefined) updateData.totalAmount = data.totalAmount
+    if (data.discount !== undefined) updateData.discount = data.discount
+    if (data.isActive !== undefined) updateData.isActive = data.isActive
+
+    const { data: pkg, error } = await supabase
+      .from("PredefinedPackage")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true, data: pkg }
   } catch {
@@ -356,8 +428,10 @@ export async function updatePredefinedPackage(
 
 export async function deletePredefinedPackage(id: string) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.predefinedPackage.delete({ where: { id } })
+    const { error } = await supabase.from("PredefinedPackage").delete().eq("id", id)
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true }
   } catch {
@@ -368,10 +442,16 @@ export async function deletePredefinedPackage(id: string) {
 // ─── Medicine Master ──────────────────────────────────────────────────────────
 
 export async function getMedicineMasterList(includeInactive = false) {
-  return db.medicineMaster.findMany({
-    where: includeInactive ? {} : { isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  })
+  const supabase = await createClient()
+  let query = supabase
+    .from("MedicineMaster")
+    .select("*")
+    .order("sortOrder", { ascending: true })
+    .order("name", { ascending: true })
+  if (!includeInactive) query = query.eq("isActive", true)
+  const { data, error } = await query
+  if (error) throw error
+  return data
 }
 
 export async function createMedicineMaster(data: {
@@ -383,11 +463,15 @@ export async function createMedicineMaster(data: {
   sortOrder?: number
 }) {
   const user = await requireAuth()
+  const supabase = await createClient()
   try {
-    const existing = await db.medicineMaster.findUnique({ where: { name: data.name.trim() } })
+    const { data: existing } = await supabase.from("MedicineMaster").select("id").eq("name", data.name.trim()).single()
     if (existing) return { success: false, error: "Medicine name already exists" }
-    const med = await db.medicineMaster.create({
-      data: {
+
+    const now = new Date().toISOString()
+    const { data: med, error } = await supabase
+      .from("MedicineMaster")
+      .insert({
         name: data.name.trim(),
         category: data.category?.trim() || null,
         defaultTiming: data.defaultTiming?.trim() || null,
@@ -396,8 +480,12 @@ export async function createMedicineMaster(data: {
         sortOrder: data.sortOrder ?? 0,
         isActive: true,
         createdBy: user.id,
-      },
-    })
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true, data: med }
   } catch {
@@ -418,19 +506,24 @@ export async function updateMedicineMaster(
   }
 ) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    const med = await db.medicineMaster.update({
-      where: { id },
-      data: {
-        ...(data.name !== undefined && { name: data.name.trim() }),
-        ...(data.category !== undefined && { category: data.category.trim() || null }),
-        ...(data.defaultTiming !== undefined && { defaultTiming: data.defaultTiming.trim() || null }),
-        ...(data.defaultDays !== undefined && { defaultDays: data.defaultDays.trim() || null }),
-        ...(data.note !== undefined && { note: data.note.trim() || null }),
-        ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
-        ...(data.isActive !== undefined && { isActive: data.isActive }),
-      },
-    })
+    const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+    if (data.name !== undefined) updateData.name = data.name.trim()
+    if (data.category !== undefined) updateData.category = data.category.trim() || null
+    if (data.defaultTiming !== undefined) updateData.defaultTiming = data.defaultTiming.trim() || null
+    if (data.defaultDays !== undefined) updateData.defaultDays = data.defaultDays.trim() || null
+    if (data.note !== undefined) updateData.note = data.note.trim() || null
+    if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
+    if (data.isActive !== undefined) updateData.isActive = data.isActive
+
+    const { data: med, error } = await supabase
+      .from("MedicineMaster")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true, data: med }
   } catch {
@@ -440,8 +533,10 @@ export async function updateMedicineMaster(
 
 export async function deleteMedicineMaster(id: string) {
   await requireAuth()
+  const supabase = await createClient()
   try {
-    await db.medicineMaster.delete({ where: { id } })
+    const { error } = await supabase.from("MedicineMaster").delete().eq("id", id)
+    if (error) throw error
     revalidatePath("/settings")
     return { success: true }
   } catch {

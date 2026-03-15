@@ -1,96 +1,123 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
+import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 import { getISTDayBounds, toLocalDateISO, computePatientStatus } from "@/lib/utils"
 import { z } from "zod"
 
 export async function getDoctorQueue(date?: string) {
+  const supabase = await createClient()
   const targetDate = date ?? toLocalDateISO()
   const { start, end } = getISTDayBounds(targetDate)
+  const startMs = start.getTime()
+  const endMs = end.getTime()
 
-  const patients = await db.patient.findMany({
-    where: {
-      patientType: "OPD",
-      OR: [
-        { prescriptions: { some: { prescriptionDate: { gte: start, lte: end } } } },
-        { appointmentDate: { gte: start, lte: end } },
-      ],
-    },
-    orderBy: { createdAt: "asc" },
-    include: {
-      eyeReadings: {
-        where: { readingDate: { gte: start, lte: end } },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-      prescriptions: {
-        where: { prescriptionDate: { gte: start, lte: end } },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        include: { items: true },
-      },
-      labBills: {
-        include: { lab: { select: { name: true } }, items: true },
-        orderBy: { createdAt: "desc" },
-      },
-    },
+  // Fetch all OPD patients with nested relations
+  const { data: patients, error } = await supabase
+    .from("Patient")
+    .select("*, eyeReadings:EyeReading(*), prescriptions:Prescription(*, items:InvoiceItem(*)), labBills:LabBill(*, lab:Lab(name), items:LabBillItem(*))")
+    .eq("patientType", "OPD")
+    .order("createdAt", { ascending: true })
+
+  if (error) {
+    console.error("getDoctorQueue error:", error)
+    return []
+  }
+
+  function isInDay(dateStr: string) {
+    const t = new Date(dateStr).getTime()
+    return t >= startMs && t <= endMs
+  }
+
+  // Filter to patients that have a prescription or appointment in the target date range
+  const filtered = (patients ?? []).filter(p => {
+    const hasPrescriptionToday = p.prescriptions?.some(
+      (rx: any) => isInDay(rx.prescriptionDate)
+    )
+    const hasAppointmentToday =
+      p.appointmentDate && isInDay(p.appointmentDate)
+    return hasPrescriptionToday || hasAppointmentToday
   })
 
-  // Compute status from actual data
-  return patients.map(p => {
-    const hasWorkup = p.eyeReadings.length > 0
-    const hasDoctorPrescription = p.prescriptions.some(
-      rx => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
+  // Filter nested relations to today's date and compute status
+  return filtered.map((p: any) => {
+    const todayEyeReadings = (p.eyeReadings ?? [])
+      .filter((er: any) => isInDay(er.readingDate))
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 1)
+
+    const todayPrescriptions = (p.prescriptions ?? [])
+      .filter((rx: any) => isInDay(rx.prescriptionDate))
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 1)
+
+    const hasWorkup = todayEyeReadings.length > 0
+    const hasDoctorPrescription = todayPrescriptions.some(
+      (rx: any) => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
     )
+
     return {
       ...p,
+      eyeReadings: todayEyeReadings,
+      prescriptions: todayPrescriptions,
       status: computePatientStatus(hasWorkup, hasDoctorPrescription, p.status),
     }
   })
 }
 
 export async function getPatientForConsultation(patientId: string) {
+  const supabase = await createClient()
   const { start, end } = getISTDayBounds()
+  const startMs = start.getTime()
+  const endMs = end.getTime()
 
-  const patient = await db.patient.findUnique({
-    where: { patientId },
-    include: {
-      eyeReadings: {
-        where: { readingDate: { gte: start, lte: end } },
-        orderBy: { createdAt: "desc" },
-      },
-      prescriptions: {
-        include: { items: true, payments: true, eyeReading: true },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  })
+  function isInDay(dateStr: string) {
+    const t = new Date(dateStr).getTime()
+    return t >= startMs && t <= endMs
+  }
 
-  if (!patient) return null
+  const { data: patient, error } = await supabase
+    .from("Patient")
+    .select("*, eyeReadings:EyeReading(*), prescriptions:Prescription(*, items:InvoiceItem(*), payments:Payment(*))")
+    .eq("patientId", patientId)
+    .single()
+
+  if (error || !patient) return null
+
+  // Filter eye readings to today
+  const todayEyeReadings = (patient.eyeReadings ?? [])
+    .filter((er: any) => isInDay(er.readingDate))
+    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   // Compute status from actual data
-  const hasWorkup = patient.eyeReadings.length > 0
-  const hasDoctorPrescription = patient.prescriptions.some(
-    rx => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
+  const hasWorkup = todayEyeReadings.length > 0
+  const hasDoctorPrescription = (patient.prescriptions ?? []).some(
+    (rx: any) => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
   )
   const computedStatus = computePatientStatus(hasWorkup, hasDoctorPrescription, patient.status)
 
+  // Sort prescriptions by createdAt desc
+  const sortedPrescriptions = (patient.prescriptions ?? []).sort(
+    (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
+
   // Split prescriptions into today vs past on the server (reliable date handling)
-  const todayPrescription = patient.prescriptions.find(
-    rx => rx.prescriptionDate >= start && rx.prescriptionDate <= end
+  const todayPrescription = sortedPrescriptions.find(
+    (rx: any) => isInDay(rx.prescriptionDate)
   ) ?? null
 
-  const pastPrescriptions = patient.prescriptions.filter(
-    rx => !todayPrescription || rx.id !== todayPrescription.id
+  const pastPrescriptions = sortedPrescriptions.filter(
+    (rx: any) => !todayPrescription || rx.id !== todayPrescription.id
   )
 
   return {
-    ...JSON.parse(JSON.stringify(patient)) as typeof patient,
+    ...patient,
+    eyeReadings: todayEyeReadings,
+    prescriptions: sortedPrescriptions,
     status: computedStatus,
-    todayPrescription: todayPrescription as typeof patient.prescriptions[0] | null,
-    pastPrescriptions: pastPrescriptions as typeof patient.prescriptions,
+    todayPrescription,
+    pastPrescriptions,
   }
 }
 
@@ -128,21 +155,28 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
 
   const pd = validated.data
   try {
-    const patient = await db.patient.findUnique({
-      where: { patientId: pd.patientId },
-    })
-    if (!patient) return { success: false, error: "Patient not found" }
+    const supabase = await createClient()
+
+    const { data: patient, error: patientError } = await supabase
+      .from("Patient")
+      .select("*")
+      .eq("patientId", pd.patientId)
+      .single()
+
+    if (patientError || !patient) return { success: false, error: "Patient not found" }
 
     // Find today's billing-only prescription to update with medical data
     const { start: todayStart, end: todayEnd } = getISTDayBounds()
 
-    const existing = await db.prescription.findFirst({
-      where: {
-        patientId: pd.patientId,
-        prescriptionDate: { gte: todayStart, lte: todayEnd },
-      },
-      orderBy: { createdAt: "desc" },
-    })
+    const { data: existing } = await supabase
+      .from("Prescription")
+      .select("*")
+      .eq("patientId", pd.patientId)
+      .gte("prescriptionDate", todayStart.toISOString())
+      .lte("prescriptionDate", todayEnd.toISOString())
+      .order("createdAt", { ascending: false })
+      .limit(1)
+      .single()
 
     const medicalData = {
       doctorId: user.role === "DOCTOR" ? user.id : null,
@@ -157,29 +191,43 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
       additionalNotes: pd.additionalNotes ?? null,
       medicines: JSON.stringify(pd.medicines),
       investigations: JSON.stringify(pd.investigations),
-      followUpDate: pd.followUpDate ? new Date(pd.followUpDate + "T00:00:00+05:30") : null,
+      followUpDate: pd.followUpDate ? new Date(pd.followUpDate + "T00:00:00+05:30").toISOString() : null,
       notes: pd.notes ?? null,
       status: "COMPLETED",
     }
 
     let prescription
+    const now = new Date().toISOString()
+
     if (existing) {
       // Update the billing prescription with medical data
-      prescription = await db.prescription.update({
-        where: { id: existing.id },
-        data: { ...medicalData, updatedBy: user.id },
-      })
+      const { data: updated, error: updateError } = await supabase
+        .from("Prescription")
+        .update({ ...medicalData, updatedBy: user.id, updatedAt: now })
+        .eq("id", existing.id)
+        .select()
+        .single()
+
+      if (updateError) throw updateError
+      prescription = updated
     } else {
       // No billing prescription today — create a new one with medical data only
-      prescription = await db.prescription.create({
-        data: {
+      const { data: created, error: createError } = await supabase
+        .from("Prescription")
+        .insert({
           patientId: pd.patientId,
           patientType: "OPD",
           ...medicalData,
-          prescriptionDate: new Date(),
+          prescriptionDate: now,
           createdBy: user.id,
-        },
-      })
+          createdAt: now,
+          updatedAt: now,
+        })
+        .select()
+        .single()
+
+      if (createError) throw createError
+      prescription = created
     }
 
     // Status is computed from data — no DB status update needed.
@@ -196,42 +244,70 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
 // ─── Configurations (Medicine Master, Templates, etc.) ────────────────────────
 
 export async function getMedicineMaster() {
-  return db.medicineMaster.findMany({
-    where: { isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  })
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("MedicineMaster")
+    .select("*")
+    .eq("isActive", true)
+    .order("sortOrder", { ascending: true })
+    .order("name", { ascending: true })
+  return data ?? []
 }
 
 export async function getInvestigationMaster() {
-  return db.investigationMaster.findMany({
-    where: { isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  })
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("InvestigationMaster")
+    .select("*")
+    .eq("isActive", true)
+    .order("sortOrder", { ascending: true })
+    .order("name", { ascending: true })
+  return data ?? []
 }
 
 export async function getPredefinedTemplates() {
-  return db.predefinedTemplate.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-  })
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("PredefinedTemplate")
+    .select("*")
+    .eq("isActive", true)
+    .order("name", { ascending: true })
+  return data ?? []
 }
 
 export async function getDropdownOptions(fieldName: string) {
-  const options = await db.dropdownOption.findMany({
-    where: { fieldName },
-    orderBy: { value: "asc" },
-  })
-  return options.map(o => o.value)
+  const supabase = await createClient()
+  const { data: options } = await supabase
+    .from("DropdownOption")
+    .select("*")
+    .eq("fieldName", fieldName)
+    .order("value", { ascending: true })
+  return (options ?? []).map((o: any) => o.value)
 }
 
 export async function addDropdownOption(fieldName: string, value: string) {
   const user = await requireAuth()
   try {
-    await db.dropdownOption.upsert({
-      where: { fieldName_value: { fieldName, value } },
-      create: { fieldName, value, createdBy: user.id },
-      update: {},
-    })
+    const supabase = await createClient()
+
+    // Check if already exists (upsert equivalent)
+    const { data: existing } = await supabase
+      .from("DropdownOption")
+      .select("id")
+      .eq("fieldName", fieldName)
+      .eq("value", value)
+      .limit(1)
+      .single()
+
+    if (!existing) {
+      const now = new Date().toISOString()
+      const { error } = await supabase
+        .from("DropdownOption")
+        .insert({ fieldName, value, createdBy: user.id, createdAt: now })
+
+      if (error) throw error
+    }
+
     return { success: true }
   } catch {
     return { success: false, error: "Failed to add option" }
@@ -247,9 +323,15 @@ export async function createMedicine(data: {
 }) {
   const user = await requireAuth()
   try {
-    const med = await db.medicineMaster.create({
-      data: { ...data, createdBy: user.id },
-    })
+    const supabase = await createClient()
+    const now = new Date().toISOString()
+    const { data: med, error } = await supabase
+      .from("MedicineMaster")
+      .insert({ ...data, createdBy: user.id, createdAt: now, updatedAt: now })
+      .select()
+      .single()
+
+    if (error) throw error
     revalidatePath("/doctor")
     return { success: true, data: med }
   } catch {
@@ -265,27 +347,44 @@ export async function updatePatientToWithDoctor(patientId: string) {
 }
 
 export async function getReceiptData(patientId: string) {
+  const supabase = await createClient()
   const { start, end } = getISTDayBounds()
+  const startMs = start.getTime()
+  const endMs = end.getTime()
 
-  const [patient, hospital] = await Promise.all([
-    db.patient.findUnique({
-      where: { patientId },
-      include: {
-        eyeReadings: {
-          where: { readingDate: { gte: start, lte: end } },
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-        prescriptions: {
-          where: { prescriptionDate: { gte: start, lte: end } },
-          include: { items: true, payments: true },
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-      },
-    }),
-    db.hospitalProfile.findFirst(),
+  function isInDay(dateStr: string) {
+    const t = new Date(dateStr).getTime()
+    return t >= startMs && t <= endMs
+  }
+
+  const [patientResult, hospitalResult] = await Promise.all([
+    supabase
+      .from("Patient")
+      .select("*, eyeReadings:EyeReading(*), prescriptions:Prescription(*, items:InvoiceItem(*), payments:Payment(*))")
+      .eq("patientId", patientId)
+      .single(),
+    supabase
+      .from("HospitalProfile")
+      .select("*")
+      .limit(1)
+      .single(),
   ])
+
+  const patient = patientResult.data
+  const hospital = hospitalResult.data
+
+  // Filter nested relations to today's date
+  if (patient) {
+    patient.eyeReadings = (patient.eyeReadings ?? [])
+      .filter((er: any) => isInDay(er.readingDate))
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 1)
+
+    patient.prescriptions = (patient.prescriptions ?? [])
+      .filter((rx: any) => isInDay(rx.prescriptionDate))
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 1)
+  }
 
   return {
     patient,
