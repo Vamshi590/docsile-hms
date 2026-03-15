@@ -38,11 +38,7 @@ export default async function DashboardPage() {
 
   return (
     <DashboardClient
-      userName={user.fullName.split(" ")[0]}
       greeting={greeting}
-      opdToday={opdResult.count ?? 0}
-      ipdToday={ipdResult.count ?? 0}
-      activeIP={activeIPResult.count ?? 0}
     />
   )
 }

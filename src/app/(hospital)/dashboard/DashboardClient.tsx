@@ -59,14 +59,11 @@ const modules = [
 ]
 
 interface DashboardClientProps {
-  userName: string
   greeting: string
-  opdToday: number
-  ipdToday: number
-  activeIP: number
+
 }
 
-export function DashboardClient({ userName, greeting, opdToday, ipdToday, activeIP }: DashboardClientProps) {
+export function DashboardClient({ greeting }: DashboardClientProps) {
   const [mounted, setMounted] = useState(false)
   const [quoteIndex, setQuoteIndex] = useState(0)
   const [quoteFading, setQuoteFading] = useState(false)
@@ -88,11 +85,6 @@ export function DashboardClient({ userName, greeting, opdToday, ipdToday, active
     return () => clearInterval(interval)
   }, [])
 
-  const stats = [
-    { label: "OPD Today", value: opdToday, icon: UserPlus, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
-    { label: "IPD Today", value: ipdToday, icon: BedSingle, color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-100" },
-    { label: "Active In-Patients", value: activeIP, icon: Activity, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
-  ]
 
   const quote = quotes[quoteIndex]
 
@@ -108,7 +100,7 @@ export function DashboardClient({ userName, greeting, opdToday, ipdToday, active
         <div className="flex items-start justify-between gap-8">
           <div>
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-              {greeting}, {userName}
+              {greeting}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
               Here&apos;s your hospital overview for today
