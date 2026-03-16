@@ -956,6 +956,46 @@ export async function deletePatient(patientId: string) {
   }
 }
 
+// ─── Receipt Data (for print modal) ──────────────────────────────────────────
+
+export async function getPatientReceiptData(patientId: string) {
+  const supabase = await createClient()
+
+  const [patientResult, hospitalResult] = await Promise.all([
+    supabase
+      .from("Patient")
+      .select("*, eyeReadings:EyeReading(*), prescriptions:Prescription(*, items:InvoiceItem(*), payments:Payment(*))")
+      .eq("patientId", patientId)
+      .single(),
+    supabase
+      .from("HospitalProfile")
+      .select("*")
+      .limit(1)
+      .single(),
+  ])
+
+  const patient = patientResult.data
+  const hospital = hospitalResult.data
+
+  if (patient) {
+    // Sort eye readings desc by createdAt, take latest
+    patient.eyeReadings = (patient.eyeReadings ?? [])
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 1)
+
+    // Sort prescriptions desc by createdAt
+    patient.prescriptions = (patient.prescriptions ?? [])
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  }
+
+  return {
+    patient,
+    hospital,
+    prescription: patient?.prescriptions?.[0] ?? null,
+    eyeReading: patient?.eyeReadings?.[0] ?? null,
+  }
+}
+
 // ─── Dropdown Options (doctor name, department, referred by) ──────────────────
 
 export async function getDropdownOptions(fieldName: string): Promise<string[]> {

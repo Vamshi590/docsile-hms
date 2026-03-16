@@ -234,7 +234,7 @@ export function PrintReceiptsModal({ open, onClose, patientId, patientName }: Pr
                       patient={patientInfo}
                       payment={{
                         mode: prescription.paymentMode || "Cash",
-                        totalAmount: prescription.total ?? 0,
+                        totalAmount: prescription.subtotal ?? prescription.total ?? 0,
                         discount: prescription.discount ?? 0,
                         amountReceived: prescription.amountPaid ?? 0,
                         amountDue: prescription.balanceDue ?? 0,

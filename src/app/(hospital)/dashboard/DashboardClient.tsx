@@ -19,9 +19,6 @@ import {
   ScrollText,
   DatabaseZap,
   BarChart3,
-  Activity,
-  UserPlus,
-  BedSingle,
   Quote,
   Heart,
 } from "lucide-react"

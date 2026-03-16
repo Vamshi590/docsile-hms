@@ -15,7 +15,7 @@ import SriHarshaEyeHospitalHeader from "./SriHarshaEyeHospital";
  * The key should match the hospital's `name` field in the DB (case-insensitive).
  */
 const headerRegistry: Record<string, ComponentType<HospitalHeaderProps>> = {
-  "docsile eye hospital": SriHarshaEyeHospitalHeader,
+  "sri harsha eye hospital": SriHarshaEyeHospitalHeader,
 };
 
 /**
