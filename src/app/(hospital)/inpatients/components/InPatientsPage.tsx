@@ -68,7 +68,6 @@ export default function InPatientsPage() {
           onBack={() => setSelectedId(null)}
           backLabel="In-Patients"
           currentLabel={selectedPatient.name}
-          subtitle={`· ${selectedPatient.ipNumber}`}
         />
         <InPatientDetailPage
           inpatient={selectedPatient}

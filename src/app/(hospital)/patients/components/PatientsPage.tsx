@@ -118,7 +118,6 @@ export function PatientsPage() {
             onBack={() => { setSelectedPatient(null); setSelectedInpatient(null) }}
             backLabel="Patients"
             currentLabel={selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName ?? ""}`.trim() : selectedInpatient?.name ?? ""}
-            subtitle={`· ${selectedPatient ? selectedPatient.patientId : selectedInpatient?.ipNumber}`}
           />
         ) : (
           <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
@@ -156,8 +155,8 @@ export function PatientsPage() {
           </div>
         )}
 
-        {/* Date nav + Search — only shown in list view */}
-        {!selectedPatient && !selectedInpatient && (
+        {/* Date nav + Search — only shown in OPD list view */}
+        {!selectedPatient && !selectedInpatient && tab === "OPD" && (
           <FilterBar>
             <div className="flex items-center gap-3">
               <DateNavigator
@@ -213,7 +212,7 @@ export function PatientsPage() {
                 onDelete={p => setDeleteTarget({ type: "OPD", id: p.patientId, name: `${p.firstName} ${p.lastName ?? ""}`.trim() })}
               />
             </TabsContent>
-            <TabsContent value="IPD" className="mt-0">
+            <TabsContent value="IPD" className="mt-4">
               <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
                 <Table>
                   <TableHeader>

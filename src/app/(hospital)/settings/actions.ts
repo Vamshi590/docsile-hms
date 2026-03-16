@@ -346,6 +346,112 @@ export async function deletePrescriptionTemplate(id: string) {
   }
 }
 
+// ─── Inpatient Templates ──────────────────────────────────────────────────────
+
+export async function getInpatientTemplates(includeInactive = false) {
+  const supabase = await createClient()
+  let query = supabase.from("InpatientTemplate").select("*").order("code", { ascending: true })
+  if (!includeInactive) query = query.eq("isActive", true)
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
+export async function createInpatientTemplate(data: {
+  code: string
+  name: string
+  operationName?: string
+  provisionDiagnosis?: string
+  medicines: string
+  followUpDays?: number
+  additionalNotes?: string
+}) {
+  const user = await requireAuth()
+  const supabase = await createClient()
+  try {
+    const code = data.code.trim().toUpperCase()
+    const { data: existing } = await supabase.from("InpatientTemplate").select("id").eq("code", code).single()
+    if (existing) return { success: false, error: "Template code already exists" }
+
+    const now = new Date().toISOString()
+    const { data: tmpl, error } = await supabase
+      .from("InpatientTemplate")
+      .insert({
+        code,
+        name: data.name.trim(),
+        operationName: data.operationName?.trim() || null,
+        provisionDiagnosis: data.provisionDiagnosis?.trim() || null,
+        medicines: data.medicines,
+        followUpDays: data.followUpDays ?? null,
+        additionalNotes: data.additionalNotes?.trim() || null,
+        isActive: true,
+        createdBy: user.id,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select()
+      .single()
+    if (error) throw error
+    revalidatePath("/settings")
+    return { success: true, data: tmpl }
+  } catch {
+    return { success: false, error: "Failed to create inpatient template" }
+  }
+}
+
+export async function updateInpatientTemplate(
+  id: string,
+  data: {
+    code?: string
+    name?: string
+    operationName?: string
+    provisionDiagnosis?: string
+    medicines?: string
+    followUpDays?: number | null
+    additionalNotes?: string
+    isActive?: boolean
+  }
+) {
+  await requireAuth()
+  const supabase = await createClient()
+  try {
+    const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+    if (data.code !== undefined) updateData.code = data.code.trim().toUpperCase()
+    if (data.name !== undefined) updateData.name = data.name.trim()
+    if (data.operationName !== undefined) updateData.operationName = data.operationName.trim() || null
+    if (data.provisionDiagnosis !== undefined) updateData.provisionDiagnosis = data.provisionDiagnosis.trim() || null
+    if (data.medicines !== undefined) updateData.medicines = data.medicines
+    if (data.followUpDays !== undefined) updateData.followUpDays = data.followUpDays
+    if (data.additionalNotes !== undefined) updateData.additionalNotes = data.additionalNotes.trim() || null
+    if (data.isActive !== undefined) updateData.isActive = data.isActive
+
+    const { data: tmpl, error } = await supabase
+      .from("InpatientTemplate")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) throw error
+    revalidatePath("/settings")
+    return { success: true, data: tmpl }
+  } catch {
+    return { success: false, error: "Failed to update inpatient template" }
+  }
+}
+
+export async function deleteInpatientTemplate(id: string) {
+  await requireAuth()
+  const supabase = await createClient()
+  try {
+    const { error } = await supabase.from("InpatientTemplate").delete().eq("id", id)
+    if (error) throw error
+    revalidatePath("/settings")
+    return { success: true }
+  } catch {
+    return { success: false, error: "Failed to delete inpatient template" }
+  }
+}
+
 // ─── Predefined Packages ─────────────────────────────────────────────────────
 
 export async function getPredefinedPackages(includeInactive = false) {

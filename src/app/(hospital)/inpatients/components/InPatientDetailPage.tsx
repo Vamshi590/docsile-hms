@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import {
-  ArrowLeft, ChevronRight, Loader2, Plus, X, Printer,
+  ArrowLeft, ChevronRight, Loader2, Plus, X, Printer, Search, ClipboardList,
   User, Stethoscope, CreditCard, Pill, FileText, Activity,
 } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { InPatientStatusBadge, IP_STATUS_CONFIG, IP_STATUS_TRANSITIONS } from "./InPatientStatusBadge"
 import { updateInPatientStatus, addInPatientPayment, dischargeInPatient, updateInPatientDetails, getHospitalProfileForReceipts } from "../actions"
 import { getMedicineMaster } from "@/app/(hospital)/doctor/actions"
+import { getInpatientTemplates } from "@/app/(hospital)/settings/actions"
 import { CashReceipt } from "@/components/receipts/CashReceipt"
 import { ReceiptLayout, ReceiptFooter } from "@/components/receipts/ReceiptLayout"
 import { ReceiptHeader } from "@/components/receipts/ReceiptHeader"
@@ -120,8 +121,16 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
   const [medicalValues, setMedicalValues] = useState<MedicalValues>({})
   const [followUpDate, setFollowUpDate] = useState("")
   const [followUpDays, setFollowUpDays] = useState("")
+  type MedicineMasterEntry = { name: string; defaultTiming: string | null; defaultDays: string | null; note: string | null }
+  const [medicineMasterFull, setMedicineMasterFull] = useState<MedicineMasterEntry[]>([])
   const [medicineOptions, setMedicineOptions] = useState<string[]>([])
   const [savingRx, setSavingRx] = useState(false)
+
+  // ── Inpatient template state ──
+  type InpatientTemplate = { id: string; code: string; name: string; operationName: string | null; provisionDiagnosis: string | null; medicines: string; followUpDays: number | null; additionalNotes: string | null }
+  const [ipTemplates, setIpTemplates] = useState<InpatientTemplate[]>([])
+  const [templateSearch, setTemplateSearch] = useState("")
+  const [showTemplateList, setShowTemplateList] = useState(false)
 
   // ── Discharge state (form variant) ──
   const [dischargeDate, setDischargeDate] = useState(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()))
@@ -171,7 +180,11 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
   // ── Load medicine master + init state ──
   useEffect(() => {
     if (variant === "form") {
-      getMedicineMaster().then(meds => setMedicineOptions(meds.map(m => m.name)))
+      getMedicineMaster().then(meds => {
+        setMedicineMasterFull(meds)
+        setMedicineOptions(meds.map(m => m.name))
+      })
+      getInpatientTemplates().then(data => setIpTemplates(data as InpatientTemplate[]))
     }
   }, [variant])
 
@@ -187,7 +200,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
       setMedicines([{ medicine: "", days: "", timing: "", note: "" }])
     }
     setMedicalValues(storedMedicalValues)
-    setFollowUpDate(inpatient.followUpDate ? formatDate(inpatient.followUpDate) : "")
+    setFollowUpDate(inpatient.followUpDate ? new Date(inpatient.followUpDate).toISOString().split("T")[0] : "")
 
     if (dischargeSummary && typeof dischargeSummary === "object" && dischargeSummary.diagnosis) {
       setDischargeDiagnosis(dischargeSummary.diagnosis ?? "")
@@ -242,10 +255,46 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
     setMedicines(prev => prev.filter((_, idx) => idx !== i))
   }
   function updateMedicine(i: number, field: string, value: string) {
-    setMedicines(prev => prev.map((m, idx) => idx === i ? { ...m, [field]: value } : m))
+    setMedicines(prev => prev.map((m, idx) => {
+      if (idx !== i) return m
+      if (field === "medicine") {
+        const master = medicineMasterFull.find(x => x.name === value)
+        return {
+          ...m,
+          medicine: value,
+          timing: m.timing || (master?.defaultTiming ?? ""),
+          days: m.days || (master?.defaultDays ?? ""),
+          note: m.note || (master?.note ?? ""),
+        }
+      }
+      return { ...m, [field]: value }
+    }))
   }
   function updateMedicalValue(key: keyof MedicalValues, value: string) {
     setMedicalValues(prev => ({ ...prev, [key]: value }))
+  }
+
+  const filteredTemplates = templateSearch.trim()
+    ? ipTemplates.filter(t =>
+        t.code.toLowerCase().includes(templateSearch.toLowerCase()) ||
+        t.name.toLowerCase().includes(templateSearch.toLowerCase())
+      )
+    : ipTemplates
+
+  function applyTemplate(t: InpatientTemplate) {
+    try {
+      const meds = JSON.parse(t.medicines)
+      if (meds.length > 0) setMedicines(meds.map((m: any) => ({ medicine: m.name ?? m.medicine ?? "", days: m.days ?? "", timing: m.timing ?? "", note: m.note ?? "" })))
+    } catch { /* ignore */ }
+    if (t.followUpDays) {
+      const d = new Date()
+      d.setDate(d.getDate() + t.followUpDays)
+      setFollowUpDate(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d))
+      setFollowUpDays(String(t.followUpDays))
+    }
+    setTemplateSearch("")
+    setShowTemplateList(false)
+    toast.success(`Template "${t.name}" applied`)
   }
 
   async function handleSavePrescription() {
@@ -816,6 +865,64 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
                 ))}
               </div>
             </div>
+
+            {/* ── Quick Fill from Template ── */}
+            {ipTemplates.length > 0 && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50">
+                <div className="px-4 py-3">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <ClipboardList className="h-4 w-4 text-blue-600" />
+                    <p className="text-sm font-semibold text-blue-700">Quick Fill from Template</p>
+                  </div>
+                  <p className="text-xs text-blue-600 mb-3">Search and select a predefined template to auto-fill medicines and follow-up.</p>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      value={templateSearch}
+                      onChange={e => { setTemplateSearch(e.target.value); setShowTemplateList(true) }}
+                      onFocus={() => setShowTemplateList(true)}
+                      onBlur={() => setTimeout(() => setShowTemplateList(false), 150)}
+                      placeholder="Search templates by code or name..."
+                      className="pl-9 bg-white"
+                    />
+                    {showTemplateList && filteredTemplates.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto">
+                        <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
+                          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">Templates</p>
+                          <p className="text-[11px] text-gray-400">{filteredTemplates.length} found</p>
+                        </div>
+                        {filteredTemplates.map((t) => {
+                          let medCount = 0
+                          try { medCount = JSON.parse(t.medicines).length } catch { /* ignore */ }
+                          return (
+                            <button
+                              key={t.id}
+                              onMouseDown={() => applyTemplate(t)}
+                              className="group w-full flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50/60 text-left transition-colors duration-100 border-b border-gray-100 last:border-0"
+                            >
+                              <span className="h-8 w-8 flex items-center justify-center rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-600 text-[11px] font-bold shrink-0 leading-none">
+                                {t.code}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[0.82rem] font-semibold text-gray-800 leading-snug truncate group-hover:text-blue-700 transition-colors">
+                                  {t.name}
+                                </p>
+                                {t.operationName && (
+                                  <p className="text-[11px] text-gray-400 leading-snug truncate mt-0.5">{t.operationName}</p>
+                                )}
+                              </div>
+                              <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-500 group-hover:border-blue-200 group-hover:text-blue-600 transition-colors">
+                                {medCount} med{medCount !== 1 ? "s" : ""}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* ── Section 2: Medications ── */}
             <div className="rounded-xl border border-border bg-gray-50/50">

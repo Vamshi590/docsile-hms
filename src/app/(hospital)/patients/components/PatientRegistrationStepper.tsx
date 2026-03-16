@@ -546,7 +546,7 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
                           <Input
                             className="bg-white focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 focus:outline-none placeholder:text-gray-300"
                             value={patientData.fullName}
-                            onChange={e => setPatientData(prev => ({ ...prev, fullName: e.target.value }))}
+                            onChange={e => setPatientData(prev => ({ ...prev, fullName: e.target.value.toUpperCase() }))}
                             placeholder="Full name"
                           />
                         </div>
@@ -586,19 +586,26 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                           <Label>Gender <span className="text-destructive">*</span></Label>
-                          <Select
-                            value={patientData.gender}
-                            onValueChange={v => setPatientData(prev => ({ ...prev, gender: v }))}
-                          >
-                            <SelectTrigger className="bg-white focus:ring-1 focus:ring-gray-200 focus:ring-offset-0 focus:outline-none">
-                              <SelectValue placeholder="Select Gender" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="MALE">Male</SelectItem>
-                              <SelectItem value="FEMALE">Female</SelectItem>
-                              <SelectItem value="OTHER">Other</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="flex gap-2">
+                            {[
+                              { value: "MALE", label: "Male" },
+                              { value: "FEMALE", label: "Female" },
+                              { value: "OTHER", label: "Other" },
+                            ].map(opt => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setPatientData(prev => ({ ...prev, gender: opt.value }))}
+                                className={`flex-1 h-9 rounded-md border text-sm font-medium transition-all ${
+                                  patientData.gender === opt.value
+                                    ? "bg-primary text-white border-primary shadow-sm"
+                                    : "bg-white text-muted-foreground border-gray-200 hover:border-gray-300 hover:text-foreground"
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                         <div className="space-y-1.5">
                           <Label>Phone <span className="text-destructive">*</span></Label>

@@ -95,7 +95,6 @@ export default function InsurancePage() {
             onBack={() => setSelectedClaim(null)}
             backLabel="Insurance Claims"
             currentLabel={selectedClaim.patientName}
-            subtitle={`· ${selectedClaim.claimNumber}`}
           />
         )
       ) : (

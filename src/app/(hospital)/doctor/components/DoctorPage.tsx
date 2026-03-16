@@ -165,7 +165,6 @@ export function DoctorPage() {
           onBack={closeDetail}
           backLabel="Doctor Console"
           currentLabel={`${selectedRow.firstName} ${selectedRow.lastName ?? ""}`.trim()}
-          subtitle={`· ${selectedRow.patientId}`}
         />
       ) : (
         <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
