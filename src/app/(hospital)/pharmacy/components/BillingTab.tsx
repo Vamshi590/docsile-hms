@@ -537,6 +537,13 @@ export function BillingTab() {
                   onChange={(e) => setPaymentRef(e.target.value)}
                 />
               </div>
+
+              {billAmount > 0 && paidAmount < billAmount && (
+                <div className="flex justify-between items-center pt-2 border-t border-red-200 bg-red-50 -mx-4 px-4 pb-2 rounded-b-lg">
+                  <span className="text-sm font-semibold text-red-600">Balance Due</span>
+                  <span className="text-lg font-bold tabular-nums text-red-600">{formatCurrency(billAmount - paidAmount)}</span>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 pt-3 mt-3 border-t">
@@ -579,12 +586,13 @@ export function BillingTab() {
                   <th className="text-right p-2 text-xs font-medium text-muted-foreground">Items</th>
                   <th className="text-right p-2 text-xs font-medium text-muted-foreground">Amount</th>
                   <th className="text-right p-2 text-xs font-medium text-muted-foreground">Paid</th>
+                  <th className="text-right p-2 text-xs font-medium text-muted-foreground">Due</th>
                   <th className="text-center p-2 text-xs font-medium text-muted-foreground">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {bills.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">No bills found</td></tr>
+                  <tr><td colSpan={8} className="text-center py-8 text-muted-foreground text-sm">No bills found</td></tr>
                 ) : (
                   bills.map((bill) => (
                     <tr key={bill.id} className="border-b hover:bg-muted/20">
@@ -596,10 +604,15 @@ export function BillingTab() {
                       </td>
                       <td className="p-2 text-right">{bill.items.length}</td>
                       <td className="p-2 text-right font-medium">{formatCurrency(bill.billAmount)}</td>
-                      <td className="p-2 text-right">{formatCurrency(bill.paidAmount)}</td>
+                      <td className="p-2 text-right text-green-600">{formatCurrency(bill.paidAmount)}</td>
+                      <td className="p-2 text-right">
+                        <span className={`font-medium ${bill.balanceDue > 0 ? "text-red-600" : "text-green-600"}`}>
+                          {bill.balanceDue > 0 ? formatCurrency(bill.balanceDue) : "Nil"}
+                        </span>
+                      </td>
                       <td className="p-2 text-center">
-                        <Badge variant={bill.status === "COMPLETED" ? "default" : "destructive"} className="text-[10px]">
-                          {bill.status}
+                        <Badge variant={bill.balanceDue > 0 ? "destructive" : "default"} className="text-[10px]">
+                          {bill.balanceDue > 0 ? "DUE" : bill.status === "COMPLETED" ? "PAID" : bill.status}
                         </Badge>
                       </td>
                     </tr>

@@ -409,7 +409,7 @@ export async function getPatientPrescription(patientId: string) {
   const { data: prescriptions } = await supabase
     .from("Prescription")
     .select("id, prescriptionNumber, medicines, doctorName, prescriptionDate")
-    .eq("patientId", patient.id)
+    .eq("patientId", patient.patientId)
     .in("status", ["COMPLETED", "DRAFT"])
     .neq("medicines", "[]")
     .order("prescriptionDate", { ascending: false })
@@ -516,6 +516,7 @@ export async function createPharmacyBill(data: {
         billAmount,
         paidAmount: data.paidAmount,
         balanceDue,
+        status: balanceDue > 0 ? "DUE" : "COMPLETED",
         paymentMode: data.paymentMode,
         paymentRef: data.paymentRef || null,
         createdBy: user.id,

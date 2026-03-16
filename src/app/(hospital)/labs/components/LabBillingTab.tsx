@@ -127,10 +127,10 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
     setHistoryLoaded(true)
   }, [dateFrom, dateTo, filterLabId, filterStatus, filterPatient])
 
-  // Only load history when the panel is first opened or filters change
+  // Load today's bills on mount, then reload when filters change or panel is opened
   useEffect(() => {
-    if (historyOpen) loadHistory()
-  }, [historyOpen, loadHistory])
+    loadHistory()
+  }, [loadHistory])
 
   // ── Billing handlers
   async function handleSearch() {

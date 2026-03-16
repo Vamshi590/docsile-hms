@@ -8,7 +8,7 @@ import { requireAuth } from "@/lib/auth"
 
 export interface DueRecord {
   id: string
-  type: "OPD" | "IPD" | "LAB"
+  type: "OPD" | "IPD" | "LAB" | "PHARMACY"
   patientId: string
   patientName: string
   uhid: string
@@ -20,6 +20,7 @@ export interface DueRecord {
   date: string
   prescriptionNumber?: string
   labBillNumber?: string
+  pharmacyBillNumber?: string
 }
 
 export interface FollowUpRecord {
@@ -45,6 +46,8 @@ export interface DuesSummary {
   ipdTotal: number
   labCount: number
   labTotal: number
+  pharmacyCount: number
+  pharmacyTotal: number
 }
 
 export interface FollowUpsSummary {
@@ -58,7 +61,7 @@ export interface FollowUpsSummary {
 
 export async function getDues(filters: {
   search?: string
-  type?: "OPD" | "IPD" | "LAB" | "ALL"
+  type?: "OPD" | "IPD" | "LAB" | "PHARMACY" | "ALL"
   dateFrom?: string
   dateTo?: string
   sortBy?: "amount_desc" | "amount_asc" | "date_desc" | "date_asc"
@@ -187,6 +190,44 @@ export async function getDues(filters: {
     }
   }
 
+  // ── PHARMACY Dues: PharmacyBills with balanceDue > 0 ──
+  if (type === "ALL" || type === "PHARMACY") {
+    let query = supabase
+      .from("PharmacyBill")
+      .select("*, items:PharmacyBillItem(*)")
+      .gt("balanceDue", 0)
+      .order("createdAt", { ascending: false })
+
+    if (dateFrom) query = query.gte("createdAt", dateFrom + "T00:00:00")
+    if (dateTo) query = query.lte("createdAt", dateTo + "T23:59:59")
+
+    if (search) {
+      query = query.or(
+        `billNumber.ilike.%${search}%,patientName.ilike.%${search}%,patientPhone.ilike.%${search}%,patientId.ilike.%${search}%`
+      )
+    }
+
+    const { data: pharmacyBills } = await query
+
+    for (const pb of pharmacyBills ?? []) {
+      const items = (pb.items ?? []) as { medicineName: string }[]
+      dues.push({
+        id: pb.id,
+        type: "PHARMACY",
+        patientId: pb.patientId ?? "—",
+        patientName: pb.patientName,
+        uhid: pb.patientId ?? "—",
+        phone: pb.patientPhone ?? "—",
+        services: items.map((i) => i.medicineName).join(", ") || "Medicines",
+        totalAmount: pb.billAmount,
+        amountPaid: pb.paidAmount,
+        balanceDue: pb.balanceDue,
+        date: new Date(pb.createdAt).toISOString(),
+        pharmacyBillNumber: pb.billNumber,
+      })
+    }
+  }
+
   // ── Sort ──
   dues.sort((a, b) => {
     switch (sortBy) {
@@ -202,6 +243,7 @@ export async function getDues(filters: {
   const opdDues = dues.filter((d) => d.type === "OPD")
   const ipdDues = dues.filter((d) => d.type === "IPD")
   const labDues = dues.filter((d) => d.type === "LAB")
+  const pharmacyDues = dues.filter((d) => d.type === "PHARMACY")
 
   const summary: DuesSummary = {
     totalOutstanding: dues.reduce((sum, d) => sum + d.balanceDue, 0),
@@ -211,6 +253,8 @@ export async function getDues(filters: {
     ipdTotal: ipdDues.reduce((sum, d) => sum + d.balanceDue, 0),
     labCount: labDues.length,
     labTotal: labDues.reduce((sum, d) => sum + d.balanceDue, 0),
+    pharmacyCount: pharmacyDues.length,
+    pharmacyTotal: pharmacyDues.reduce((sum, d) => sum + d.balanceDue, 0),
   }
 
   return { dues, summary }
@@ -358,7 +402,7 @@ export async function getFollowUps(filters: {
 
 // ─── Mark Due as Paid ────────────────────────────────────────────────────────
 
-export async function markDueAsPaid(id: string, type: "OPD" | "IPD" | "LAB") {
+export async function markDueAsPaid(id: string, type: "OPD" | "IPD" | "LAB" | "PHARMACY") {
   const user = await requireAuth()
   const supabase = await createClient()
 
@@ -415,6 +459,23 @@ export async function markDueAsPaid(id: string, type: "OPD" | "IPD" | "LAB") {
           paymentMode: "CASH",
           receivedBy: user.id,
         })
+    } else if (type === "PHARMACY") {
+      const { data: pharmacyBill } = await supabase
+        .from("PharmacyBill")
+        .select("*")
+        .eq("id", id)
+        .single()
+      if (!pharmacyBill) return { success: false as const, error: "Pharmacy bill not found" }
+
+      await supabase
+        .from("PharmacyBill")
+        .update({
+          paidAmount: pharmacyBill.billAmount,
+          balanceDue: 0,
+          status: "COMPLETED",
+          updatedAt: new Date().toISOString(),
+        })
+        .eq("id", id)
     } else {
       const { data: inpatient } = await supabase
         .from("InPatient")

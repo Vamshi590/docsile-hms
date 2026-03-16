@@ -26,11 +26,11 @@ import { formatDateLong, formatCurrency } from "@/lib/utils"
 export function DuesTab() {
   const [dues, setDues] = useState<DueRecord[]>([])
   const [summary, setSummary] = useState<DuesSummary>({
-    totalOutstanding: 0, opdCount: 0, opdTotal: 0, ipdCount: 0, ipdTotal: 0, labCount: 0, labTotal: 0,
+    totalOutstanding: 0, opdCount: 0, opdTotal: 0, ipdCount: 0, ipdTotal: 0, labCount: 0, labTotal: 0, pharmacyCount: 0, pharmacyTotal: 0,
   })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [typeFilter, setTypeFilter] = useState<"ALL" | "OPD" | "IPD" | "LAB">("ALL")
+  const [typeFilter, setTypeFilter] = useState<"ALL" | "OPD" | "IPD" | "LAB" | "PHARMACY">("ALL")
   const [sortBy, setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc">("date_desc")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
@@ -88,8 +88,8 @@ export function DuesTab() {
             className="w-56"
           />
           <div className="filter-divider" />
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as "ALL" | "OPD" | "IPD" | "LAB")}>
-            <SelectTrigger className="w-28 text-sm bg-white h-8 border-border/60">
+          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as "ALL" | "OPD" | "IPD" | "LAB" | "PHARMACY")}>
+            <SelectTrigger className="w-32 text-sm bg-white h-8 border-border/60">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -97,6 +97,7 @@ export function DuesTab() {
               <SelectItem value="OPD">OPD</SelectItem>
               <SelectItem value="IPD">IPD</SelectItem>
               <SelectItem value="LAB">Lab</SelectItem>
+              <SelectItem value="PHARMACY">Pharmacy</SelectItem>
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
@@ -129,7 +130,7 @@ export function DuesTab() {
       </FilterBar>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-5 gap-3 mb-5">
         <div className="bg-white rounded-xl border border-border px-4 py-3">
           <p className="text-xs font-medium text-muted-foreground mb-1">Total Outstanding</p>
           <p className="text-xl font-bold text-red-600">{formatCurrency(summary.totalOutstanding)}</p>
@@ -148,6 +149,11 @@ export function DuesTab() {
           <p className="text-xs font-medium text-muted-foreground mb-1">Lab Dues</p>
           <p className="text-lg font-bold text-foreground">{formatCurrency(summary.labTotal)}</p>
           <p className="text-xs text-muted-foreground">{summary.labCount} bill{summary.labCount !== 1 ? "s" : ""}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-border px-4 py-3">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Pharmacy Dues</p>
+          <p className="text-lg font-bold text-foreground">{formatCurrency(summary.pharmacyTotal)}</p>
+          <p className="text-xs text-muted-foreground">{summary.pharmacyCount} bill{summary.pharmacyCount !== 1 ? "s" : ""}</p>
         </div>
       </div>
 
@@ -193,7 +199,7 @@ export function DuesTab() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={due.type === "LAB" ? "info" : due.type === "OPD" ? "secondary" : "outline"} className="text-xs">
+                    <Badge variant={due.type === "LAB" ? "info" : due.type === "OPD" ? "secondary" : due.type === "PHARMACY" ? "warning" : "outline"} className="text-xs">
                       {due.type}
                     </Badge>
                   </TableCell>
@@ -206,6 +212,9 @@ export function DuesTab() {
                     )}
                     {due.labBillNumber && (
                       <div className="text-[10px] font-mono text-muted-foreground/70">{due.labBillNumber}</div>
+                    )}
+                    {due.pharmacyBillNumber && (
+                      <div className="text-[10px] font-mono text-muted-foreground/70">{due.pharmacyBillNumber}</div>
                     )}
                   </TableCell>
                   <TableCell className="text-right text-sm">{formatCurrency(due.totalAmount)}</TableCell>
