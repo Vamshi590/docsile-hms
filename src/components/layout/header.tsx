@@ -60,7 +60,7 @@ export function BreadcrumbHeader({ onBack, backLabel, currentLabel, subtitle, ch
           </svg>
           <span className="text-lg font-semibold">{backLabel}</span>
         </button>
-        <span className="text-muted-foreground/40 text-lg select-none">/</span>
+        <span className="text-muted-foreground/40 text-lg select-none">&gt;</span>
         <div className="min-w-0">
           <span className="text-lg font-semibold text-foreground truncate block">{currentLabel}</span>
         </div>

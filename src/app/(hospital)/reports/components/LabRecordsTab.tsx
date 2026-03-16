@@ -6,13 +6,27 @@ import {
   ChevronDown,
   ChevronUp,
   CreditCard,
+  Printer,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDateLong, formatCurrency } from "@/lib/utils"
 import { getLabRecords } from "../actions"
+import { ReportPrintModal } from "./ReportPrintModal"
 
 type LabBill = Awaited<ReturnType<typeof getLabRecords>>[0]
+
+type PatientSummary = {
+  id: string
+  patientId: string
+  fullName: string
+  phone?: string | null
+  age?: number | null
+  gender?: string | null
+  dateOfBirth?: string | null
+  address?: string | null
+}
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   PAID: "default",
@@ -21,10 +35,12 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   CANCELLED: "destructive",
 }
 
-export function LabRecordsTab({ patientId }: { patientId: string }) {
+export function LabRecordsTab({ patientId, patient }: { patientId: string; patient: PatientSummary }) {
   const [bills, setBills] = useState<LabBill[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [printOpen, setPrintOpen] = useState(false)
+  const [printBill, setPrintBill] = useState<LabBill | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -122,6 +138,18 @@ export function LabRecordsTab({ patientId }: { patientId: string }) {
                   <Badge variant={STATUS_VARIANT[bill.status] ?? "secondary"} className="text-xs">
                     {bill.status}
                   </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setPrintBill(bill)
+                      setPrintOpen(true)
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                  </Button>
                   {expanded ? (
                     <ChevronUp className="h-4 w-4 text-muted-foreground" />
                   ) : (
@@ -184,6 +212,27 @@ export function LabRecordsTab({ patientId }: { patientId: string }) {
           </div>
         )
       })}
+
+      {printBill && (
+        <ReportPrintModal
+          open={printOpen}
+          onClose={() => { setPrintOpen(false); setPrintBill(null) }}
+          patient={patient}
+          mode="lab"
+          labBill={{
+            billNumber: printBill.billNumber,
+            labName: printBill.lab.name,
+            total: printBill.total,
+            amountPaid: printBill.amountPaid,
+            balanceDue: printBill.balanceDue,
+            discount: printBill.discount,
+            subtotal: printBill.subtotal,
+            paymentMode: printBill.paymentMode,
+            items: printBill.items.map((item: any) => ({ name: item.name, amount: item.amount })),
+            createdAt: printBill.createdAt,
+          }}
+        />
+      )}
     </div>
   )
 }

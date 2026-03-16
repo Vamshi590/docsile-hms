@@ -14,13 +14,27 @@ import {
   Heart,
   CalendarCheck,
   ClipboardList,
+  Printer,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDateLong, formatCurrency } from "@/lib/utils"
 import { getInpatientRecords } from "../actions"
+import { ReportPrintModal } from "./ReportPrintModal"
 
 type InpatientRecord = Awaited<ReturnType<typeof getInpatientRecords>>
+
+type PatientSummary = {
+  id: string
+  patientId: string
+  fullName: string
+  phone?: string | null
+  age?: number | null
+  gender?: string | null
+  dateOfBirth?: string | null
+  address?: string | null
+}
 
 const STATUS_COLORS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   ADMITTED: "default",
@@ -28,7 +42,6 @@ const STATUS_COLORS: Record<string, "default" | "secondary" | "destructive" | "o
   CANCELLED: "destructive",
 }
 
-// Flat array: each item is a single medicine row
 type IPPrescription = {
   medicine: string
   days: string
@@ -36,7 +49,6 @@ type IPPrescription = {
   note?: string
 }
 
-// Discharge notes is a JSON object, not a plain string
 type DischargeSummary = {
   diagnosis?: string
   conditionAtDischarge?: string
@@ -45,12 +57,13 @@ type DischargeSummary = {
   notes?: string
 }
 
-export function InpatientRecordsTab({ patientInternalId }: { patientInternalId: string }) {
+export function InpatientRecordsTab({ patientInternalId, patient }: { patientInternalId: string; patient: PatientSummary }) {
   const [record, setRecord] = useState<InpatientRecord>(null)
   const [loading, setLoading] = useState(true)
   const [showPrescriptions, setShowPrescriptions] = useState(false)
   const [showDischarge, setShowDischarge] = useState(false)
   const [showInsurance, setShowInsurance] = useState(false)
+  const [printOpen, setPrintOpen] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -152,6 +165,15 @@ export function InpatientRecordsTab({ patientInternalId }: { patientInternalId: 
                 )}
               </div>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => setPrintOpen(true)}
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Print
+            </Button>
           </div>
         </div>
 
@@ -430,6 +452,14 @@ export function InpatientRecordsTab({ patientInternalId }: { patientInternalId: 
           )}
         </div>
       )}
+
+      <ReportPrintModal
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        patient={patient}
+        mode="inpatient"
+        inpatientRecord={record}
+      />
     </div>
   )
 }

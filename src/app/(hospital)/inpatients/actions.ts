@@ -612,3 +612,12 @@ export async function updateInPatient(id: string, data: z.infer<typeof InPatient
     return { success: false as const, error: "Failed to update inpatient record" }
   }
 }
+
+// ─── Get Hospital Profile (for receipts) ─────────────────────────────────────
+
+export async function getHospitalProfileForReceipts() {
+  await requireAuth()
+  const supabase = await createClient()
+  const { data } = await supabase.from("HospitalProfile").select("*").limit(1).single()
+  return data
+}

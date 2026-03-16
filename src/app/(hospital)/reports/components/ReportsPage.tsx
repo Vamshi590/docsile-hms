@@ -134,13 +134,13 @@ export default function ReportsPage() {
               <VisitHistoryTab patientId={patient.patientId} />
             )}
             {activeTab === "prescriptions" && (
-              <PrescriptionsTab patientId={patient.patientId} />
+              <PrescriptionsTab patientId={patient.patientId} patient={patient} />
             )}
             {activeTab === "inpatient" && (
-              <InpatientRecordsTab patientInternalId={patient.id} />
+              <InpatientRecordsTab patientInternalId={patient.id} patient={patient} />
             )}
             {activeTab === "labs" && (
-              <LabRecordsTab patientId={patient.patientId} />
+              <LabRecordsTab patientId={patient.patientId} patient={patient} />
             )}
             {activeTab === "billing" && (
               <BillingTab patientId={patient.patientId} patientInternalId={patient.id} />

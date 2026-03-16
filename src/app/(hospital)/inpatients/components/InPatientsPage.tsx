@@ -8,7 +8,7 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/table"
 import { RefreshCw, Plus } from "lucide-react"
-import { PageHeader, FilterBar, SearchInput, StatBadge } from "@/components/layout/header"
+import { PageHeader, FilterBar, SearchInput, StatBadge, BreadcrumbHeader } from "@/components/layout/header"
 import { InPatientStatusBadge } from "./InPatientStatusBadge"
 import { InPatientDetailPage } from "./InPatientDetailPage"
 import InPatientAdmissionForm from "./InPatientAdmissionForm"
@@ -64,6 +64,12 @@ export default function InPatientsPage() {
   if (selectedPatient) {
     return (
       <div className="space-y-5">
+        <BreadcrumbHeader
+          onBack={() => setSelectedId(null)}
+          backLabel="In-Patients"
+          currentLabel={selectedPatient.name}
+          subtitle={`· ${selectedPatient.ipNumber}`}
+        />
         <InPatientDetailPage
           inpatient={selectedPatient}
           onBack={() => setSelectedId(null)}

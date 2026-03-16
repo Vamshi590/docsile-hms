@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import {
   ArrowLeft, ChevronRight, Loader2, Plus, X, Printer,
@@ -17,9 +17,14 @@ import {
 } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { EditableCombobox } from "@/components/ui/combobox"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { InPatientStatusBadge, IP_STATUS_CONFIG, IP_STATUS_TRANSITIONS } from "./InPatientStatusBadge"
-import { updateInPatientStatus, addInPatientPayment, dischargeInPatient, updateInPatientDetails } from "../actions"
+import { updateInPatientStatus, addInPatientPayment, dischargeInPatient, updateInPatientDetails, getHospitalProfileForReceipts } from "../actions"
 import { getMedicineMaster } from "@/app/(hospital)/doctor/actions"
+import { CashReceipt } from "@/components/receipts/CashReceipt"
+import { ReceiptLayout, ReceiptFooter } from "@/components/receipts/ReceiptLayout"
+import { ReceiptHeader } from "@/components/receipts/ReceiptHeader"
+import { PatientInfoSection } from "@/components/receipts/PatientInfoSection"
 import { formatDate, formatCurrency, formatDateTime, getInitials } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { InPatientStatus, PaymentRecord, PackageInclusion, MedicalValues } from "@/lib/types"
@@ -114,6 +119,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
   const [medicines, setMedicines] = useState<Array<{ medicine: string; days: string; timing: string; note: string }>>([])
   const [medicalValues, setMedicalValues] = useState<MedicalValues>({})
   const [followUpDate, setFollowUpDate] = useState("")
+  const [followUpDays, setFollowUpDays] = useState("")
   const [medicineOptions, setMedicineOptions] = useState<string[]>([])
   const [savingRx, setSavingRx] = useState(false)
 
@@ -126,10 +132,12 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
   const [followUpInstructions, setFollowUpInstructions] = useState("")
   const [savingDischarge, setSavingDischarge] = useState(false)
 
-  // ── Print refs ──
-  const rxPrintRef = useRef<HTMLDivElement>(null)
-  const dischargePrintRef = useRef<HTMLDivElement>(null)
-  const billPrintRef = useRef<HTMLDivElement>(null)
+  // ── Print state ──
+  const printRef = useRef<HTMLDivElement>(null)
+  const [printOpen, setPrintOpen] = useState(false)
+  const [printTab, setPrintTab] = useState<"bill" | "discharge">("bill")
+  const [hospitalInfo, setHospitalInfo] = useState<any>(null)
+  const [printLoading, setPrintLoading] = useState(false)
 
   // ── Parse stored JSON ──
   const doctors: string[] = (() => {
@@ -176,7 +184,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
         note: rx.note ?? "",
       })))
     } else {
-      setMedicines([{ medicine: "", days: "7", timing: "1-1-1", note: "" }])
+      setMedicines([{ medicine: "", days: "", timing: "", note: "" }])
     }
     setMedicalValues(storedMedicalValues)
     setFollowUpDate(inpatient.followUpDate ? formatDate(inpatient.followUpDate) : "")
@@ -228,7 +236,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
   }
 
   function addMedicine() {
-    setMedicines(prev => [...prev, { medicine: "", days: "7", timing: "1-1-1", note: "" }])
+    setMedicines(prev => [...prev, { medicine: "", days: "", timing: "", note: "" }])
   }
   function removeMedicine(i: number) {
     setMedicines(prev => prev.filter((_, idx) => idx !== i))
@@ -284,30 +292,53 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
     finally { setSavingDischarge(false) }
   }
 
-  function handlePrint(ref: React.RefObject<HTMLDivElement | null>) {
-    if (!ref.current) return
-    const printWindow = window.open("", "_blank")
+  async function openPrintModal(tab: "bill" | "discharge") {
+    setPrintTab(tab)
+    setPrintOpen(true)
+    if (!hospitalInfo) {
+      setPrintLoading(true)
+      const data = await getHospitalProfileForReceipts()
+      setHospitalInfo(data)
+      setPrintLoading(false)
+    }
+  }
+
+  function handlePrint() {
+    if (!printRef.current) return
+    const content = printRef.current.innerHTML
+    const printWindow = window.open("", "_blank", "width=800,height=1000")
     if (!printWindow) return
     printWindow.document.write(`
-      <html><head><title>Print</title>
-      <style>
-        body { font-family: system-ui, -apple-system, sans-serif; padding: 24px; color: #1a1a1a; font-size: 13px; }
-        h1 { font-size: 18px; margin-bottom: 4px; }
-        h2 { font-size: 15px; margin: 16px 0 8px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
-        table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-        th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; font-size: 12px; }
-        th { background: #f5f5f5; font-weight: 600; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; }
-        .grid-item label { font-size: 11px; color: #666; display: block; }
-        .grid-item span { font-weight: 500; }
-        .meta { color: #666; font-size: 12px; }
-        @media print { body { padding: 0; } }
-      </style></head><body>
-      ${ref.current.innerHTML}
-      </body></html>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Print - ${inpatient.name}</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+          @media print {
+            body { margin: 0; padding: 0; }
+            @page { size: A4 portrait; margin: 0; }
+            .receipt-page {
+              width: 210mm;
+              min-height: 297mm;
+              padding: 8mm;
+              page-break-after: always;
+            }
+            .receipt-page:last-child { page-break-after: auto; }
+            .no-break { page-break-inside: avoid; }
+          }
+        </style>
+      </head>
+      <body>
+        ${content}
+      </body>
+      </html>
     `)
     printWindow.document.close()
-    printWindow.print()
+    setTimeout(() => {
+      printWindow.print()
+      printWindow.close()
+    }, 1000)
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -534,7 +565,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
             {/* ════ Billing Tab ════ */}
             <TabsContent value="billing" className="p-6 space-y-5">
               <div className="flex justify-end">
-                <Button size="sm" variant="outline" onClick={() => handlePrint(billPrintRef)}>
+                <Button size="sm" variant="outline" onClick={() => openPrintModal("bill")}>
                   <Printer className="h-3.5 w-3.5 mr-1.5" /> Print Bill
                 </Button>
               </div>
@@ -616,54 +647,6 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
                 </div>
               )}
 
-              {/* Hidden bill print content */}
-              <div className="hidden">
-                <div ref={billPrintRef}>
-                  <h1>Bill Summary</h1>
-                  <p className="meta">{inpatient.name} | {inpatient.ipNumber} | {inpatient.age}y / {inpatient.gender.charAt(0)} | Phone: {inpatient.phone}</p>
-                  <p className="meta">Doctor(s): {doctors.join(", ") || "—"} | Department: {inpatient.department ?? "—"}</p>
-                  <p className="meta">Admission: {formatDate(inpatient.admissionDate)}{inpatient.dischargeDate ? ` | Discharge: ${formatDate(inpatient.dischargeDate)}` : ""}</p>
-
-                  {packageInclusions.length > 0 && (
-                    <>
-                      <h2>Package Inclusions</h2>
-                      <table>
-                        <thead><tr><th>Item</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
-                        <tbody>
-                          {packageInclusions.map((item, i) => (
-                            <tr key={i}><td>{item.name}</td><td style={{ textAlign: "right" }}>{formatCurrency(item.amount)}</td></tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </>
-                  )}
-
-                  <div className="grid" style={{ marginTop: "16px" }}>
-                    <div className="grid-item"><label>Package Amount</label><span>{formatCurrency(inpatient.packageAmount)}</span></div>
-                    <div className="grid-item"><label>Discount</label><span>- {formatCurrency(inpatient.discount)}</span></div>
-                    <div className="grid-item"><label>Net Amount</label><span>{formatCurrency(inpatient.netAmount)}</span></div>
-                  </div>
-
-                  {paymentRecords.length > 0 && (
-                    <>
-                      <h2>Payment History</h2>
-                      <table>
-                        <thead><tr><th>Date</th><th>Type</th><th>Mode</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
-                        <tbody>
-                          {paymentRecords.map((p, i) => (
-                            <tr key={i}><td>{formatDate(p.date)}</td><td>{p.amountType}</td><td>{p.paymentMode}</td><td style={{ textAlign: "right" }}>{formatCurrency(p.amount)}</td></tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </>
-                  )}
-
-                  <div className="grid" style={{ marginTop: "16px" }}>
-                    <div className="grid-item"><label>Total Received</label><span>{formatCurrency(inpatient.totalReceivedAmount)}</span></div>
-                    <div className="grid-item"><label>Balance Due</label><span>{formatCurrency(inpatient.balanceAmount)}</span></div>
-                  </div>
-                </div>
-              </div>
             </TabsContent>
 
             {/* ════ Prescription Tab (read-only) ════ */}
@@ -673,7 +656,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
                   <Pill className="h-3.5 w-3.5 inline mr-1" /> Discharge Prescription
                 </p>
                 {ipPrescriptions.length > 0 && (
-                  <Button size="sm" variant="outline" onClick={() => handlePrint(rxPrintRef)}>
+                  <Button size="sm" variant="outline" onClick={() => openPrintModal("discharge")}>
                     <Printer className="h-3.5 w-3.5 mr-1.5" /> Print Prescription
                   </Button>
                 )}
@@ -734,40 +717,6 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
                 </div>
               )}
 
-              {/* Hidden print content */}
-              <div className="hidden">
-                <div ref={rxPrintRef}>
-                  <h1>{inpatient.name} - Discharge Prescription</h1>
-                  <p className="meta">{inpatient.ipNumber} | {inpatient.age}y / {inpatient.gender.charAt(0)} | Phone: {inpatient.phone}</p>
-                  <p className="meta">Admission: {formatDate(inpatient.admissionDate)} | Doctor(s): {doctors.join(", ") || "—"}</p>
-                  {inpatient.operationName && <p className="meta">Operation: {inpatient.operationName} ({formatDate(inpatient.operationDate)})</p>}
-
-                  {Object.values(storedMedicalValues).some(v => v) && (
-                    <>
-                      <h2>Medical Values</h2>
-                      <div className="grid">
-                        {MEDICAL_VALUE_FIELDS.filter(f => storedMedicalValues[f.key]).map(f => (
-                          <div key={f.key} className="grid-item">
-                            <label>{f.label}</label>
-                            <span>{String(storedMedicalValues[f.key])}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                  <h2>Medications</h2>
-                  <table>
-                    <thead><tr><th>#</th><th>Medicine</th><th>Days</th><th>Timing</th><th>Note</th></tr></thead>
-                    <tbody>
-                      {ipPrescriptions.map((rx, i) => (
-                        <tr key={i}><td>{i + 1}</td><td>{rx.medicine}</td><td>{rx.days}</td><td>{rx.timing}</td><td>{rx.note || ""}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {inpatient.followUpDate && <p><strong>Follow-up Date:</strong> {formatDate(inpatient.followUpDate)}</p>}
-                </div>
-              </div>
             </TabsContent>
 
             {/* ════ Discharge Summary Tab (read-only) ════ */}
@@ -777,7 +726,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
                   <FileText className="h-3.5 w-3.5 inline mr-1" /> Discharge Summary
                 </p>
                 {inpatient.status === "DISCHARGED" && dischargeSummary && (
-                  <Button size="sm" variant="outline" onClick={() => handlePrint(dischargePrintRef)}>
+                  <Button size="sm" variant="outline" onClick={() => openPrintModal("discharge")}>
                     <Printer className="h-3.5 w-3.5 mr-1.5" /> Print Summary
                   </Button>
                 )}
@@ -827,59 +776,6 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
                 </div>
               )}
 
-              {/* Hidden print content */}
-              <div className="hidden">
-                <div ref={dischargePrintRef}>
-                  <h1>Discharge Summary</h1>
-                  <p className="meta">{inpatient.name} | {inpatient.ipNumber} | {inpatient.age}y / {inpatient.gender.charAt(0)} | Phone: {inpatient.phone}</p>
-                  {inpatient.guardianName && <p className="meta">Guardian: {inpatient.guardianName}</p>}
-                  <p className="meta">Doctor(s): {doctors.join(", ") || "—"} | Department: {inpatient.department ?? "—"}</p>
-
-                  <div className="grid">
-                    <div className="grid-item"><label>Admission Date</label><span>{formatDate(inpatient.admissionDate)}</span></div>
-                    <div className="grid-item"><label>Discharge Date</label><span>{formatDate(inpatient.dischargeDate)}</span></div>
-                    <div className="grid-item"><label>Days Stayed</label><span>{daysAdmitted} days</span></div>
-                  </div>
-
-                  {inpatient.operationName && (
-                    <div className="grid">
-                      <div className="grid-item"><label>Operation</label><span>{inpatient.operationName}</span></div>
-                      <div className="grid-item"><label>Operation Date</label><span>{formatDate(inpatient.operationDate)}</span></div>
-                      <div className="grid-item"><label>Provisional Diagnosis</label><span>{inpatient.provisionDiagnosis ?? "—"}</span></div>
-                    </div>
-                  )}
-
-                  {dischargeSummary && typeof dischargeSummary === "object" && (
-                    <>
-                      {dischargeSummary.diagnosis && <><h2>Discharge Diagnosis</h2><p>{dischargeSummary.diagnosis}</p></>}
-                      {dischargeSummary.conditionAtDischarge && <><h2>Condition at Discharge</h2><p>{dischargeSummary.conditionAtDischarge}</p></>}
-                      {dischargeSummary.medications && <><h2>Medications</h2><p>{dischargeSummary.medications}</p></>}
-                      {dischargeSummary.followUpInstructions && <><h2>Follow-up Instructions</h2><p>{dischargeSummary.followUpInstructions}</p></>}
-                      {dischargeSummary.notes && <><h2>Additional Notes</h2><p>{dischargeSummary.notes}</p></>}
-                    </>
-                  )}
-
-                  {ipPrescriptions.length > 0 && (
-                    <>
-                      <h2>Discharge Prescription</h2>
-                      <table>
-                        <thead><tr><th>#</th><th>Medicine</th><th>Days</th><th>Timing</th></tr></thead>
-                        <tbody>
-                          {ipPrescriptions.map((rx, i) => (
-                            <tr key={i}><td>{i + 1}</td><td>{rx.medicine}</td><td>{rx.days}</td><td>{rx.timing}</td></tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </>
-                  )}
-
-                  <div className="grid" style={{ marginTop: "40px" }}>
-                    <div className="grid-item"><label>Package Amount</label><span>{formatCurrency(inpatient.packageAmount)}</span></div>
-                    <div className="grid-item"><label>Net Amount</label><span>{formatCurrency(inpatient.netAmount)}</span></div>
-                    <div className="grid-item"><label>Balance</label><span>{formatCurrency(inpatient.balanceAmount)}</span></div>
-                  </div>
-                </div>
-              </div>
             </TabsContent>
           </Tabs>
         </div>
@@ -978,8 +874,28 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
             <div className="rounded-xl border border-border bg-gray-50/50 p-4">
               <div className="grid grid-cols-4 gap-3">
                 <div className="space-y-1">
+                  <Label className="text-xs">Days from now</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 7"
+                    value={followUpDays}
+                    onChange={e => {
+                      const val = e.target.value
+                      setFollowUpDays(val)
+                      const num = parseInt(val, 10)
+                      if (!isNaN(num) && num >= 0) {
+                        const d = new Date()
+                        d.setDate(d.getDate() + num)
+                        setFollowUpDate(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d))
+                      }
+                    }}
+                    className="bg-white h-9"
+                  />
+                </div>
+                <div className="space-y-1">
                   <Label className="text-xs">Follow-up Date</Label>
-                  <Input type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)} className="bg-white h-9" />
+                  <Input type="date" value={followUpDate} onChange={e => { setFollowUpDate(e.target.value); setFollowUpDays("") }} className="bg-white h-9" />
                 </div>
               </div>
             </div>
@@ -1070,6 +986,298 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
           </div>
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* Print Modal                                                          */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      <Dialog open={printOpen} onOpenChange={(open) => !open && setPrintOpen(false)}>
+        <DialogContent className="max-w-217.5 max-h-[95vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-5 pb-3 border-b border-border flex-row items-center justify-between">
+            <DialogTitle className="text-base">Print — {inpatient.name}</DialogTitle>
+            <Button size="sm" onClick={handlePrint} disabled={printLoading} className="gap-1.5">
+              <Printer className="h-3.5 w-3.5" />
+              Print
+            </Button>
+          </DialogHeader>
+
+          {printLoading ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-3">
+              <Loader2 className="h-7 w-7 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Loading...</p>
+            </div>
+          ) : (
+            <Tabs value={printTab} onValueChange={(v) => setPrintTab(v as typeof printTab)} className="flex-1 flex flex-col min-h-0">
+              <div className="border-b border-border px-4">
+                <TabsList className="bg-transparent h-auto p-0 rounded-none gap-0 -mb-px">
+                  <TabsTrigger value="bill" className={TAB_CLASS}>Bill Summary</TabsTrigger>
+                  <TabsTrigger value="discharge" className={TAB_CLASS}>Discharge Summary</TabsTrigger>
+                </TabsList>
+              </div>
+
+              <div className="flex-1 overflow-y-auto bg-gray-100 p-4">
+                <div ref={printRef}>
+                  {(() => {
+                    const hInfo = hospitalInfo ? {
+                      name: hospitalInfo.name,
+                      displayName: hospitalInfo.displayName,
+                      address: hospitalInfo.address,
+                      phone: hospitalInfo.phone,
+                      email: hospitalInfo.email,
+                      website: hospitalInfo.website,
+                      registrationNo: hospitalInfo.registrationNo,
+                      logoUrl: hospitalInfo.logoUrl,
+                    } : { name: "Hospital" }
+
+                    const pInfo = {
+                      patientName: inpatient.name,
+                      patientId: inpatient.ipNumber,
+                      date: formatDate(inpatient.admissionDate),
+                      mobile: inpatient.phone || "—",
+                      gender: inpatient.gender,
+                      age: String(inpatient.age),
+                      address: inpatient.address || "—",
+                      referredBy: inpatient.referredBy || undefined,
+                      doctorName: doctors.join(", ") || "—",
+                      department: inpatient.department || undefined,
+                    }
+
+                    const hospitalName = hInfo.displayName || hInfo.name
+
+                    return (
+                      <>
+                        {/* Bill Summary */}
+                        <TabsContent value="bill" className="mt-0">
+                          <ReceiptLayout footer={<ReceiptFooter hospitalName={hospitalName} />}>
+                            <div className="receipt-header-section">
+                              <ReceiptHeader hospital={hInfo} />
+                            </div>
+                            <h2 className="text-sm text-center font-bold py-1 mb-2">BILL SUMMARY</h2>
+                            <PatientInfoSection data={pInfo} />
+
+                            {packageInclusions.length > 0 && (
+                              <div className="pb-3 mb-4 no-break">
+                                <h3 className="text-xs font-bold mb-2">PACKAGE INCLUSIONS</h3>
+                                <table className="w-full border-collapse text-[11px]">
+                                  <thead>
+                                    <tr>
+                                      <th className="border border-black p-2 text-left font-bold w-[10%]">S.No</th>
+                                      <th className="border border-black p-2 text-left font-bold">ITEM</th>
+                                      <th className="border border-black p-2 text-right font-bold w-[25%]">AMOUNT</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {packageInclusions.map((item, i) => (
+                                      <tr key={i}>
+                                        <td className="border border-black p-2">{i + 1}</td>
+                                        <td className="border border-black p-2">{item.name}</td>
+                                        <td className="border border-black p-2 text-right">{item.amount.toLocaleString("en-IN")}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+
+                            <div className="pb-3 mb-4 no-break">
+                              <table className="w-full border-collapse text-[11px]">
+                                <tbody>
+                                  <tr>
+                                    <td className="border border-black p-2 font-bold">PACKAGE AMOUNT</td>
+                                    <td className="border border-black p-2 text-right font-bold">{inpatient.packageAmount.toLocaleString("en-IN")}</td>
+                                  </tr>
+                                  {inpatient.discount > 0 && (
+                                    <tr>
+                                      <td className="border border-black p-2 font-bold">DISCOUNT</td>
+                                      <td className="border border-black p-2 text-right font-bold">- {inpatient.discount.toLocaleString("en-IN")}</td>
+                                    </tr>
+                                  )}
+                                  <tr>
+                                    <td className="border border-black p-2 font-bold">NET AMOUNT</td>
+                                    <td className="border border-black p-2 text-right font-bold">{inpatient.netAmount.toLocaleString("en-IN")}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-black p-2 font-bold">AMOUNT RECEIVED</td>
+                                    <td className="border border-black p-2 text-right font-bold">{inpatient.totalReceivedAmount.toLocaleString("en-IN")}</td>
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-black p-2 font-bold">BALANCE DUE</td>
+                                    <td className="border border-black p-2 text-right font-bold">{inpatient.balanceAmount.toLocaleString("en-IN")}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {paymentRecords.length > 0 && (
+                              <div className="pb-3 mb-4 no-break">
+                                <h3 className="text-xs font-bold mb-2">PAYMENT HISTORY</h3>
+                                <table className="w-full border-collapse text-[11px]">
+                                  <thead>
+                                    <tr>
+                                      <th className="border border-black p-2 text-left font-bold">DATE</th>
+                                      <th className="border border-black p-2 text-left font-bold">TYPE</th>
+                                      <th className="border border-black p-2 text-left font-bold">MODE</th>
+                                      <th className="border border-black p-2 text-right font-bold">AMOUNT</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {paymentRecords.map((p, i) => (
+                                      <tr key={i}>
+                                        <td className="border border-black p-2">{formatDate(p.date)}</td>
+                                        <td className="border border-black p-2">{p.amountType}</td>
+                                        <td className="border border-black p-2">{p.paymentMode}</td>
+                                        <td className="border border-black p-2 text-right">{p.amount.toLocaleString("en-IN")}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </ReceiptLayout>
+                        </TabsContent>
+
+                        {/* Discharge Summary */}
+                        <TabsContent value="discharge" className="mt-0">
+                          {/* ── Page 1: Admission + Clinical Details ── */}
+                          <ReceiptLayout footer={<ReceiptFooter hospitalName={hospitalName} />}>
+                            <div className="receipt-header-section">
+                              <ReceiptHeader hospital={hInfo} />
+                            </div>
+                            <h2 className="text-sm text-center font-bold py-1 mb-2">DISCHARGE SUMMARY</h2>
+                            <PatientInfoSection data={{
+                              ...pInfo,
+                              ...(inpatient.guardianName ? { referredBy: `Guardian: ${inpatient.guardianName}` } : {}),
+                            }} />
+
+                            <div className="pb-3 mb-4 border-b border-black no-break">
+                              <h3 className="text-xs font-bold mb-3">ADMISSION DETAILS</h3>
+                              <div className="text-[11px] grid grid-cols-3 gap-x-4 gap-y-2">
+                                <div><div className="font-bold">ADMISSION DATE</div><div>{formatDate(inpatient.admissionDate)}</div></div>
+                                <div><div className="font-bold">DISCHARGE DATE</div><div>{formatDate(inpatient.dischargeDate)}</div></div>
+                                <div><div className="font-bold">DAYS STAYED</div><div>{daysAdmitted} days</div></div>
+                                {inpatient.operationName && (
+                                  <>
+                                    <div><div className="font-bold">OPERATION</div><div>{inpatient.operationName}</div></div>
+                                    <div><div className="font-bold">OPERATION DATE</div><div>{formatDate(inpatient.operationDate)}</div></div>
+                                    <div><div className="font-bold">PROV. DIAGNOSIS</div><div>{inpatient.provisionDiagnosis ?? "—"}</div></div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            {dischargeSummary && typeof dischargeSummary === "object" && (
+                              <div className="pb-3 mb-4 border-b border-black no-break">
+                                <h3 className="text-xs font-bold mb-3">CLINICAL DETAILS</h3>
+                                <div className="text-[11px] space-y-2">
+                                  {dischargeSummary.diagnosis && (
+                                    <div><div className="font-bold">DISCHARGE DIAGNOSIS</div><div className="whitespace-pre-wrap">{dischargeSummary.diagnosis}</div></div>
+                                  )}
+                                  {dischargeSummary.conditionAtDischarge && (
+                                    <div><div className="font-bold">CONDITION AT DISCHARGE</div><div>{dischargeSummary.conditionAtDischarge}</div></div>
+                                  )}
+                                  {dischargeSummary.medications && (
+                                    <div><div className="font-bold">MEDICATIONS ON DISCHARGE</div><div className="whitespace-pre-wrap">{dischargeSummary.medications}</div></div>
+                                  )}
+                                  {dischargeSummary.followUpInstructions && (
+                                    <div><div className="font-bold">FOLLOW-UP INSTRUCTIONS</div><div className="whitespace-pre-wrap">{dischargeSummary.followUpInstructions}</div></div>
+                                  )}
+                                  {dischargeSummary.notes && (
+                                    <div><div className="font-bold">ADDITIONAL NOTES</div><div className="whitespace-pre-wrap">{dischargeSummary.notes}</div></div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {ipPrescriptions.length > 0 && (
+                              <div className="pb-3 mb-4 border-b border-black no-break">
+                                <h3 className="text-xs font-bold mb-2">DISCHARGE PRESCRIPTION</h3>
+                                <table className="w-full border-collapse text-[11px]">
+                                  <thead>
+                                    <tr>
+                                      <th className="border border-black p-2 text-left font-bold w-[8%]">#</th>
+                                      <th className="border border-black p-2 text-left font-bold">MEDICINE</th>
+                                      <th className="border border-black p-2 text-center font-bold w-[15%]">TIMING</th>
+                                      <th className="border border-black p-2 text-center font-bold w-[15%]">DAYS</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {ipPrescriptions.map((rx, i) => (
+                                      <tr key={i}>
+                                        <td className="border border-black p-2">{i + 1}</td>
+                                        <td className="border border-black p-2">{rx.medicine}</td>
+                                        <td className="border border-black p-2 text-center">{rx.timing}</td>
+                                        <td className="border border-black p-2 text-center">{rx.days}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+
+                            {inpatient.followUpDate && (
+                              <div className="text-[11px] mt-3 no-break">
+                                <span className="font-bold">FOLLOW-UP DATE: </span>
+                                <span>{formatDate(inpatient.followUpDate)}</span>
+                              </div>
+                            )}
+                          </ReceiptLayout>
+
+                          {/* ── Page 2: Medical Examination Values ── */}
+                          {Object.values(storedMedicalValues).some(v => v) && (
+                            <ReceiptLayout footer={<ReceiptFooter hospitalName={hospitalName} />}>
+                              <div className="receipt-header-section">
+                                <ReceiptHeader hospital={hInfo} />
+                              </div>
+                              <h2 className="text-sm text-center font-bold py-1 mb-2">DISCHARGE SUMMARY — contd.</h2>
+
+                              <div className="pb-3 mb-4 no-break">
+                                <h3 className="text-xs font-bold mb-2">MEDICAL EXAMINATION VALUES</h3>
+                                {(() => {
+                                  const filledFields = MEDICAL_VALUE_FIELDS.filter(f => storedMedicalValues[f.key])
+                                  const chunkSize = 3
+                                  const chunks: typeof filledFields[] = []
+                                  for (let i = 0; i < filledFields.length; i += chunkSize) {
+                                    chunks.push(filledFields.slice(i, i + chunkSize))
+                                  }
+                                  return (
+                                    <table className="w-full border-collapse text-[11px]">
+                                      <tbody>
+                                        {chunks.map((chunk, ci) => (
+                                          <React.Fragment key={ci}>
+                                            <tr>
+                                              {chunk.map(f => (
+                                                <th key={f.key} className="border border-black p-2 text-center font-bold bg-gray-50">{f.label.toUpperCase()}</th>
+                                              ))}
+                                              {chunk.length < chunkSize && Array.from({ length: chunkSize - chunk.length }).map((_, i) => (
+                                                <th key={`empty-h-${i}`} className="border border-black p-2"></th>
+                                              ))}
+                                            </tr>
+                                            <tr>
+                                              {chunk.map(f => (
+                                                <td key={f.key} className="border border-black p-2 text-center">{String(storedMedicalValues[f.key])}</td>
+                                              ))}
+                                              {chunk.length < chunkSize && Array.from({ length: chunkSize - chunk.length }).map((_, i) => (
+                                                <td key={`empty-v-${i}`} className="border border-black p-2"></td>
+                                              ))}
+                                            </tr>
+                                          </React.Fragment>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )
+                                })()}
+                              </div>
+                            </ReceiptLayout>
+                          )}
+                        </TabsContent>
+                      </>
+                    )
+                  })()}
+                </div>
+              </div>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -168,6 +168,45 @@ export async function getInpatientRecords(patientInternalId: string) {
   return inpatient
 }
 
+// ─── Receipt data for printing ───────────────────────────────────────────────
+
+export async function getReportReceiptData(patientId: string) {
+  const supabase = await createClient()
+
+  const [patientResult, hospitalResult] = await Promise.all([
+    supabase
+      .from("Patient")
+      .select(
+        "*, eyeReadings:EyeReading(*), prescriptions:Prescription(*, items:InvoiceItem(*), payments:Payment(*))"
+      )
+      .eq("patientId", patientId)
+      .single(),
+    supabase
+      .from("HospitalProfile")
+      .select("*")
+      .limit(1)
+      .single(),
+  ])
+
+  const patient = patientResult.data
+  const hospital = hospitalResult.data
+
+  if (patient) {
+    // Sort prescriptions descending by date
+    patient.prescriptions = (patient.prescriptions ?? []).sort(
+      (a: any, b: any) =>
+        new Date(b.prescriptionDate).getTime() - new Date(a.prescriptionDate).getTime()
+    )
+    // Sort eye readings descending
+    patient.eyeReadings = (patient.eyeReadings ?? []).sort(
+      (a: any, b: any) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+  }
+
+  return { patient, hospital }
+}
+
 // ─── Lab Records ─────────────────────────────────────────────────────────────
 
 export async function getLabRecords(patientId: string) {
@@ -176,7 +215,7 @@ export async function getLabRecords(patientId: string) {
   const { data: labBills, error } = await supabase
     .from("LabBill")
     .select(
-      "*, lab:Lab(name), items:LabBillItem(id, name, amount), payments:Payment(id, amount, paymentMode, paymentDate)"
+      "*, lab:Lab(name), items:LabBillItem(id, name, amount), payments:LabPayment(id, amount, paymentMode, paymentDate)"
     )
     .eq("patientId", patientId)
     .order("createdAt", { ascending: false })
@@ -210,7 +249,7 @@ export async function getBillingOverview(patientId: string, patientInternalId: s
     supabase
       .from("LabBill")
       .select(
-        "id, billNumber, total, amountPaid, balanceDue, status, createdAt, lab:Lab(name), payments:Payment(id, amount, paymentMode, paymentDate)"
+        "id, billNumber, total, amountPaid, balanceDue, status, createdAt, lab:Lab(name), payments:LabPayment(id, amount, paymentMode, paymentDate)"
       )
       .eq("patientId", patientId)
       .order("createdAt", { ascending: false }),

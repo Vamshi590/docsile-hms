@@ -9,11 +9,14 @@ import {
   FlaskConical,
   FileText,
   CalendarCheck,
+  Printer,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDateLong } from "@/lib/utils"
 import { getPrescriptions } from "../actions"
+import { ReportPrintModal } from "./ReportPrintModal"
 
 type Prescription = Awaited<ReturnType<typeof getPrescriptions>>[0]
 
@@ -24,10 +27,23 @@ type Medicine = {
   notes?: string
 }
 
-export function PrescriptionsTab({ patientId }: { patientId: string }) {
+type PatientSummary = {
+  id: string
+  patientId: string
+  fullName: string
+  phone?: string | null
+  age?: number | null
+  gender?: string | null
+  dateOfBirth?: string | null
+  address?: string | null
+}
+
+export function PrescriptionsTab({ patientId, patient }: { patientId: string; patient: PatientSummary }) {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [printOpen, setPrintOpen] = useState(false)
+  const [printPrescriptionId, setPrintPrescriptionId] = useState<string | undefined>()
 
   useEffect(() => {
     setLoading(true)
@@ -136,6 +152,19 @@ export function PrescriptionsTab({ patientId }: { patientId: string }) {
                   </div>
                 </div>
 
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0 h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setPrintPrescriptionId(rx.id)
+                    setPrintOpen(true)
+                  }}
+                >
+                  <Printer className="h-4 w-4" />
+                </Button>
+
                 {hasDetails && (
                   expanded ? (
                     <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -230,6 +259,14 @@ export function PrescriptionsTab({ patientId }: { patientId: string }) {
           </div>
         )
       })}
+
+      <ReportPrintModal
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        patient={patient}
+        mode="prescription"
+        prescriptionId={printPrescriptionId}
+      />
     </div>
   )
 }
