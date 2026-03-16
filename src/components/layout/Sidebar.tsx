@@ -9,7 +9,6 @@ import {
   Stethoscope,
   BedDouble,
   Shield,
-  LayoutDashboard,
   Settings,
   LogOut,
   Hospital,
@@ -23,29 +22,63 @@ import {
   DatabaseZap,
   BarChart3,
   UserCog,
+  LayoutDashboard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { getInitials } from "@/lib/utils"
 
-const navItems = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
-  { href: "/patients", icon: Users, label: "Patients" },
-  { href: "/workup", icon: Eye, label: "Workup" },
-  { href: "/doctor", icon: Stethoscope, label: "Doctor" },
-  { href: "/labs", icon: FlaskConical, label: "Labs" },
-  { href: "/pharmacy", icon: Pill, label: "Pharmacy" },
-  { href: "/optical", icon: Glasses, label: "Optical" },
-  { href: "/inpatients", icon: BedDouble, label: "In-Patients" },
-  { href: "/insurance", icon: Shield, label: "Insurance" },
-  { href: "/dues-followups", icon: ClipboardList, label: "Dues & Follow-Ups" },
-  { href: "/expenses", icon: Wallet, label: "Expenses" },
-  { href: "/analytics", icon: BarChart3, label: "Analytics" },
-  { href: "/reports", icon: FileBarChart, label: "Reports" },
-  { href: "/license-tracker", icon: ScrollText, label: "Licenses" },
-  { href: "/data", icon: DatabaseZap, label: "Data Export" },
-  { href: "/staff", icon: UserCog, label: "Staff", adminOnly: true },
+type NavItem = {
+  href: string
+  icon: React.ElementType
+  label: string
+  exact?: boolean
+  adminOnly?: boolean
+}
+
+const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
+  {
+    label: "",
+    items: [
+      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
+    ],
+  },
+  {
+    label: "Clinical",
+    items: [
+      { href: "/patients", icon: Users, label: "Patients" },
+      { href: "/workup", icon: Eye, label: "Workup" },
+      { href: "/doctor", icon: Stethoscope, label: "Doctor" },
+      { href: "/inpatients", icon: BedDouble, label: "In-Patients" },
+    ],
+  },
+  {
+    label: "Services",
+    items: [
+      { href: "/pharmacy", icon: Pill, label: "Pharmacy" },
+      { href: "/optical", icon: Glasses, label: "Optical" },
+      { href: "/labs", icon: FlaskConical, label: "Labs" },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      { href: "/insurance", icon: Shield, label: "Insurance" },
+      { href: "/dues-followups", icon: ClipboardList, label: "Dues & Follow-Ups" },
+      { href: "/expenses", icon: Wallet, label: "Expenses" },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [
+      { href: "/analytics", icon: BarChart3, label: "Analytics" },
+      { href: "/reports", icon: FileBarChart, label: "Reports" },
+      { href: "/data", icon: DatabaseZap, label: "Data Export" },
+      { href: "/license-tracker", icon: ScrollText, label: "Licenses" },
+      { href: "/staff", icon: UserCog, label: "Staff", adminOnly: true },
+    ],
+  },
 ]
 
 interface SidebarProps {
@@ -78,7 +111,6 @@ export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
     }, 300)
   }, [])
 
-  // Show sidebar when mouse moves to the left edge of the screen
   useEffect(() => {
     function handleMouseMove(e: MouseEvent) {
       if (e.clientX <= 6) {
@@ -89,7 +121,6 @@ export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
     return () => window.removeEventListener("mousemove", handleMouseMove)
   }, [showSidebar])
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current)
@@ -98,7 +129,7 @@ export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
 
   return (
     <>
-      {/* Overlay backdrop when sidebar is open */}
+      {/* Overlay backdrop */}
       {visible && (
         <div
           className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px] transition-opacity duration-300"
@@ -112,82 +143,100 @@ export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
         onMouseEnter={showSidebar}
         onMouseLeave={hideSidebar}
         className={cn(
-          "fixed left-0 top-0 z-50 flex h-full w-64 flex-col border-r border-border bg-white shadow-2xl transition-transform duration-300 ease-in-out",
+          "fixed left-0 top-0 z-50 flex h-full w-64 flex-col bg-white border-r border-gray-200/80 shadow-2xl transition-transform duration-300 ease-in-out",
           visible ? "translate-x-0" : "-translate-x-full"
         )}
       >
         {/* Hospital Brand */}
-        <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary shadow-sm">
             <Hospital className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0">
-            <p className="text-[0.9rem] font-semibold text-foreground truncate leading-snug">
+            <p className="text-sm font-bold text-foreground truncate leading-snug">
               {hospitalName}
             </p>
-            <p className="text-xs text-muted-foreground leading-snug">HMS</p>
+            <p className="text-[11px] text-muted-foreground leading-snug">Hospital Management</p>
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto scrollbar-hide px-2 py-4 space-y-0.5">
-          {navItems
-            .filter((item) => !item.adminOnly || user.role === "ADMIN")
-            .map((item) => {
-              const active = isActive(item.href, item.exact)
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setVisible(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[0.9rem] font-semibold transition-all duration-150",
-                    active
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  )}
-                >
-                  <item.icon
-                    className={cn(
-                      "h-[18px] w-[18px] shrink-0",
-                      active ? "text-primary" : "text-current"
-                    )}
-                  />
-                  <span className="truncate">{item.label}</span>
-                  {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
-                </Link>
-              )
-            })}
+        <nav className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
+          {NAV_SECTIONS.map((section) => {
+            const visibleItems = section.items.filter(
+              (item) => !item.adminOnly || user.role === "ADMIN"
+            )
+            if (visibleItems.length === 0) return null
+
+            return (
+              <div key={section.label}>
+                {section.label && (
+                  <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                    {section.label}
+                  </p>
+                )}
+                <div className="space-y-0.5">
+                  {visibleItems.map((item) => {
+                    const active = isActive(item.href, item.exact)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setVisible(false)}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150",
+                          active
+                            ? "bg-primary/8 text-primary"
+                            : "text-gray-500 hover:text-foreground hover:bg-gray-50"
+                        )}
+                      >
+                        <item.icon
+                          className={cn(
+                            "h-4 w-4 shrink-0",
+                            active ? "text-primary" : "text-gray-400"
+                          )}
+                        />
+                        <span className="truncate">{item.label}</span>
+                        {active && (
+                          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+                        )}
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
         </nav>
 
         {/* Bottom section */}
-        <div className="border-t border-border px-2 pt-3 pb-4 space-y-0.5">
+        <div className="border-t border-gray-100 px-3 pt-3 pb-4 space-y-1">
           <Link
             href="/settings"
             onClick={() => setVisible(false)}
             className={cn(
-              "flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[0.9rem] font-medium transition-all duration-150",
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150",
               isActive("/settings")
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                ? "bg-primary/8 text-primary"
+                : "text-gray-500 hover:text-foreground hover:bg-gray-50"
             )}
           >
-            <Settings className="h-[18px] w-[18px] shrink-0" />
+            <Settings className={cn("h-4 w-4 shrink-0", isActive("/settings") ? "text-primary" : "text-gray-400")} />
             <span>Configurations</span>
           </Link>
 
           {/* User card */}
-          <div className="mt-2 flex items-center rounded-xl bg-muted gap-3 px-3.5 py-2.5">
+          <div className="mt-1 flex items-center rounded-lg bg-gray-50 border border-gray-100 gap-3 px-3 py-2.5">
             <Avatar className="h-8 w-8 shrink-0">
-              <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+              <AvatarFallback className="text-[11px] bg-primary/10 text-primary font-bold">
                 {getInitials(user.fullName)}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <p className="text-[0.85rem] font-semibold text-foreground truncate leading-snug">
+              <p className="text-[13px] font-semibold text-foreground truncate leading-snug">
                 {user.fullName}
               </p>
-              <p className="text-xs text-muted-foreground capitalize leading-snug">
+              <p className="text-[11px] text-muted-foreground capitalize leading-snug">
                 {user.role.toLowerCase()}
               </p>
             </div>
@@ -197,7 +246,7 @@ export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
                 variant="ghost"
                 size="icon-sm"
                 title="Logout"
-                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                className="text-gray-400 hover:text-destructive hover:bg-destructive/10"
               >
                 <LogOut className="h-4 w-4" />
               </Button>

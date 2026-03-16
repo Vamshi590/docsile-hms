@@ -162,8 +162,8 @@ export function BillingTab() {
     const items = [...billItems]
     const item = { ...items[idx] }
     if (field === "quantity") {
-      if (value > item.availableQty) return toast.error(`Only ${item.availableQty} available`)
-      item.quantity = value
+      if (value > 0 && value > item.availableQty) return toast.error(`Only ${item.availableQty} available`)
+      item.quantity = value < 0 ? 0 : value
     } else if (field === "price") {
       item.price = value
     } else if (field === "discountPercent") {
@@ -425,8 +425,9 @@ export function BillingTab() {
                           <Input
                             type="number"
                             className="h-7 w-16 text-xs text-right ml-auto border-transparent hover:border-input bg-transparent focus:bg-white"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
+                            value={item.quantity === 0 ? "" : item.quantity}
+                            onChange={(e) => updateItem(idx, "quantity", e.target.value === "" ? 0 : parseInt(e.target.value))}
+                            onBlur={() => { if (item.quantity < 1) updateItem(idx, "quantity", 1) }}
                           />
                         </td>
                         <td className="p-3 text-right text-xs">{formatCurrency(item.total)}</td>

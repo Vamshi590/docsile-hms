@@ -377,7 +377,7 @@ export function PatientDetail({ patientId, onBack, onUpdate }: Props) {
                   <PatientStatusBadge status={patient.status as PatientStatus} />
                 </div>
                 <div className="flex items-center gap-4 mt-1.5 text-sm text-muted-foreground">
-                  <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">{patient.patientId}</span>
+                  <span className="font-mono text-xs text-black font-semibold bg-muted px-2 py-0.5 rounded">{patient.patientId}</span>
                   {patient.phone && (
                     <span className="flex items-center gap-1">
                       <Phone className="h-3 w-3" />
