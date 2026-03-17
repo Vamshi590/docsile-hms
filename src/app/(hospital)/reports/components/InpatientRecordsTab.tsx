@@ -275,7 +275,7 @@ export function InpatientRecordsTab({ patientInternalId, patient }: { patientInt
                       </span>
                     )}
                     {med.note && (
-                      <span className="text-xs text-muted-foreground italic shrink-0 max-w-[160px] truncate">
+                      <span className="text-xs text-muted-foreground italic shrink-0 max-w-40 truncate">
                         {med.note}
                       </span>
                     )}

@@ -6,6 +6,58 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export interface Database {
   public: {
     Tables: {
+      CallLog: {
+        Row: {
+          id: string
+          exotelCallSid: string | null
+          callFrom: string
+          callTo: string
+          direction: string
+          status: string
+          startTime: string | null
+          endTime: string | null
+          duration: number
+          recordingUrl: string | null
+          callerName: string | null
+          patientId: string | null
+          notes: string | null
+          createdAt: string
+          updatedAt: string
+        }
+        Insert: {
+          id?: string
+          exotelCallSid?: string | null
+          callFrom: string
+          callTo: string
+          direction?: string
+          status?: string
+          startTime?: string | null
+          endTime?: string | null
+          duration?: number
+          recordingUrl?: string | null
+          callerName?: string | null
+          patientId?: string | null
+          notes?: string | null
+          createdAt?: string
+          updatedAt?: string
+        }
+        Update: {
+          id?: string
+          exotelCallSid?: string | null
+          callFrom?: string
+          callTo?: string
+          direction?: string
+          status?: string
+          startTime?: string | null
+          endTime?: string | null
+          duration?: number
+          recordingUrl?: string | null
+          callerName?: string | null
+          patientId?: string | null
+          notes?: string | null
+          updatedAt?: string
+        }
+      }
       User: {
         Row: {
           id: string

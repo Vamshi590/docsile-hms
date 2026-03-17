@@ -927,13 +927,13 @@ function PrescriptionsTab() {
                     <TableCell>
                       <div className="font-medium">{tmpl.name}</div>
                       {tmpl.presentComplaint && (
-                        <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                        <div className="text-xs text-muted-foreground truncate max-w-50">
                           {tmpl.presentComplaint}
                         </div>
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm truncate max-w-[180px]">
+                      <div className="text-sm truncate max-w-45">
                         {tmpl.provisionalDiagnosis || <span className="text-muted-foreground">—</span>}
                       </div>
                     </TableCell>
@@ -945,7 +945,7 @@ function PrescriptionsTab() {
                         )}
                       </div>
                       {meds.slice(0, 2).map((m, i) => (
-                        <div key={i} className="text-xs text-muted-foreground truncate max-w-[180px]">
+                        <div key={i} className="text-xs text-muted-foreground truncate max-w-45">
                           {m.name}
                         </div>
                       ))}
@@ -1532,13 +1532,13 @@ function InpatientTemplatesTab() {
                     <TableCell>
                       <div className="font-medium">{tmpl.name}</div>
                       {tmpl.provisionDiagnosis && (
-                        <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                        <div className="text-xs text-muted-foreground truncate max-w-50">
                           {tmpl.provisionDiagnosis}
                         </div>
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm truncate max-w-[180px]">
+                      <div className="text-sm truncate max-w-45">
                         {tmpl.operationName || <span className="text-muted-foreground">—</span>}
                       </div>
                     </TableCell>
@@ -1547,7 +1547,7 @@ function InpatientTemplatesTab() {
                         {meds.length} medicine{meds.length !== 1 ? "s" : ""}
                       </div>
                       {meds.slice(0, 2).map((m, i) => (
-                        <div key={i} className="text-xs text-muted-foreground truncate max-w-[180px]">
+                        <div key={i} className="text-xs text-muted-foreground truncate max-w-45">
                           {m.name}
                         </div>
                       ))}
@@ -2469,7 +2469,7 @@ function MedicinesTab() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-[200px]">
+                  <TableCell className="max-w-50">
                     {med.note ? (
                       <span className="text-sm text-muted-foreground truncate block">{med.note}</span>
                     ) : (

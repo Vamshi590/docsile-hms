@@ -152,7 +152,7 @@ export default function ReportsPage() {
       {/* Empty State */}
       {!loading && !patient && (
         <div className="text-center py-16">
-          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 mx-auto mb-5">
+          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-linear-to-br from-primary/10 to-primary/5 mx-auto mb-5">
             <FileSearch className="h-9 w-9 text-primary/60" />
           </div>
           <h3 className="text-base font-semibold text-foreground">Search for a patient to get started</h3>

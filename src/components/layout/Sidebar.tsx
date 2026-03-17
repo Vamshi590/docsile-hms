@@ -23,6 +23,7 @@ import {
   BarChart3,
   UserCog,
   LayoutDashboard,
+  Phone,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -47,6 +48,7 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: "Clinical",
     items: [
+      { href: "/call-logs", icon: Phone, label: "Call Logs" },
       { href: "/patients", icon: Users, label: "Patients" },
       { href: "/workup", icon: Eye, label: "Workup" },
       { href: "/doctor", icon: Stethoscope, label: "Doctor" },
