@@ -21,6 +21,7 @@ export interface Database {
           callerName: string | null
           patientId: string | null
           notes: string | null
+          rawResponse: Json | null
           createdAt: string
           updatedAt: string
         }
@@ -38,6 +39,7 @@ export interface Database {
           callerName?: string | null
           patientId?: string | null
           notes?: string | null
+          rawResponse?: Json | null
           createdAt?: string
           updatedAt?: string
         }
@@ -55,6 +57,7 @@ export interface Database {
           callerName?: string | null
           patientId?: string | null
           notes?: string | null
+          rawResponse?: Json | null
           updatedAt?: string
         }
       }

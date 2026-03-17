@@ -149,37 +149,100 @@ export async function syncExotelCalls() {
   try {
     const supabase = await createClient()
     const now = new Date()
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
 
-    const url = `https://api.exotel.com/v1/Accounts/${sid}/Calls.json?StartTime>=${oneDayAgo.toISOString()}&PageSize=100`
+    // Use Exotel v2 API which returns detailed call data including conversation_duration
+    const params = new URLSearchParams({
+      "StartTime": threeDaysAgo.toISOString(),
+      "EndTime": now.toISOString(),
+      "PageSize": "200",
+      "SortBy": "DateCreated:desc",
+    })
+
     const authHeader = Buffer.from(`${apiKey}:${apiToken}`).toString("base64")
 
-    const response = await fetch(url, {
+    // Try v2 API first
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let calls: any[] = []
+    let apiVersion = "v2"
+
+    const v2Url = `https://api.exotel.com/v2/accounts/${sid}/calls?${params}`
+    console.log("[Exotel Sync] Fetching v2:", v2Url)
+
+    let response = await fetch(v2Url, {
       headers: { Authorization: `Basic ${authHeader}` },
     })
 
-    if (!response.ok) {
-      return { success: false as const, error: `Exotel API error: ${response.status}` }
+    if (response.ok) {
+      const result = await response.json()
+      console.log("[Exotel Sync] v2 response keys:", Object.keys(result))
+      // v2 returns { response: [...] } or { data: [...] }
+      calls = result?.response || result?.data || []
+    } else {
+      // Fallback to v1 API
+      apiVersion = "v1"
+      const v1Url = `https://api.exotel.com/v1/Accounts/${sid}/Calls.json`
+      console.log("[Exotel Sync] v2 failed, trying v1:", v1Url)
+
+      response = await fetch(v1Url, {
+        headers: { Authorization: `Basic ${authHeader}` },
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("[Exotel Sync] API error:", response.status, errorText)
+        return { success: false as const, error: `Exotel API error: ${response.status}` }
+      }
+
+      const result = await response.json()
+      console.log("[Exotel Sync] v1 response keys:", Object.keys(result))
+      // v1 can return { Calls: [...] } or { Calls: { Call: [...] } }
+      const rawCalls = result?.Calls
+      if (Array.isArray(rawCalls)) {
+        calls = rawCalls.map((c: any) => c.Call || c)
+      } else if (rawCalls?.Call) {
+        calls = Array.isArray(rawCalls.Call) ? rawCalls.Call : [rawCalls.Call]
+      }
     }
 
-    const result = await response.json()
-    const calls = result?.Calls || []
+    console.log(`[Exotel Sync] Found ${calls.length} calls via ${apiVersion}`)
+    if (calls.length > 0) {
+      console.log("[Exotel Sync] Sample call keys:", Object.keys(calls[0]))
+      console.log("[Exotel Sync] Sample call:", JSON.stringify(calls[0]).slice(0, 500))
+    }
+
     let synced = 0
+    let updated = 0
 
     for (const call of calls) {
-      const callSid = call.Sid
-      const { data: existing } = await supabase
-        .from("CallLog")
-        .select("id")
-        .eq("exotelCallSid", callSid)
-        .maybeSingle()
+      // Handle both v1 (PascalCase) and v2 (snake_case) field names
+      const callSid = (call.Sid || call.sid || call.CallSid) as string
+      if (!callSid) continue
 
-      if (existing) continue
+      const callFrom = (call.From || call.from || call.CallFrom || "") as string
+      const callTo = (call.To || call.to || call.CallTo || "") as string
+      const rawDirection = ((call.Direction || call.direction || "inbound") as string).toLowerCase()
+      const direction = rawDirection.includes("out") ? "outbound" : "inbound"
+
+      // Duration fields
+      const totalDuration = parseInt(String(call.Duration || call.duration || "0"), 10)
+      const conversationDuration = parseInt(String(call.ConversationDuration || call.conversation_duration || "0"), 10)
+
+      // Status: use conversation_duration to determine real outcome
+      const rawStatus = ((call.Status || call.status || "") as string).toLowerCase()
+      const status = resolveCallStatus(rawStatus, conversationDuration, totalDuration)
+
+      const startTimeRaw = (call.StartTime || call.start_time || call.DateCreated || call.date_created) as string | null
+      const endTimeRaw = (call.EndTime || call.end_time) as string | null
+      const recordingUrl = (call.RecordingUrl || call.recording_url) as string | null
+
+      // Use conversation duration (actual talk time) as the displayed duration
+      const displayDuration = conversationDuration || totalDuration
 
       // Try to match caller to patient
-      const phoneToSearch = call.Direction === "inbound" ? call.From : call.To
+      const phoneToSearch = direction === "inbound" ? callFrom : callTo
       let callerName: string | null = null
-      let patientId: string | null = null
+      let patientIdVal: string | null = null
 
       if (phoneToSearch) {
         const digits = phoneToSearch.replace(/\D/g, "").slice(-10)
@@ -193,43 +256,92 @@ export async function syncExotelCalls() {
 
           if (patient) {
             callerName = patient.fullName
-            patientId = patient.id
+            patientIdVal = patient.id
           }
         }
       }
 
+      // Check if already exists
+      const { data: existing } = await supabase
+        .from("CallLog")
+        .select("id, status")
+        .eq("exotelCallSid", callSid)
+        .maybeSingle()
+
       const nowStr = new Date().toISOString()
-      await supabase.from("CallLog").insert({
-        exotelCallSid: callSid,
-        callFrom: call.From || "",
-        callTo: call.To || "",
-        direction: (call.Direction || "inbound").toLowerCase(),
-        status: mapStatus(call.Status || ""),
-        startTime: call.StartTime ? new Date(call.StartTime).toISOString() : nowStr,
-        endTime: call.EndTime ? new Date(call.EndTime).toISOString() : null,
-        duration: parseInt(call.Duration || "0", 10),
-        recordingUrl: call.RecordingUrl || null,
-        callerName,
-        patientId,
-        createdAt: nowStr,
-        updatedAt: nowStr,
-      })
-      synced++
+
+      if (existing) {
+        // Update if the new status is more accurate (final vs intermediate)
+        const isFinal = ["completed", "missed", "busy", "failed"].includes(status)
+        const existingIsFinal = ["completed", "missed", "busy", "failed"].includes(existing.status)
+
+        if (isFinal && !existingIsFinal) {
+          await supabase.from("CallLog").update({
+            status,
+            duration: displayDuration,
+            endTime: endTimeRaw ? new Date(endTimeRaw).toISOString() : null,
+            recordingUrl,
+            callerName,
+            patientId: patientIdVal,
+            rawResponse: call,
+            updatedAt: nowStr,
+          }).eq("id", existing.id)
+          updated++
+        }
+      } else {
+        await supabase.from("CallLog").insert({
+          exotelCallSid: callSid,
+          callFrom,
+          callTo,
+          direction,
+          status,
+          startTime: startTimeRaw ? new Date(startTimeRaw).toISOString() : nowStr,
+          endTime: endTimeRaw ? new Date(endTimeRaw).toISOString() : null,
+          duration: displayDuration,
+          recordingUrl,
+          callerName,
+          patientId: patientIdVal,
+          rawResponse: call,
+          createdAt: nowStr,
+          updatedAt: nowStr,
+        })
+        synced++
+      }
     }
 
     revalidatePath("/call-logs")
-    return { success: true as const, synced }
+    return { success: true as const, synced, message: `${synced} new, ${updated} updated` }
   } catch (error) {
-    console.error("Exotel sync error:", error)
+    console.error("[Exotel Sync] Error:", error)
     return { success: false as const, error: "Failed to sync calls from Exotel" }
   }
 }
 
-function mapStatus(s: string): string {
-  const lower = s.toLowerCase()
-  if (lower === "completed") return "completed"
-  if (lower === "busy") return "busy"
-  if (lower === "no-answer" || lower === "noanswer") return "missed"
-  if (lower === "failed" || lower === "canceled") return "failed"
-  return lower || "ringing"
+/**
+ * Resolve actual call outcome.
+ * Exotel "Status: completed" = call flow finished, NOT that agent answered.
+ * ConversationDuration > 0 means someone actually picked up and talked.
+ */
+function resolveCallStatus(rawStatus: string, conversationDuration: number, totalDuration: number): string {
+  switch (rawStatus) {
+    case "busy":
+      return "busy"
+    case "no-answer":
+    case "noanswer":
+      return "missed"
+    case "failed":
+    case "canceled":
+      return "failed"
+    case "completed":
+      // "completed" = call flow finished. Check actual talk time.
+      if (conversationDuration > 0) return "completed"
+      return "missed"
+    case "in-progress":
+    case "ringing":
+      return "ringing"
+    default:
+      if (totalDuration > 0 && conversationDuration === 0) return "missed"
+      if (conversationDuration > 0) return "completed"
+      return "ringing"
+  }
 }

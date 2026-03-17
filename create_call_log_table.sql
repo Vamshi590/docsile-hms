@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS "CallLog" (
   "callerName" TEXT,
   "patientId" TEXT,
   "notes" TEXT,
+  "rawResponse" JSONB,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
 
