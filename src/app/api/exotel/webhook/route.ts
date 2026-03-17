@@ -18,6 +18,47 @@ import { createClient } from "@/lib/supabase/server";
 
 // ─── Exotel API Helper ───────────────────────────────────────────────────────
 
+/**
+ * Map Exotel Leg 2 (agent leg) status to our database status.
+ *
+ * According to Exotel docs, Leg 2 status can be:
+ * - completed: The call was answered and has ended normally → "completed"
+ * - busy: The caller received a busy signal → "busy"
+ * - no-answer: The call ended without being answered → "missed"
+ * - failed: The call could not be completed as dialed (non-existent number) → "failed"
+ * - canceled: The call was canceled while queued or ringing → "missed"
+ * - null/empty: The call did not have a second leg → "missed"
+ */
+function mapLeg2StatusToDbStatus(
+  leg2Status: string | null | undefined
+): { status: string; duration: number } {
+  const status = (leg2Status || "").toLowerCase().trim();
+
+  switch (status) {
+    case "completed":
+      // Call was answered and ended normally
+      return { status: "completed", duration: -1 }; // -1 means use actual duration
+    case "busy":
+      // Caller received busy signal
+      return { status: "busy", duration: 0 };
+    case "no-answer":
+    case "noanswer":
+      // Call ended without being answered
+      return { status: "missed", duration: 0 };
+    case "failed":
+      // Call could not be completed (non-existent number, etc.)
+      return { status: "failed", duration: 0 };
+    case "canceled":
+      // Call was canceled while queued or ringing
+      return { status: "missed", duration: 0 };
+    case "":
+    case "null":
+    default:
+      // No second leg or unknown status = missed
+      return { status: "missed", duration: 0 };
+  }
+}
+
 function getExotelAuth() {
   const sid = process.env.EXOTEL_SID;
   const apiKey = process.env.EXOTEL_API_KEY;
@@ -32,25 +73,30 @@ function getExotelAuth() {
 }
 
 /**
- * Fetch the legs (sub-calls) for a given parent call.
- * Leg 0 = caller → ExoPhone ("From" leg)
- * Leg 1 = ExoPhone → agent ("To" leg - THIS tells us if the agent actually answered)
+ * Fetch call details to get Leg2Status.
  *
  * Uses the Exotel API with ?details=true to get leg information.
  * See: https://developer.exotel.com/api/make-a-call-api#call-details
  *
- * Returns the agent leg's status, or null if no legs found.
+ * Response structure includes:
+ * - Details.Leg1Status: Status of first leg (caller to ExoPhone)
+ * - Details.Leg2Status: Status of second leg (ExoPhone to agent) - THIS is what we need
+ * - Details.ConversationDuration: Duration of actual conversation
+ * - Details.Legs[]: Array of leg objects with OnCallDuration
+ *
+ * Returns the Leg2Status and duration, or null if fetch fails.
  */
-async function fetchCallLegs(
+async function fetchCallDetails(
   callSid: string,
   auth: { sid: string; authHeader: string }
 ): Promise<{
-  agentLegStatus: string;
-  agentLegDuration: number;
-  legs: any[];
+  leg2Status: string | null;
+  leg1Status: string | null;
+  conversationDuration: number;
+  details: any;
 } | null> {
   try {
-    // Fetch specific call with details=true to get Legs array
+    // Fetch specific call with details=true to get Leg2Status
     const url = `https://api.exotel.com/v1/Accounts/${auth.sid}/Calls/${callSid}?details=true`;
     const response = await fetch(url, {
       headers: { Authorization: auth.authHeader },
@@ -58,89 +104,43 @@ async function fetchCallLegs(
 
     if (!response.ok) {
       console.error(
-        `[Exotel Legs] Failed to fetch call ${callSid}: ${response.status}`
+        `[Exotel Details] Failed to fetch call ${callSid}: ${response.status}`
       );
       return null;
     }
 
     const result = await response.json();
-
-    console.log(
-      `[Exotel Legs] Raw response for ${callSid}:`,
-      JSON.stringify(result).slice(0, 1000)
-    );
-
-    // Parse legs from response
-    // Response format: { Call: { Sid, Status, ..., Legs: [...] } }
-    let legs: any[] = [];
     const callData = result?.Call || result;
 
-    if (Array.isArray(callData?.Legs)) {
-      legs = callData.Legs;
-    } else if (callData?.Legs?.Leg) {
-      // Handle { Legs: { Leg: {...} } } or { Legs: { Leg: [...] } }
-      legs = Array.isArray(callData.Legs.Leg)
-        ? callData.Legs.Leg
-        : [callData.Legs.Leg];
-    }
+    console.log(
+      `[Exotel Details] Raw response for ${callSid}:`,
+      JSON.stringify(callData).slice(0, 1500)
+    );
 
-    // Also handle nested { Leg: {...} } inside array
-    legs = legs.map((l: any) => l.Leg || l);
-
-    console.log(`[Exotel Legs] CallSid=${callSid} found ${legs.length} legs`);
-    if (legs.length > 0) {
-      console.log(
-        `[Exotel Legs] Leg data:`,
-        JSON.stringify(legs).slice(0, 800)
-      );
-    }
-
-    // No legs found = call never connected
-    if (legs.length === 0) {
-      return { agentLegStatus: "no-answer", agentLegDuration: 0, legs };
-    }
-
-    // For two-number connections:
-    // Leg Id=0 or first leg = "From" (caller to ExoPhone)
-    // Leg Id=1 or second leg = "To" (ExoPhone to agent)
-    // The agent leg status tells us if the agent actually answered
-
-    // Find the "To" leg (Id=1) or use the last leg
-    const agentLeg =
-      legs.find((l: any) => String(l.Id) === "1") || legs[legs.length - 1];
-
-    if (!agentLeg) {
-      // Only caller leg exists — agent was never dialed
-      return { agentLegStatus: "no-answer", agentLegDuration: 0, legs };
-    }
-
-    // Get status from the agent leg
-    const agentStatus = (
-      (agentLeg.Status || agentLeg.status || "") as string
-    ).toLowerCase();
-
-    // OnCallDuration is the duration the leg was on call (in seconds)
-    const agentDuration = parseInt(
-      String(
-        agentLeg.OnCallDuration ||
-          agentLeg.Duration ||
-          agentLeg.duration ||
-          "0"
-      ),
+    // Extract Details object which contains Leg1Status, Leg2Status, ConversationDuration
+    const details = callData?.Details || {};
+    const leg1Status = details.Leg1Status || null;
+    const leg2Status = details.Leg2Status || null;
+    const conversationDuration = parseInt(
+      String(details.ConversationDuration || "0"),
       10
     );
 
     console.log(
-      `[Exotel Legs] Agent leg: Status=${agentStatus}, OnCallDuration=${agentDuration}`
+      `[Exotel Details] CallSid=${callSid} Leg1Status="${leg1Status}" Leg2Status="${leg2Status}" ConversationDuration=${conversationDuration}`
     );
 
     return {
-      agentLegStatus: agentStatus,
-      agentLegDuration: agentDuration,
-      legs,
+      leg2Status,
+      leg1Status,
+      conversationDuration,
+      details,
     };
   } catch (error) {
-    console.error(`[Exotel Legs] Error fetching legs for ${callSid}:`, error);
+    console.error(
+      `[Exotel Details] Error fetching details for ${callSid}:`,
+      error
+    );
     return null;
   }
 }
@@ -215,31 +215,30 @@ export async function POST(request: NextRequest) {
     let rawResponse: Record<string, any> = { ...data };
 
     if (auth) {
-      const legData = await fetchCallLegs(callSid, auth);
+      const callDetails = await fetchCallDetails(callSid, auth);
 
-      if (legData) {
-        // Use the agent leg's status — this is the truth
-        const agentStatus = legData.agentLegStatus;
-        if (agentStatus === "completed") {
-          status = "completed";
-          displayDuration = legData.agentLegDuration;
-        } else if (agentStatus === "busy") {
-          status = "busy";
-          displayDuration = 0;
-        } else if (agentStatus === "failed" || agentStatus === "canceled") {
-          status = "failed";
-          displayDuration = 0;
+      if (callDetails && callDetails.leg2Status !== null) {
+        // Use Leg2Status from Details — this is the truth
+        // Map Leg 2 status according to Exotel documentation
+        const mappedStatus = mapLeg2StatusToDbStatus(callDetails.leg2Status);
+        status = mappedStatus.status;
+
+        // If status is completed, use conversation duration; otherwise 0
+        if (mappedStatus.duration === -1) {
+          displayDuration = callDetails.conversationDuration;
         } else {
-          // "no-answer", "ringing", empty, or only 1 leg = missed
-          status = "missed";
-          displayDuration = 0;
+          displayDuration = mappedStatus.duration;
         }
 
-        // Include legs in raw response for debugging
-        rawResponse = { ...data, _legs: legData.legs };
+        // Include details in raw response for debugging
+        rawResponse = {
+          ...data,
+          _details: callDetails.details,
+          _leg2Status: callDetails.leg2Status,
+        };
 
         console.log(
-          `[Exotel Webhook] CallSid=${callSid} agentLegStatus=${agentStatus} → status=${status} duration=${displayDuration}`
+          `[Exotel Webhook] CallSid=${callSid} Leg2Status="${callDetails.leg2Status}" → dbStatus="${status}" duration=${displayDuration}`
         );
       } else {
         // Fallback: couldn't fetch legs, use webhook data with ConversationDuration logic

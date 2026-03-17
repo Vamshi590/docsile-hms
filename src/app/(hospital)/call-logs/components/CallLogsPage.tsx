@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { format } from "date-fns"
 import {
   Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff,
-  Search, RefreshCw, Clock, ChevronDown,
+  Search, RefreshCw, Clock, Eye,
 } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/header"
@@ -12,6 +12,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { getCallLogs, getCallStats, syncExotelCalls } from "../actions"
 import { CallDetailSheet } from "./CallDetailSheet"
 import type { Database } from "@/lib/supabase/types"
@@ -263,20 +271,37 @@ export default function CallLogsPage() {
           </Select>
         </div>
 
-        {/* Call List */}
+        {/* Call Table */}
         {loading ? (
-          <div className="divide-y divide-gray-100">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-4 px-4 py-3.5">
-                <Skeleton className="h-9 w-9 rounded-full" />
-                <div className="flex-1 space-y-1.5">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-                <Skeleton className="h-5 w-16 rounded-full" />
-                <Skeleton className="h-4 w-12" />
-              </div>
-            ))}
+          <div className="p-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Direction</TableHead>
+                  <TableHead>Caller / Contact</TableHead>
+                  <TableHead>Phone Number</TableHead>
+                  <TableHead>Date & Time</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Notes</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-36" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                    <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-8 w-8 rounded" /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         ) : filteredCalls.length === 0 ? (
           <div className="text-center py-16">
@@ -285,72 +310,102 @@ export default function CallLogsPage() {
             <p className="text-gray-400 text-xs mt-1">Call data will appear here once Exotel is connected</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
-            {filteredCalls.map((call) => {
-              const config = STATUS_CONFIG[call.status] || STATUS_CONFIG.failed
-              const StatusIcon = config.icon
-              const isInbound = call.direction === "inbound"
-              const DirectionIcon = isInbound ? PhoneIncoming : PhoneOutgoing
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50/50">
+                <TableHead>Direction</TableHead>
+                <TableHead>Caller / Contact</TableHead>
+                <TableHead>Phone Number</TableHead>
+                <TableHead>Date & Time</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Notes</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredCalls.map((call) => {
+                const config = STATUS_CONFIG[call.status] || STATUS_CONFIG.failed
+                const isInbound = call.direction === "inbound"
+                const DirectionIcon = isInbound ? PhoneIncoming : PhoneOutgoing
 
-              return (
-                <button
-                  key={call.id}
-                  onClick={() => setSelectedCall(call)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
-                >
-                  {/* Direction & Status Icon */}
-                  <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 border ${config.bg}`}>
-                    <StatusIcon className={`h-4 w-4 ${config.color}`} />
-                  </div>
+                return (
+                  <TableRow key={call.id} className="cursor-pointer" onClick={() => setSelectedCall(call)}>
+                    {/* Direction */}
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <DirectionIcon className={`h-4 w-4 ${isInbound ? "text-blue-500" : "text-orange-500"}`} />
+                        <span className="text-sm capitalize">{call.direction}</span>
+                      </div>
+                    </TableCell>
 
-                  {/* Caller Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-800 truncate">
-                        {call.callerName || formatPhone(isInbound ? call.callFrom : call.callTo)}
+                    {/* Caller Name */}
+                    <TableCell>
+                      <span className="text-sm font-medium text-gray-800">
+                        {call.callerName || "—"}
                       </span>
-                      {call.callerName && (
-                        <span className="text-xs text-gray-400 truncate">
-                          {formatPhone(isInbound ? call.callFrom : call.callTo)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <DirectionIcon className={`h-3 w-3 ${isInbound ? "text-blue-500" : "text-orange-500"}`} />
-                      <span className="text-xs text-gray-500 capitalize">{call.direction}</span>
-                      {call.startTime && (
-                        <>
-                          <span className="text-gray-300">|</span>
-                          <span className="text-xs text-gray-400">
-                            {format(new Date(call.startTime), "hh:mm a")}
-                          </span>
-                        </>
-                      )}
-                      {call.notes && (
-                        <>
-                          <span className="text-gray-300">|</span>
-                          <span className="text-xs text-gray-400 truncate max-w-[120px]">{call.notes}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                    </TableCell>
 
-                  {/* Status Badge */}
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${config.bg} ${config.color}`}>
-                    {config.label}
-                  </span>
+                    {/* Phone Number */}
+                    <TableCell>
+                      <span className="text-sm text-gray-600">
+                        {formatPhone(isInbound ? call.callFrom : call.callTo)}
+                      </span>
+                    </TableCell>
 
-                  {/* Duration */}
-                  <div className="flex items-center gap-1 text-xs text-gray-500 shrink-0 w-16 justify-end">
-                    <Clock className="h-3 w-3" />
-                    <span>{formatDuration(call.duration)}</span>
-                  </div>
+                    {/* Date & Time */}
+                    <TableCell>
+                      {call.startTime ? (
+                        <div className="text-sm">
+                          <div className="text-gray-800">{format(new Date(call.startTime), "dd MMM yyyy")}</div>
+                          <div className="text-gray-500 text-xs">{format(new Date(call.startTime), "hh:mm a")}</div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </TableCell>
 
-                  <ChevronDown className="h-4 w-4 text-gray-300 -rotate-90 shrink-0" />
-                </button>
-              )
-            })}
-          </div>
+                    {/* Duration */}
+                    <TableCell>
+                      <div className="flex items-center gap-1 text-sm text-gray-600">
+                        <Clock className="h-3.5 w-3.5 text-gray-400" />
+                        <span>{formatDuration(call.duration)}</span>
+                      </div>
+                    </TableCell>
+
+                    {/* Status Badge */}
+                    <TableCell>
+                      <span className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-full border ${config.bg} ${config.color}`}>
+                        {config.label}
+                      </span>
+                    </TableCell>
+
+                    {/* Notes */}
+                    <TableCell>
+                      <span className="text-sm text-gray-500 truncate max-w-[150px] block">
+                        {call.notes || "—"}
+                      </span>
+                    </TableCell>
+
+                    {/* Action */}
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedCall(call)
+                        }}
+                      >
+                        <Eye className="h-4 w-4 text-gray-500" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
         )}
       </div>
 
