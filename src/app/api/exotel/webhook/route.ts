@@ -139,6 +139,8 @@ export async function POST(request: NextRequest) {
     const auth = getExotelAuth()
     let status: string
     let displayDuration: number
+    let conversationDuration = parseInt(data.ConversationDuration || data.conversationDuration || "0", 10)
+    let totalDuration = parseInt(data.Duration || data.duration || "0", 10)
     let rawResponse: Record<string, any> = { ...data }
 
     if (auth) {
@@ -168,22 +170,18 @@ export async function POST(request: NextRequest) {
         console.log(`[Exotel Webhook] CallSid=${callSid} agentLegStatus=${agentStatus} → status=${status} duration=${displayDuration}`)
       } else {
         // Fallback: couldn't fetch legs, use webhook data with ConversationDuration logic
-        const conversationDuration = parseInt(data.ConversationDuration || data.conversationDuration || "0", 10)
-        const totalDuration = parseInt(data.Duration || data.duration || "0", 10)
         const rawStatus = (data.Status || data.status || "").toLowerCase()
 
-        status = resolveCallStatusFallback(rawStatus, conversationDuration, totalDuration)
+        status = resolveCallStatus(rawStatus, conversationDuration, totalDuration)
         displayDuration = conversationDuration || totalDuration
 
         console.log(`[Exotel Webhook] CallSid=${callSid} no legs data, using fallback: status=${status} duration=${displayDuration}`)
       }
     } else {
       // No Exotel credentials configured, use fallback logic
-      const conversationDuration = parseInt(data.ConversationDuration || data.conversationDuration || "0", 10)
-      const totalDuration = parseInt(data.Duration || data.duration || "0", 10)
       const rawStatus = (data.Status || data.status || "").toLowerCase()
 
-      status = resolveCallStatusFallback(rawStatus, conversationDuration, totalDuration)
+      status = resolveCallStatus(rawStatus, conversationDuration, totalDuration)
       displayDuration = conversationDuration || totalDuration
 
       console.log(`[Exotel Webhook] CallSid=${callSid} no auth configured, using fallback: status=${status} duration=${displayDuration}`)
