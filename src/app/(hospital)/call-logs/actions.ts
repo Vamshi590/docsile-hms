@@ -133,111 +133,174 @@ export async function searchPatients(query: string) {
   return data
 }
 
+// ─── Exotel API Helper ───────────────────────────────────────────────────────
+
+function getExotelAuth() {
+  const sid = process.env.EXOTEL_SID
+  const apiKey = process.env.EXOTEL_API_KEY
+  const apiToken = process.env.EXOTEL_API_TOKEN
+  if (!sid || !apiKey || !apiToken) return null
+  return {
+    sid,
+    authHeader: `Basic ${Buffer.from(`${apiKey}:${apiToken}`).toString("base64")}`,
+  }
+}
+
+/**
+ * Fetch the legs (sub-calls) for a given parent call.
+ * Leg 1 = caller → ExoPhone (always "completed" if caller connected)
+ * Leg 2 = ExoPhone → agent (THIS tells us if the agent actually answered)
+ *
+ * Returns the agent leg's status, or null if no legs found.
+ */
+async function fetchCallLegs(callSid: string, auth: { sid: string; authHeader: string }): Promise<{
+  agentLegStatus: string
+  agentLegDuration: number
+  legs: any[]
+} | null> {
+  try {
+    const url = `https://api.exotel.com/v1/Accounts/${auth.sid}/Calls/${callSid}/Legs.json`
+    const response = await fetch(url, {
+      headers: { Authorization: auth.authHeader },
+    })
+
+    if (!response.ok) return null
+
+    const result = await response.json()
+
+    // Parse legs — can be { Legs: [...] } or { Call: { Legs: [...] } }
+    let legs: any[] = []
+    if (Array.isArray(result?.Legs)) {
+      legs = result.Legs
+    } else if (result?.Call?.Legs) {
+      legs = Array.isArray(result.Call.Legs) ? result.Call.Legs : [result.Call.Legs]
+    } else if (Array.isArray(result)) {
+      legs = result
+    }
+
+    // Also handle nested { Leg: {...} } inside array
+    legs = legs.map((l: any) => l.Leg || l)
+
+    console.log(`[Exotel Legs] CallSid=${callSid} found ${legs.length} legs`)
+    if (legs.length > 0) {
+      console.log(`[Exotel Legs] Leg data:`, JSON.stringify(legs).slice(0, 500))
+    }
+
+    // The agent leg is typically the second leg (index 1), or the one where the
+    // "To" is NOT the ExoPhone number. If only 1 leg, the agent was never dialed.
+    if (legs.length === 0) {
+      return { agentLegStatus: "no-answer", agentLegDuration: 0, legs }
+    }
+
+    if (legs.length === 1) {
+      // Only caller leg exists — agent was never dialed or call ended before connect
+      return { agentLegStatus: "no-answer", agentLegDuration: 0, legs }
+    }
+
+    // Second leg (or last leg) is the agent leg
+    const agentLeg = legs[legs.length - 1]
+    const agentStatus = ((agentLeg.Status || agentLeg.status || "") as string).toLowerCase()
+    const agentDuration = parseInt(String(agentLeg.Duration || agentLeg.duration || "0"), 10)
+
+    return { agentLegStatus: agentStatus, agentLegDuration: agentDuration, legs }
+  } catch (error) {
+    console.error(`[Exotel Legs] Error fetching legs for ${callSid}:`, error)
+    return null
+  }
+}
+
 // ─── Sync from Exotel API ────────────────────────────────────────────────────
 
 export async function syncExotelCalls() {
   await requireAuth()
 
-  const sid = process.env.EXOTEL_SID
-  const apiKey = process.env.EXOTEL_API_KEY
-  const apiToken = process.env.EXOTEL_API_TOKEN
-
-  if (!sid || !apiKey || !apiToken) {
+  const auth = getExotelAuth()
+  if (!auth) {
     return { success: false as const, error: "Exotel API credentials not configured" }
   }
 
   try {
     const supabase = await createClient()
-    const now = new Date()
-    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
 
-    // Use Exotel v2 API which returns detailed call data including conversation_duration
-    const params = new URLSearchParams({
-      "StartTime": threeDaysAgo.toISOString(),
-      "EndTime": now.toISOString(),
-      "PageSize": "200",
-      "SortBy": "DateCreated:desc",
+    // Fetch call list from v1 API
+    const v1Url = `https://api.exotel.com/v1/Accounts/${auth.sid}/Calls.json`
+    console.log("[Exotel Sync] Fetching calls:", v1Url)
+
+    const response = await fetch(v1Url, {
+      headers: { Authorization: auth.authHeader },
     })
 
-    const authHeader = Buffer.from(`${apiKey}:${apiToken}`).toString("base64")
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error("[Exotel Sync] API error:", response.status, errorText)
+      return { success: false as const, error: `Exotel API error: ${response.status}` }
+    }
 
-    // Try v2 API first
+    const result = await response.json()
+
+    // Parse calls list
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let calls: any[] = []
-    let apiVersion = "v2"
-
-    const v2Url = `https://api.exotel.com/v2/accounts/${sid}/calls?${params}`
-    console.log("[Exotel Sync] Fetching v2:", v2Url)
-
-    let response = await fetch(v2Url, {
-      headers: { Authorization: `Basic ${authHeader}` },
-    })
-
-    if (response.ok) {
-      const result = await response.json()
-      console.log("[Exotel Sync] v2 response keys:", Object.keys(result))
-      // v2 returns { response: [...] } or { data: [...] }
-      calls = result?.response || result?.data || []
-    } else {
-      // Fallback to v1 API
-      apiVersion = "v1"
-      const v1Url = `https://api.exotel.com/v1/Accounts/${sid}/Calls.json`
-      console.log("[Exotel Sync] v2 failed, trying v1:", v1Url)
-
-      response = await fetch(v1Url, {
-        headers: { Authorization: `Basic ${authHeader}` },
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error("[Exotel Sync] API error:", response.status, errorText)
-        return { success: false as const, error: `Exotel API error: ${response.status}` }
-      }
-
-      const result = await response.json()
-      console.log("[Exotel Sync] v1 response keys:", Object.keys(result))
-      // v1 can return { Calls: [...] } or { Calls: { Call: [...] } }
-      const rawCalls = result?.Calls
-      if (Array.isArray(rawCalls)) {
-        calls = rawCalls.map((c: any) => c.Call || c)
-      } else if (rawCalls?.Call) {
-        calls = Array.isArray(rawCalls.Call) ? rawCalls.Call : [rawCalls.Call]
-      }
+    const rawCalls = result?.Calls
+    if (Array.isArray(rawCalls)) {
+      calls = rawCalls.map((c: any) => c.Call || c)
+    } else if (rawCalls?.Call) {
+      calls = Array.isArray(rawCalls.Call) ? rawCalls.Call : [rawCalls.Call]
     }
 
-    console.log(`[Exotel Sync] Found ${calls.length} calls via ${apiVersion}`)
-    if (calls.length > 0) {
-      console.log("[Exotel Sync] Sample call keys:", Object.keys(calls[0]))
-      console.log("[Exotel Sync] Sample call:", JSON.stringify(calls[0]).slice(0, 500))
-    }
+    // Filter to only parent calls (ParentCallSid is empty)
+    calls = calls.filter((c: any) => !c.ParentCallSid)
+
+    console.log(`[Exotel Sync] Found ${calls.length} parent calls`)
 
     let synced = 0
     let updated = 0
 
     for (const call of calls) {
-      // Handle both v1 (PascalCase) and v2 (snake_case) field names
-      const callSid = (call.Sid || call.sid || call.CallSid) as string
+      const callSid = call.Sid as string
       if (!callSid) continue
 
-      const callFrom = (call.From || call.from || call.CallFrom || "") as string
-      const callTo = (call.To || call.to || call.CallTo || "") as string
-      const rawDirection = ((call.Direction || call.direction || "inbound") as string).toLowerCase()
-      const direction = rawDirection.includes("out") ? "outbound" : "inbound"
+      const callFrom = (call.From || "") as string
+      const callTo = (call.To || "") as string
+      const direction = ((call.Direction || "inbound") as string).toLowerCase().includes("out") ? "outbound" : "inbound"
+      const startTimeRaw = (call.StartTime || call.DateCreated) as string | null
+      const endTimeRaw = call.EndTime as string | null
+      const recordingUrl = (call.RecordingUrl || null) as string | null
 
-      // Duration fields
-      const totalDuration = parseInt(String(call.Duration || call.duration || "0"), 10)
-      const conversationDuration = parseInt(String(call.ConversationDuration || call.conversation_duration || "0"), 10)
+      // ── Fetch legs to determine the REAL call outcome ──
+      const legData = await fetchCallLegs(callSid, auth)
 
-      // Status: use conversation_duration to determine real outcome
-      const rawStatus = ((call.Status || call.status || "") as string).toLowerCase()
-      const status = resolveCallStatus(rawStatus, conversationDuration, totalDuration)
+      let status: string
+      let displayDuration: number
 
-      const startTimeRaw = (call.StartTime || call.start_time || call.DateCreated || call.date_created) as string | null
-      const endTimeRaw = (call.EndTime || call.end_time) as string | null
-      const recordingUrl = (call.RecordingUrl || call.recording_url) as string | null
+      if (legData) {
+        // Use the agent leg's status — this is the truth
+        const agentStatus = legData.agentLegStatus
+        if (agentStatus === "completed") {
+          status = "completed"
+          displayDuration = legData.agentLegDuration
+        } else if (agentStatus === "busy") {
+          status = "busy"
+          displayDuration = 0
+        } else if (agentStatus === "failed" || agentStatus === "canceled") {
+          status = "failed"
+          displayDuration = 0
+        } else {
+          // "no-answer", "ringing", empty, or only 1 leg = missed
+          status = "missed"
+          displayDuration = 0
+        }
 
-      // Use conversation duration (actual talk time) as the displayed duration
-      const displayDuration = conversationDuration || totalDuration
+        console.log(`[Exotel Sync] CallSid=${callSid} agentLegStatus=${agentStatus} → status=${status} duration=${displayDuration}`)
+      } else {
+        // Fallback: couldn't fetch legs, use parent call data
+        status = "missed"
+        displayDuration = 0
+        console.log(`[Exotel Sync] CallSid=${callSid} no legs data, defaulting to missed`)
+      }
+
+      // Build raw response with legs included
+      const rawResponse = { ...call, _legs: legData?.legs || [] }
 
       // Try to match caller to patient
       const phoneToSearch = direction === "inbound" ? callFrom : callTo
@@ -261,33 +324,27 @@ export async function syncExotelCalls() {
         }
       }
 
-      // Check if already exists
+      // Upsert
       const { data: existing } = await supabase
         .from("CallLog")
-        .select("id, status")
+        .select("id")
         .eq("exotelCallSid", callSid)
         .maybeSingle()
 
       const nowStr = new Date().toISOString()
 
       if (existing) {
-        // Update if the new status is more accurate (final vs intermediate)
-        const isFinal = ["completed", "missed", "busy", "failed"].includes(status)
-        const existingIsFinal = ["completed", "missed", "busy", "failed"].includes(existing.status)
-
-        if (isFinal && !existingIsFinal) {
-          await supabase.from("CallLog").update({
-            status,
-            duration: displayDuration,
-            endTime: endTimeRaw ? new Date(endTimeRaw).toISOString() : null,
-            recordingUrl,
-            callerName,
-            patientId: patientIdVal,
-            rawResponse: call,
-            updatedAt: nowStr,
-          }).eq("id", existing.id)
-          updated++
-        }
+        await supabase.from("CallLog").update({
+          status,
+          duration: displayDuration,
+          endTime: endTimeRaw ? new Date(endTimeRaw).toISOString() : null,
+          recordingUrl,
+          callerName,
+          patientId: patientIdVal,
+          rawResponse,
+          updatedAt: nowStr,
+        }).eq("id", existing.id)
+        updated++
       } else {
         await supabase.from("CallLog").insert({
           exotelCallSid: callSid,
@@ -301,7 +358,7 @@ export async function syncExotelCalls() {
           recordingUrl,
           callerName,
           patientId: patientIdVal,
-          rawResponse: call,
+          rawResponse,
           createdAt: nowStr,
           updatedAt: nowStr,
         })
@@ -314,34 +371,5 @@ export async function syncExotelCalls() {
   } catch (error) {
     console.error("[Exotel Sync] Error:", error)
     return { success: false as const, error: "Failed to sync calls from Exotel" }
-  }
-}
-
-/**
- * Resolve actual call outcome.
- * Exotel "Status: completed" = call flow finished, NOT that agent answered.
- * ConversationDuration > 0 means someone actually picked up and talked.
- */
-function resolveCallStatus(rawStatus: string, conversationDuration: number, totalDuration: number): string {
-  switch (rawStatus) {
-    case "busy":
-      return "busy"
-    case "no-answer":
-    case "noanswer":
-      return "missed"
-    case "failed":
-    case "canceled":
-      return "failed"
-    case "completed":
-      // "completed" = call flow finished. Check actual talk time.
-      if (conversationDuration > 0) return "completed"
-      return "missed"
-    case "in-progress":
-    case "ringing":
-      return "ringing"
-    default:
-      if (totalDuration > 0 && conversationDuration === 0) return "missed"
-      if (conversationDuration > 0) return "completed"
-      return "ringing"
   }
 }

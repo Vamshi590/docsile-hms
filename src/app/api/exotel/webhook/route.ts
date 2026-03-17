@@ -11,10 +11,86 @@ import { createClient } from "@/lib/supabase/server"
  *   CallSid, Status (completed/no-answer/busy/failed),
  *   ConversationDuration, Duration, RecordingUrl, StartTime, EndTime, etc.
  *
- * Key insight: Exotel's top-level "Status" = "completed" means the call flow
- * finished, NOT that someone answered. We use "ConversationDuration" to detect
- * if the agent actually picked up (0 = nobody answered).
+ * Key insight: We fetch call legs to determine the TRUE call outcome.
+ * Leg 1 = caller → ExoPhone (always "completed" if caller connected)
+ * Leg 2 = ExoPhone → agent (THIS tells us if the agent actually answered)
  */
+
+// ─── Exotel API Helper ───────────────────────────────────────────────────────
+
+function getExotelAuth() {
+  const sid = process.env.EXOTEL_SID
+  const apiKey = process.env.EXOTEL_API_KEY
+  const apiToken = process.env.EXOTEL_API_TOKEN
+  if (!sid || !apiKey || !apiToken) return null
+  return {
+    sid,
+    authHeader: `Basic ${Buffer.from(`${apiKey}:${apiToken}`).toString("base64")}`,
+  }
+}
+
+/**
+ * Fetch the legs (sub-calls) for a given parent call.
+ * Leg 1 = caller → ExoPhone (always "completed" if caller connected)
+ * Leg 2 = ExoPhone → agent (THIS tells us if the agent actually answered)
+ *
+ * Returns the agent leg's status, or null if no legs found.
+ */
+async function fetchCallLegs(callSid: string, auth: { sid: string; authHeader: string }): Promise<{
+  agentLegStatus: string
+  agentLegDuration: number
+  legs: any[]
+} | null> {
+  try {
+    const url = `https://api.exotel.com/v1/Accounts/${auth.sid}/Calls/${callSid}/Legs.json`
+    const response = await fetch(url, {
+      headers: { Authorization: auth.authHeader },
+    })
+
+    if (!response.ok) return null
+
+    const result = await response.json()
+
+    // Parse legs — can be { Legs: [...] } or { Call: { Legs: [...] } }
+    let legs: any[] = []
+    if (Array.isArray(result?.Legs)) {
+      legs = result.Legs
+    } else if (result?.Call?.Legs) {
+      legs = Array.isArray(result.Call.Legs) ? result.Call.Legs : [result.Call.Legs]
+    } else if (Array.isArray(result)) {
+      legs = result
+    }
+
+    // Also handle nested { Leg: {...} } inside array
+    legs = legs.map((l: any) => l.Leg || l)
+
+    console.log(`[Exotel Legs] CallSid=${callSid} found ${legs.length} legs`)
+    if (legs.length > 0) {
+      console.log(`[Exotel Legs] Leg data:`, JSON.stringify(legs).slice(0, 500))
+    }
+
+    // The agent leg is typically the second leg (index 1), or the one where the
+    // "To" is NOT the ExoPhone number. If only 1 leg, the agent was never dialed.
+    if (legs.length === 0) {
+      return { agentLegStatus: "no-answer", agentLegDuration: 0, legs }
+    }
+
+    if (legs.length === 1) {
+      // Only caller leg exists — agent was never dialed or call ended before connect
+      return { agentLegStatus: "no-answer", agentLegDuration: 0, legs }
+    }
+
+    // Second leg (or last leg) is the agent leg
+    const agentLeg = legs[legs.length - 1]
+    const agentStatus = ((agentLeg.Status || agentLeg.status || "") as string).toLowerCase()
+    const agentDuration = parseInt(String(agentLeg.Duration || agentLeg.duration || "0"), 10)
+
+    return { agentLegStatus: agentStatus, agentLegDuration: agentDuration, legs }
+  } catch (error) {
+    console.error(`[Exotel Legs] Error fetching legs for ${callSid}:`, error)
+    return null
+  }
+}
 export async function POST(request: NextRequest) {
   try {
     const webhookToken = request.headers.get("x-exotel-token") ||
@@ -56,16 +132,62 @@ export async function POST(request: NextRequest) {
     const endTime = data.EndTime || data.endTime || null
     const recordingUrl = data.RecordingUrl || data.recordingUrl || null
 
-    // Duration fields: Exotel sends both "Duration" (total) and "ConversationDuration" (talk time)
-    const totalDuration = parseInt(data.Duration || data.duration || "0", 10)
-    const conversationDuration = parseInt(data.ConversationDuration || data.conversationDuration || "0", 10)
-
-    // Determine the real call outcome
-    const rawStatus = (data.Status || data.status || "").toLowerCase()
-    const status = resolveCallStatus(rawStatus, conversationDuration, totalDuration)
-
     const supabase = await createClient()
     const now = new Date().toISOString()
+
+    // ── Fetch call legs to determine the REAL call outcome ──
+    const auth = getExotelAuth()
+    let status: string
+    let displayDuration: number
+    let rawResponse: Record<string, any> = { ...data }
+
+    if (auth) {
+      const legData = await fetchCallLegs(callSid, auth)
+
+      if (legData) {
+        // Use the agent leg's status — this is the truth
+        const agentStatus = legData.agentLegStatus
+        if (agentStatus === "completed") {
+          status = "completed"
+          displayDuration = legData.agentLegDuration
+        } else if (agentStatus === "busy") {
+          status = "busy"
+          displayDuration = 0
+        } else if (agentStatus === "failed" || agentStatus === "canceled") {
+          status = "failed"
+          displayDuration = 0
+        } else {
+          // "no-answer", "ringing", empty, or only 1 leg = missed
+          status = "missed"
+          displayDuration = 0
+        }
+
+        // Include legs in raw response for debugging
+        rawResponse = { ...data, _legs: legData.legs }
+
+        console.log(`[Exotel Webhook] CallSid=${callSid} agentLegStatus=${agentStatus} → status=${status} duration=${displayDuration}`)
+      } else {
+        // Fallback: couldn't fetch legs, use webhook data with ConversationDuration logic
+        const conversationDuration = parseInt(data.ConversationDuration || data.conversationDuration || "0", 10)
+        const totalDuration = parseInt(data.Duration || data.duration || "0", 10)
+        const rawStatus = (data.Status || data.status || "").toLowerCase()
+
+        status = resolveCallStatusFallback(rawStatus, conversationDuration, totalDuration)
+        displayDuration = conversationDuration || totalDuration
+
+        console.log(`[Exotel Webhook] CallSid=${callSid} no legs data, using fallback: status=${status} duration=${displayDuration}`)
+      }
+    } else {
+      // No Exotel credentials configured, use fallback logic
+      const conversationDuration = parseInt(data.ConversationDuration || data.conversationDuration || "0", 10)
+      const totalDuration = parseInt(data.Duration || data.duration || "0", 10)
+      const rawStatus = (data.Status || data.status || "").toLowerCase()
+
+      status = resolveCallStatusFallback(rawStatus, conversationDuration, totalDuration)
+      displayDuration = conversationDuration || totalDuration
+
+      console.log(`[Exotel Webhook] CallSid=${callSid} no auth configured, using fallback: status=${status} duration=${displayDuration}`)
+    }
 
     // Try to match caller to a patient
     let callerName: string | null = null
