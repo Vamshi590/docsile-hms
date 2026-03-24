@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { format } from "date-fns"
 import {
   Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff,
-  Search, RefreshCw, Clock, Eye,
+  Search, RefreshCw, Clock, Eye, BarChart3,
 } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/header"
@@ -12,6 +12,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Table,
   TableBody,
@@ -94,6 +100,7 @@ export default function CallLogsPage() {
   const [stats, setStats] = useState<CallStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [showStatsDialog, setShowStatsDialog] = useState(false)
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("today")
   const [customStart, setCustomStart] = useState("")
@@ -150,91 +157,70 @@ export default function CallLogsPage() {
     })
   }, [calls, searchQuery])
 
-  const statCards = [
-    { label: "Total Calls", value: stats?.total ?? 0, color: "text-gray-800", bg: "bg-white" },
-    { label: "Answered", value: stats?.completed ?? 0, color: "text-green-700", bg: "bg-green-50" },
-    { label: "Missed", value: stats?.missed ?? 0, color: "text-red-600", bg: "bg-red-50" },
-    { label: "Avg Duration", value: formatDuration(stats?.avgDuration ?? 0), color: "text-blue-700", bg: "bg-blue-50" },
-  ]
-
   return (
     <div className="space-y-0">
       <PageHeader title="Call Logs" description="Reception call management">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleSync}
-          disabled={syncing}
-        >
-          <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
-          {syncing ? "Syncing..." : "Sync Calls"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowStatsDialog(true)}
+          >
+            <BarChart3 className="h-4 w-4 mr-1.5" />
+            Stats
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSync}
+            disabled={syncing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing..." : "Sync Calls"}
+          </Button>
+        </div>
       </PageHeader>
 
-      {/* Time filter tabs */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6 mt-4">
-        <div className="flex flex-wrap gap-3 items-center">
-          {(["today", "week", "month", "custom"] as TimeFilter[]).map((filter) => (
+      {/* Sub Header with Date Filter */}
+      <div className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border -mx-6">
+        <div className="bg-muted rounded-lg p-0.5 flex">
+          {(["today", "week", "month", "custom"] as TimeFilter[]).map((f) => (
             <button
-              key={filter}
-              onClick={() => setTimeFilter(filter)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                timeFilter === filter
-                  ? "bg-primary text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              key={f}
+              onClick={() => setTimeFilter(f)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 ${
+                timeFilter === f
+                  ? "bg-white shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {filter === "today" ? "Today" : filter === "week" ? "This Week" : filter === "month" ? "This Month" : "Custom Range"}
+              {f === "today" ? "Today" : f === "week" ? "7 Days" : f === "month" ? "30 Days" : "Custom"}
             </button>
           ))}
-
-          {timeFilter === "custom" && (
-            <div className="flex gap-2 items-center">
-              <Input
-                type="date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="w-[150px] h-9 text-sm"
-              />
-              <span className="text-sm text-gray-500">to</span>
-              <Input
-                type="date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="w-[150px] h-9 text-sm"
-              />
-              <Button size="sm" onClick={fetchData}>
-                Apply
-              </Button>
-            </div>
-          )}
         </div>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {statCards.map((card) => (
-          <div
-            key={card.label}
-            className={`${card.bg} rounded-xl shadow-sm border border-gray-100 p-4`}
-          >
-            {loading ? (
-              <>
-                <Skeleton className="h-8 w-16 mb-1" />
-                <Skeleton className="h-4 w-20" />
-              </>
-            ) : (
-              <>
-                <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
-                <div className="text-sm text-gray-500 mt-0.5">{card.label}</div>
-              </>
-            )}
-          </div>
-        ))}
+        {timeFilter === "custom" && (
+          <>
+            <label className="text-xs font-medium text-muted-foreground">From:</label>
+            <input
+              type="date"
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+              className="px-2.5 py-1.5 border border-border rounded-md text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+            <label className="text-xs font-medium text-muted-foreground">To:</label>
+            <input
+              type="date"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              className="px-2.5 py-1.5 border border-border rounded-md text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+          </>
+        )}
       </div>
 
       {/* Call List */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mt-4">
         {/* Filters */}
         <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
@@ -420,6 +406,93 @@ export default function CallLogsPage() {
           }}
         />
       )}
+
+      {/* Stats Dialog */}
+      <Dialog open={showStatsDialog} onOpenChange={setShowStatsDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Call Statistics</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                <div className="text-2xl font-bold text-gray-800">{stats?.total ?? 0}</div>
+                <div className="text-xs text-gray-500">Total Calls</div>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                <div className="text-2xl font-bold text-blue-700">{formatDuration(stats?.avgDuration ?? 0)}</div>
+                <div className="text-xs text-gray-500">Avg Duration</div>
+              </div>
+            </div>
+
+            {/* Status Breakdown */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-gray-700">By Status</h4>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg border border-green-100">
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-green-600" />
+                    <span className="text-sm text-gray-700">Answered</span>
+                  </div>
+                  <span className="text-sm font-semibold text-green-700">{stats?.completed ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-red-50 rounded-lg border border-red-100">
+                  <div className="flex items-center gap-2">
+                    <PhoneMissed className="h-4 w-4 text-red-600" />
+                    <span className="text-sm text-gray-700">Missed</span>
+                  </div>
+                  <span className="text-sm font-semibold text-red-600">{stats?.missed ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-amber-50 rounded-lg border border-amber-100">
+                  <div className="flex items-center gap-2">
+                    <PhoneOff className="h-4 w-4 text-amber-600" />
+                    <span className="text-sm text-gray-700">Busy</span>
+                  </div>
+                  <span className="text-sm font-semibold text-amber-600">{stats?.busy ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <PhoneOff className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm text-gray-700">Failed</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-600">{stats?.failed ?? 0}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Direction Breakdown */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-gray-700">By Direction</h4>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center justify-between p-2 bg-blue-50 rounded-lg border border-blue-100">
+                  <div className="flex items-center gap-2">
+                    <PhoneIncoming className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm text-gray-700">Inbound</span>
+                  </div>
+                  <span className="text-sm font-semibold text-blue-600">{stats?.inbound ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-orange-50 rounded-lg border border-orange-100">
+                  <div className="flex items-center gap-2">
+                    <PhoneOutgoing className="h-4 w-4 text-orange-500" />
+                    <span className="text-sm text-gray-700">Outbound</span>
+                  </div>
+                  <span className="text-sm font-semibold text-orange-600">{stats?.outbound ?? 0}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Total Duration */}
+            <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-100">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-purple-600" />
+                <span className="text-sm text-gray-700">Total Talk Time</span>
+              </div>
+              <span className="text-sm font-semibold text-purple-700">{formatDuration(stats?.totalDuration ?? 0)}</span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
