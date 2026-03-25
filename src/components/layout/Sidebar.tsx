@@ -48,9 +48,8 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: "Clinical",
     items: [
-      { href: "/call-logs", icon: Phone, label: "Call Logs" },
       { href: "/patients", icon: Users, label: "Patients" },
-      { href: "/workup", icon: Eye, label: "Workup" },
+      { href: "/workup", icon: Eye, label: "Refraction" },
       { href: "/doctor", icon: Stethoscope, label: "Doctor" },
       { href: "/inpatients", icon: BedDouble, label: "In-Patients" },
     ],
@@ -61,6 +60,7 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { href: "/pharmacy", icon: Pill, label: "Pharmacy" },
       { href: "/optical", icon: Glasses, label: "Optical" },
       { href: "/labs", icon: FlaskConical, label: "Labs" },
+      { href: "/call-logs", icon: Phone, label: "Call Logs" },
     ],
   },
   {

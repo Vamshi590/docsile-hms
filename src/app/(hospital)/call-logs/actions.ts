@@ -4,6 +4,162 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 
+// ─── Call Analytics Types ────────────────────────────────────────────────────
+
+export interface CallAnalyticsData {
+  // KPIs
+  totalCalls: number
+  answeredCalls: number
+  missedCalls: number
+  busyCalls: number
+  failedCalls: number
+  answerRate: number
+  missedRate: number
+  avgDuration: number
+  totalTalkTime: number
+  inboundCalls: number
+  outboundCalls: number
+  linkedCalls: number
+  // Changes vs previous period
+  totalChange: number
+  answeredChange: number
+  missedChange: number
+  // Hourly heatmap (0-23 → count per status)
+  hourlyDistribution: { hour: number; answered: number; missed: number; busy: number; total: number }[]
+  // Daily trend
+  dailyTrend: { date: string; total: number; answered: number; missed: number; avgDuration: number }[]
+  // Top callers
+  topCallers: { phone: string; name: string | null; calls: number; answered: number; totalDuration: number }[]
+  // Peak hours
+  peakHour: number
+  quietHour: number
+  // Duration buckets
+  durationBuckets: { label: string; count: number }[]
+}
+
+// ─── Get Call Analytics ──────────────────────────────────────────────────────
+
+export async function getCallAnalytics(startDate: string, endDate: string): Promise<CallAnalyticsData> {
+  await requireAuth()
+  const supabase = await createClient()
+
+  const from = new Date(startDate).toISOString()
+  const to = new Date(endDate + "T23:59:59").toISOString()
+
+  // Previous period for comparison
+  const diffMs = new Date(endDate).getTime() - new Date(startDate).getTime() + 86400000
+  const prevEnd = new Date(new Date(startDate).getTime() - 1)
+  const prevStart = new Date(prevEnd.getTime() - diffMs + 1)
+  const prevFrom = prevStart.toISOString()
+  const prevTo = new Date(prevEnd.getTime() + 86400000 - 1).toISOString()
+
+  // Fetch current + previous period in parallel
+  const [currentRes, prevRes] = await Promise.all([
+    supabase.from("CallLog").select("*").gte("startTime", from).lte("startTime", to).order("startTime", { ascending: true }),
+    supabase.from("CallLog").select("status").gte("startTime", prevFrom).lte("startTime", prevTo),
+  ])
+
+  const calls = currentRes.data ?? []
+  const prevCalls = prevRes.data ?? []
+
+  // ── KPIs ──
+  const totalCalls = calls.length
+  const answeredCalls = calls.filter(c => c.status === "completed").length
+  const missedCalls = calls.filter(c => c.status === "missed").length
+  const busyCalls = calls.filter(c => c.status === "busy").length
+  const failedCalls = calls.filter(c => c.status === "failed").length
+  const inboundCalls = calls.filter(c => c.direction === "inbound").length
+  const outboundCalls = calls.filter(c => c.direction === "outbound").length
+  const linkedCalls = calls.filter(c => c.patientId).length
+
+  const totalDuration = calls.reduce((s, c) => s + (c.duration || 0), 0)
+  const answerRate = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0
+  const missedRate = totalCalls > 0 ? Math.round((missedCalls / totalCalls) * 100) : 0
+  const avgDuration = answeredCalls > 0 ? Math.round(totalDuration / answeredCalls) : 0
+
+  // ── Changes ──
+  const prevTotal = prevCalls.length
+  const prevAnswered = prevCalls.filter(c => c.status === "completed").length
+  const prevMissed = prevCalls.filter(c => c.status === "missed").length
+  const totalChange = prevTotal > 0 ? Math.round(((totalCalls - prevTotal) / prevTotal) * 100) : 0
+  const answeredChange = prevAnswered > 0 ? Math.round(((answeredCalls - prevAnswered) / prevAnswered) * 100) : 0
+  const missedChange = prevMissed > 0 ? Math.round(((missedCalls - prevMissed) / prevMissed) * 100) : 0
+
+  // ── Hourly distribution ──
+  const hourlyMap = Array.from({ length: 24 }, (_, h) => ({ hour: h, answered: 0, missed: 0, busy: 0, total: 0 }))
+  for (const c of calls) {
+    if (!c.startTime) continue
+    const h = new Date(c.startTime).getHours()
+    hourlyMap[h].total++
+    if (c.status === "completed") hourlyMap[h].answered++
+    else if (c.status === "missed") hourlyMap[h].missed++
+    else if (c.status === "busy") hourlyMap[h].busy++
+  }
+
+  const peakHour = hourlyMap.reduce((max, h) => h.total > max.total ? h : max, hourlyMap[0]).hour
+  const activeHours = hourlyMap.filter(h => h.total > 0)
+  const quietHour = activeHours.length > 0
+    ? activeHours.reduce((min, h) => h.total < min.total ? h : min, activeHours[0]).hour
+    : 0
+
+  // ── Daily trend ──
+  const dailyMap = new Map<string, { total: number; answered: number; missed: number; duration: number; answeredCount: number }>()
+  for (const c of calls) {
+    if (!c.startTime) continue
+    const day = c.startTime.split("T")[0]
+    const existing = dailyMap.get(day) ?? { total: 0, answered: 0, missed: 0, duration: 0, answeredCount: 0 }
+    existing.total++
+    if (c.status === "completed") { existing.answered++; existing.answeredCount++; existing.duration += c.duration || 0 }
+    else if (c.status === "missed") existing.missed++
+    dailyMap.set(day, existing)
+  }
+  const dailyTrend = Array.from(dailyMap.entries())
+    .map(([date, d]) => ({ date, total: d.total, answered: d.answered, missed: d.missed, avgDuration: d.answeredCount > 0 ? Math.round(d.duration / d.answeredCount) : 0 }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  // ── Top callers ──
+  const callerMap = new Map<string, { name: string | null; calls: number; answered: number; totalDuration: number }>()
+  for (const c of calls) {
+    const phone = c.direction === "inbound" ? c.callFrom : c.callTo
+    if (!phone) continue
+    const digits = phone.replace(/\D/g, "").slice(-10)
+    const existing = callerMap.get(digits) ?? { name: c.callerName, calls: 0, answered: 0, totalDuration: 0 }
+    existing.calls++
+    if (!existing.name && c.callerName) existing.name = c.callerName
+    if (c.status === "completed") { existing.answered++; existing.totalDuration += c.duration || 0 }
+    callerMap.set(digits, existing)
+  }
+  const topCallers = Array.from(callerMap.entries())
+    .map(([phone, d]) => ({ phone, ...d }))
+    .sort((a, b) => b.calls - a.calls)
+    .slice(0, 10)
+
+  // ── Duration buckets ──
+  const buckets = [
+    { label: "< 30s", min: 0, max: 30, count: 0 },
+    { label: "30s–1m", min: 30, max: 60, count: 0 },
+    { label: "1–2m", min: 60, max: 120, count: 0 },
+    { label: "2–5m", min: 120, max: 300, count: 0 },
+    { label: "5–10m", min: 300, max: 600, count: 0 },
+    { label: "10m+", min: 600, max: Infinity, count: 0 },
+  ]
+  for (const c of calls) {
+    if (c.status !== "completed" || !c.duration) continue
+    const bucket = buckets.find(b => c.duration >= b.min && c.duration < b.max)
+    if (bucket) bucket.count++
+  }
+
+  return {
+    totalCalls, answeredCalls, missedCalls, busyCalls, failedCalls,
+    answerRate, missedRate, avgDuration, totalTalkTime: totalDuration,
+    inboundCalls, outboundCalls, linkedCalls,
+    totalChange, answeredChange, missedChange,
+    hourlyDistribution: hourlyMap, dailyTrend, topCallers,
+    peakHour, quietHour,
+    durationBuckets: buckets.map(({ label, count }) => ({ label, count })),
+  }
+}
+
 // ─── Fetch Call Logs ─────────────────────────────────────────────────────────
 
 export async function getCallLogs(filters: {
@@ -306,121 +462,139 @@ export async function syncExotelCalls() {
 
     console.log(`[Exotel Sync] Found ${calls.length} parent calls`)
 
-    let synced = 0
-    let updated = 0
+    if (calls.length === 0) {
+      return { success: true as const, synced: 0, message: "No calls to sync" }
+    }
 
-    for (const call of calls) {
-      const callSid = call.Sid as string
-      if (!callSid) continue
+    // ── Step 1: Filter out already-synced calls early (single DB query) ──
+    const allSids = calls.map((c: any) => c.Sid as string).filter(Boolean)
+    const { data: existingLogs } = await supabase
+      .from("CallLog")
+      .select("exotelCallSid")
+      .in("exotelCallSid", allSids)
 
-      const callFrom = (call.From || "") as string
-      const callTo = (call.To || "") as string
-      const direction = ((call.Direction || "inbound") as string).toLowerCase().includes("out") ? "outbound" : "inbound"
-      const startTimeRaw = (call.StartTime || call.DateCreated) as string | null
-      const endTimeRaw = call.EndTime as string | null
-      const recordingUrl = (call.RecordingUrl || null) as string | null
+    const existingSids = new Set((existingLogs || []).map((l) => l.exotelCallSid))
+    const newCalls = calls.filter((c: any) => c.Sid && !existingSids.has(c.Sid))
 
-      // ── Parse Details from the call data (already included with details=true) ──
-      // Details contains Leg2Status which tells us the true outcome
-      let callDetails = parseDetailsFromCallData(call)
+    console.log(`[Exotel Sync] ${calls.length} from Exotel, ${existingSids.size} already synced, ${newCalls.length} new`)
 
-      // If no details in the bulk response, fetch individually
-      if (!callDetails) {
-        callDetails = await fetchCallDetails(callSid, auth)
-      }
+    if (newCalls.length === 0) {
+      revalidatePath("/call-logs")
+      return { success: true as const, synced: 0, message: "All calls already synced" }
+    }
 
-      let status: string
-      let displayDuration: number
+    // ── Step 2: Parse new call data (CPU only, no I/O) ──
+    const parsedCalls = newCalls
+      .map((call: any) => {
+        const callSid = call.Sid as string
+        const callFrom = (call.From || "") as string
+        const callTo = (call.To || "") as string
+        const direction = ((call.Direction || "inbound") as string).toLowerCase().includes("out") ? "outbound" : "inbound"
+        const startTimeRaw = (call.StartTime || call.DateCreated) as string | null
+        const endTimeRaw = call.EndTime as string | null
+        const recordingUrl = (call.RecordingUrl || null) as string | null
 
-      if (callDetails && callDetails.leg2Status !== null) {
-        // Use Leg2Status from Details — this is the truth
-        const mappedStatus = mapLeg2StatusToDbStatus(callDetails.leg2Status)
-        status = mappedStatus.status
+        const callDetails = parseDetailsFromCallData(call)
 
-        // If status is completed, use conversation duration; otherwise 0
-        if (mappedStatus.duration === -1) {
-          displayDuration = callDetails.conversationDuration
+        let status: string
+        let displayDuration: number
+
+        if (callDetails && callDetails.leg2Status !== null) {
+          const mappedStatus = mapLeg2StatusToDbStatus(callDetails.leg2Status)
+          status = mappedStatus.status
+          displayDuration = mappedStatus.duration === -1 ? callDetails.conversationDuration : mappedStatus.duration
         } else {
-          displayDuration = mappedStatus.duration
+          status = ""
+          displayDuration = 0
         }
 
-        console.log(`[Exotel Sync] CallSid=${callSid} Leg2Status="${callDetails.leg2Status}" → dbStatus="${status}" duration=${displayDuration}`)
-      } else {
-        // Fallback: couldn't get details, default to missed
-        status = "missed"
-        displayDuration = 0
-        console.log(`[Exotel Sync] CallSid=${callSid} no Leg2Status data, defaulting to missed`)
-      }
-
-      // Build raw response with details included
-      const rawResponse = { ...call, _details: callDetails?.details || {}, _leg2Status: callDetails?.leg2Status || null }
-
-      // Try to match caller to patient
-      const phoneToSearch = direction === "inbound" ? callFrom : callTo
-      let callerName: string | null = null
-      let patientIdVal: string | null = null
-
-      if (phoneToSearch) {
+        const phoneToSearch = direction === "inbound" ? callFrom : callTo
         const digits = phoneToSearch.replace(/\D/g, "").slice(-10)
-        if (digits.length === 10) {
-          const { data: patient } = await supabase
-            .from("Patient")
-            .select("id, fullName")
-            .ilike("phone", `%${digits}`)
-            .limit(1)
-            .maybeSingle()
 
-          if (patient) {
-            callerName = patient.fullName
-            patientIdVal = patient.id
+        return {
+          callSid, callFrom, callTo, direction, startTimeRaw, endTimeRaw,
+          recordingUrl, status, displayDuration, callDetails, digits,
+          rawCall: call,
+        }
+      })
+
+    // ── Step 3: Fetch missing details from Exotel in parallel (only for new calls without inline details) ──
+    const needsDetailFetch = parsedCalls.filter((c) => c.status === "")
+    if (needsDetailFetch.length > 0) {
+      console.log(`[Exotel Sync] Fetching details for ${needsDetailFetch.length} calls in parallel`)
+      const BATCH_SIZE = 5
+      for (let i = 0; i < needsDetailFetch.length; i += BATCH_SIZE) {
+        const batch = needsDetailFetch.slice(i, i + BATCH_SIZE)
+        const results = await Promise.all(
+          batch.map((c) => fetchCallDetails(c.callSid, auth))
+        )
+        for (let j = 0; j < batch.length; j++) {
+          const details = results[j]
+          if (details && details.leg2Status !== null) {
+            const mapped = mapLeg2StatusToDbStatus(details.leg2Status)
+            batch[j].status = mapped.status
+            batch[j].displayDuration = mapped.duration === -1 ? details.conversationDuration : mapped.duration
+            batch[j].callDetails = details
+          } else {
+            batch[j].status = "missed"
+            batch[j].displayDuration = 0
           }
         }
       }
+    }
 
-      // Upsert
-      const { data: existing } = await supabase
-        .from("CallLog")
-        .select("id")
-        .eq("exotelCallSid", callSid)
-        .maybeSingle()
+    // ── Step 4: Batch patient lookup — single query for all unique phones ──
+    const uniqueDigits = [...new Set(parsedCalls.map((c) => c.digits).filter((d) => d.length === 10))]
+    const patientMap = new Map<string, { id: string; fullName: string }>()
 
-      const nowStr = new Date().toISOString()
+    if (uniqueDigits.length > 0) {
+      const orFilter = uniqueDigits.map((d) => `phone.ilike.%${d}`).join(",")
+      const { data: patients } = await supabase
+        .from("Patient")
+        .select("id, fullName, phone")
+        .or(orFilter)
 
-      if (existing) {
-        await supabase.from("CallLog").update({
-          status,
-          duration: displayDuration,
-          endTime: endTimeRaw ? new Date(endTimeRaw).toISOString() : null,
-          recordingUrl,
-          callerName,
-          patientId: patientIdVal,
-          rawResponse,
-          updatedAt: nowStr,
-        }).eq("id", existing.id)
-        updated++
-      } else {
-        await supabase.from("CallLog").insert({
-          exotelCallSid: callSid,
-          callFrom,
-          callTo,
-          direction,
-          status,
-          startTime: startTimeRaw ? new Date(startTimeRaw).toISOString() : nowStr,
-          endTime: endTimeRaw ? new Date(endTimeRaw).toISOString() : null,
-          duration: displayDuration,
-          recordingUrl,
-          callerName,
-          patientId: patientIdVal,
-          rawResponse,
-          createdAt: nowStr,
-          updatedAt: nowStr,
-        })
-        synced++
+      if (patients) {
+        for (const p of patients) {
+          const pDigits = (p.phone || "").replace(/\D/g, "").slice(-10)
+          if (pDigits.length === 10 && !patientMap.has(pDigits)) {
+            patientMap.set(pDigits, { id: p.id, fullName: p.fullName })
+          }
+        }
       }
     }
 
+    // ── Step 5: Bulk insert all new calls in one query ──
+    const nowStr = new Date().toISOString()
+    const toInsert = parsedCalls.map((c) => {
+      const patient = c.digits.length === 10 ? patientMap.get(c.digits) : null
+      const rawResponse = { ...c.rawCall, _details: c.callDetails?.details || {}, _leg2Status: c.callDetails?.leg2Status || null }
+
+      return {
+        exotelCallSid: c.callSid,
+        callFrom: c.callFrom,
+        callTo: c.callTo,
+        direction: c.direction,
+        status: c.status || "missed",
+        startTime: c.startTimeRaw ? new Date(c.startTimeRaw).toISOString() : nowStr,
+        endTime: c.endTimeRaw ? new Date(c.endTimeRaw).toISOString() : null,
+        duration: c.displayDuration,
+        recordingUrl: c.recordingUrl,
+        callerName: patient?.fullName || null,
+        patientId: patient?.id || null,
+        rawResponse,
+        createdAt: nowStr,
+        updatedAt: nowStr,
+      }
+    })
+
+    const { error: insertErr } = await supabase.from("CallLog").insert(toInsert)
+    if (insertErr) console.error("[Exotel Sync] Bulk insert error:", insertErr)
+
+    console.log(`[Exotel Sync] Done: ${toInsert.length} new calls inserted`)
+
     revalidatePath("/call-logs")
-    return { success: true as const, synced, message: `${synced} new, ${updated} updated` }
+    return { success: true as const, synced: toInsert.length, message: `${toInsert.length} new calls synced` }
   } catch (error) {
     console.error("[Exotel Sync] Error:", error)
     return { success: false as const, error: "Failed to sync calls from Exotel" }

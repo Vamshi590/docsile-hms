@@ -54,13 +54,13 @@ export function WorkupPage() {
       {selected ? (
         <BreadcrumbHeader
           onBack={() => setSelected(null)}
-          backLabel="Workup"
+          backLabel="Refraction"
           currentLabel={`${selected.firstName} ${selected.lastName ?? ""}`.trim()}
         />
       ) : (
         <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Workup</h1>
+            <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Refraction</h1>
             <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Pre-consultation assessment</p>
           </div>
           <div className="flex items-center gap-2">

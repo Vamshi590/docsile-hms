@@ -21,6 +21,7 @@ import {
   BarChart3,
   Quote,
   Heart,
+  Phone,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -39,7 +40,7 @@ const quotes = [
 
 const modules = [
   { href: "/patients", icon: Users, label: "Patients", description: "Register and manage OPD & IPD patient visits, appointments and billing", iconBg: "bg-blue-50", iconColor: "text-blue-500" },
-  { href: "/workup", icon: Eye, label: "Workup", description: "Pre-consultation eye assessment with refraction and clinical findings", iconBg: "bg-sky-50", iconColor: "text-sky-500" },
+  { href: "/workup", icon: Eye, label: "Refraction", description: "Pre-consultation eye assessment with refraction and clinical findings", iconBg: "bg-sky-50", iconColor: "text-sky-500" },
   { href: "/doctor", icon: Stethoscope, label: "Doctor Console", description: "Diagnosis, prescriptions, vitals recording and follow-up notes", iconBg: "bg-indigo-50", iconColor: "text-indigo-500" },
   { href: "/labs", icon: FlaskConical, label: "Labs", description: "Lab investigations, test billing and report configuration", iconBg: "bg-teal-50", iconColor: "text-teal-600" },
   { href: "/pharmacy", icon: Pill, label: "Pharmacy", description: "Medicine inventory, billing, suppliers and purchase orders", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
@@ -48,6 +49,7 @@ const modules = [
   { href: "/insurance", icon: Shield, label: "Insurance", description: "TPA insurance claims, preauth tracking and settlements", iconBg: "bg-cyan-50", iconColor: "text-cyan-600" },
   { href: "/dues-followups", icon: ClipboardList, label: "Dues & Follow-Ups", description: "Track pending dues and schedule patient follow-up reminders", iconBg: "bg-amber-50", iconColor: "text-amber-600" },
   { href: "/expenses", icon: Wallet, label: "Expenses", description: "Record and categorize hospital expenses and expenditures", iconBg: "bg-orange-50", iconColor: "text-orange-500" },
+  { href: "/call-logs", icon: Phone, label: "Call Logs", description: "Reception call management, Exotel sync and call analytics", iconBg: "bg-green-50", iconColor: "text-green-600" },
   { href: "/analytics", icon: BarChart3, label: "Analytics", description: "Comprehensive dashboard with trends, financials and insights", iconBg: "bg-rose-50", iconColor: "text-rose-500" },
   { href: "/reports", icon: FileBarChart, label: "Reports", description: "Patient history, visit records, prescriptions and billing reports", iconBg: "bg-sky-50", iconColor: "text-sky-600" },
   { href: "/license-tracker", icon: ScrollText, label: "Licenses", description: "Track hospital licenses, registrations and renewal dates", iconBg: "bg-indigo-50", iconColor: "text-indigo-600" },

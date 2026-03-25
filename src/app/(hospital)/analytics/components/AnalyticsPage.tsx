@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { format } from "date-fns"
 import {
   Users, IndianRupee, TrendingUp, TrendingDown,
   BedDouble, Stethoscope, FlaskConical, Pill, Glasses,
@@ -24,6 +25,7 @@ import {
   getExpenseBreakdown, getFinancialSummary, getDoctorPerformance,
   getStatusDistribution, getReferralStats,
 } from "../actions"
+import CallAnalyticsTab from "../../call-logs/components/CallAnalyticsTab"
 
 // ─── COLORS ──────────────────────────────────────────
 
@@ -40,13 +42,14 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ─── TABS ────────────────────────────────────────────
 
-type Tab = "overview" | "trends" | "financial" | "reports"
+type Tab = "overview" | "trends" | "financial" | "reports" | "calls"
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "trends", label: "Trends" },
   { key: "financial", label: "Financial" },
   { key: "reports", label: "Reports" },
+  { key: "calls", label: "Calls" },
 ]
 
 // ─── CURRENCY FORMATTER ──────────────────────────────
@@ -152,7 +155,32 @@ export default function AnalyticsPage() {
   const [statusDist, setStatusDist] = useState<StatusDistribution[]>([])
   const [referrals, setReferrals] = useState<{ name: string; count: number }[]>([])
 
+  // Compute date strings for the Calls tab (CallAnalyticsTab needs yyyy-MM-dd strings)
+  const callDateRange = useMemo(() => {
+    const today = new Date()
+    const todayStr = format(today, "yyyy-MM-dd")
+    switch (filter) {
+      case "today":
+        return { startDate: todayStr, endDate: todayStr }
+      case "week": {
+        const d = new Date(today); d.setDate(d.getDate() - 7)
+        return { startDate: format(d, "yyyy-MM-dd"), endDate: todayStr }
+      }
+      case "month": {
+        const d = new Date(today); d.setDate(d.getDate() - 30)
+        return { startDate: format(d, "yyyy-MM-dd"), endDate: todayStr }
+      }
+      case "year": {
+        const d = new Date(today); d.setFullYear(d.getFullYear() - 1)
+        return { startDate: format(d, "yyyy-MM-dd"), endDate: todayStr }
+      }
+      case "custom":
+        return { startDate: customRange.start || todayStr, endDate: customRange.end || todayStr }
+    }
+  }, [filter, customRange])
+
   const loadData = useCallback(async () => {
+    if (tab === "calls") { setLoading(false); return }
     setLoading(true)
     try {
       const args: [TimeFilter, string?, string?] = [filter]
@@ -904,6 +932,9 @@ export default function AnalyticsPage() {
             {tab === "trends" && renderTrends()}
             {tab === "financial" && renderFinancial()}
             {tab === "reports" && renderReports()}
+            {tab === "calls" && (
+              <CallAnalyticsTab startDate={callDateRange.startDate} endDate={callDateRange.endDate} />
+            )}
           </>
         )}
       </div>
