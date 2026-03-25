@@ -170,7 +170,7 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-0">
-      <PageHeader title="Expenses Management">
+      <PageHeader title="Expenses Management" onRefresh={fetchExpenses}>
         <Button variant="outline" size="sm" onClick={() => setShowCategoryManager(true)}>
           <Settings2 className="h-4 w-4 mr-1.5" />
           Categories

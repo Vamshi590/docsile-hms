@@ -19,7 +19,7 @@ export default function OpticalPage() {
 
   return (
     <div className="space-y-0">
-      <PageHeader title="Optical" description="Frames, lenses & contact lens">
+      <PageHeader title="Optical" description="Frames, lenses & contact lens" onRefresh={() => getStockSummary().then(setSummary)}>
         <div className="flex items-center gap-2">
           {summary.lowStock > 0 && (
             <StatBadge value={summary.lowStock} label="Low Stock" variant="destructive" />

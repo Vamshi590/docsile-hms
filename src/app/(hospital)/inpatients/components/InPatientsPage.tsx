@@ -80,7 +80,7 @@ export default function InPatientsPage() {
 
   return (
     <div className="">
-      <PageHeader title="In-Patients" description="Admission & ward management">
+      <PageHeader title="In-Patients" description="Admission & ward management" onRefresh={fetchData}>
         {stats && (
           <>
             <StatBadge value={stats.totalAdmitted} label="Admitted" variant="info" />

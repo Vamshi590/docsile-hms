@@ -118,7 +118,7 @@ export default function CallLogsPage() {
 
   return (
     <div className="space-y-0">
-      <PageHeader title="Call Logs" description="Reception call management">
+      <PageHeader title="Call Logs" description="Reception call management" onRefresh={fetchData}>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"

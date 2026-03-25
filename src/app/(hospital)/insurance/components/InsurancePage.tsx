@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
+import { RefreshCw } from "lucide-react"
 import { BreadcrumbHeader, StatBadge, SearchInput } from "@/components/layout/header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent } from "@/components/ui/card"
@@ -99,9 +100,18 @@ export default function InsurancePage() {
         )
       ) : (
         <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Insurance Claims</h1>
-            <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Preauth, billing & settlement</p>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Insurance Claims</h1>
+              <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Preauth, billing & settlement</p>
+            </div>
+            <button
+              onClick={fetchData}
+              className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            </button>
           </div>
           <div className="flex items-center gap-2.5">
             {stats && (

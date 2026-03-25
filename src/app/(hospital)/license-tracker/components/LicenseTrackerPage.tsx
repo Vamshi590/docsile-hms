@@ -183,7 +183,7 @@ export default function LicenseTrackerPage() {
 
   return (
     <div className="space-y-0">
-      <PageHeader title="License Tracker">
+      <PageHeader title="License Tracker" onRefresh={fetchLicenses}>
         <Button size="sm" onClick={() => setShowAddModal(true)}>
           <Plus className="h-4 w-4 mr-1.5" />
           Add License

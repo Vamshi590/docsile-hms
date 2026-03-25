@@ -607,6 +607,7 @@ export function DataExportPage() {
       <PageHeader
         title="Data Export"
         description="Select, filter and export hospital data in CSV or Excel format"
+        onRefresh={fetchData}
       >
         <div className="flex items-center gap-2">
           {selectedIds.size > 0 && (

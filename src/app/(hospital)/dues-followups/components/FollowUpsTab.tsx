@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
 import { CalendarClock } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,7 @@ import { getFollowUps, getDoctorList, getDepartmentList } from "../actions"
 import type { FollowUpRecord, FollowUpsSummary } from "../actions"
 import { formatDateLong } from "@/lib/utils"
 
-export function FollowUpsTab() {
+export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObject<(() => void) | null> }) {
   const [followUps, setFollowUps] = useState<FollowUpRecord[]>([])
   const [summary, setSummary] = useState<FollowUpsSummary>({
     todayCount: 0, tomorrowCount: 0, totalCount: 0, overdueCount: 0,
@@ -63,6 +63,12 @@ export function FollowUpsTab() {
   }, [search, typeFilter, doctorFilter, departmentFilter, dateFrom, dateTo, includeOverdue])
 
   useEffect(() => { loadFollowUps() }, [loadFollowUps])
+
+  // Expose refresh to parent
+  useEffect(() => {
+    if (refreshRef) refreshRef.current = loadFollowUps
+    return () => { if (refreshRef) refreshRef.current = null }
+  }, [refreshRef, loadFollowUps])
 
   function getFollowUpWhatsAppMessage(fu: FollowUpRecord) {
     return `Hello ${fu.patientName}, this is a reminder. You have a follow-up appointment scheduled for ${formatDateLong(fu.followUpDate)} with Dr. ${fu.doctorName}. Please visit at your convenience. Thank you.`

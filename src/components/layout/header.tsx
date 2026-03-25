@@ -1,4 +1,4 @@
-import { ReactNode } from "react"
+import { ReactNode, useState, useCallback } from "react"
 import { cn } from "@/lib/utils"
 
 interface PageHeaderProps {
@@ -6,9 +6,22 @@ interface PageHeaderProps {
   description?: string
   children?: ReactNode
   className?: string
+  onRefresh?: () => void | Promise<void>
 }
 
-export function PageHeader({ title, description, children, className }: PageHeaderProps) {
+export function PageHeader({ title, description, children, className, onRefresh }: PageHeaderProps) {
+  const [spinning, setSpinning] = useState(false)
+
+  const handleRefresh = useCallback(async () => {
+    if (!onRefresh || spinning) return
+    setSpinning(true)
+    try {
+      await onRefresh()
+    } finally {
+      setSpinning(false)
+    }
+  }, [onRefresh, spinning])
+
   return (
     <div
       className={cn(
@@ -18,10 +31,24 @@ export function PageHeader({ title, description, children, className }: PageHead
         className
       )}
     >
-      <div className="min-w-0">
-        <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">{title}</h1>
-        {description && (
-          <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">{description}</p>
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">{title}</h1>
+          {description && (
+            <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">{description}</p>
+          )}
+        </div>
+        {onRefresh && (
+          <button
+            onClick={handleRefresh}
+            disabled={spinning}
+            className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
+            title="Refresh"
+          >
+            <svg className={cn("h-3.5 w-3.5", spinning && "animate-spin")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M20.016 4.657v4.992" />
+            </svg>
+          </button>
         )}
       </div>
       {children && (

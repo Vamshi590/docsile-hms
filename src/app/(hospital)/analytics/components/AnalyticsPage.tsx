@@ -869,7 +869,7 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-0 animate-fade-in bg-gray-50 min-h-screen">
       {/* Header */}
-      <PageHeader title="Analytics Dashboard">
+      <PageHeader title="Analytics Dashboard" onRefresh={loadData}>
         {/* Time Filter Controls */}
         <div className="flex items-center gap-2">
           <div className="bg-muted rounded-lg p-0.5 flex">

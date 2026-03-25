@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import {
   Plus, BarChart2, TrendingUp, IndianRupee, X,
-  MoreVertical, Pencil, Trash2, Loader2
+  MoreVertical, Pencil, Trash2, Loader2, RefreshCw
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -121,9 +121,18 @@ export function PatientsPage() {
           />
         ) : (
           <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Patients</h1>
-              <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Registration & management</p>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="min-w-0">
+                <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Patients</h1>
+                <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Registration & management</p>
+              </div>
+              <button
+                onClick={loadPatients}
+                className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              </button>
             </div>
             <div className="flex items-center gap-2.5">
               <TabsList className="bg-muted/50 border border-border/40">

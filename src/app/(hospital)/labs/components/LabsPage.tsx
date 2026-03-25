@@ -36,7 +36,7 @@ export default function LabsPage() {
 
   return (
     <div className="space-y-0">
-      <PageHeader title="Labs" description="Billing, history & configuration">
+      <PageHeader title="Labs" description="Billing, history & configuration" onRefresh={refreshLabs}>
         <StatBadge value={activeCount} label="Active Labs" variant="info" />
       </PageHeader>
 

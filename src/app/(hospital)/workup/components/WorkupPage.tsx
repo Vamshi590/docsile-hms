@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Eye } from "lucide-react"
+import { Eye, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { BreadcrumbHeader, FilterBar, DateNavigator, SearchInput, StatBadge } from "@/components/layout/header"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -59,9 +59,18 @@ export function WorkupPage() {
         />
       ) : (
         <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Refraction</h1>
-            <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Pre-consultation assessment</p>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Refraction</h1>
+              <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Pre-consultation assessment</p>
+            </div>
+            <button
+              onClick={loadQueue}
+              className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <StatBadge value={queue.length} label="Total" />

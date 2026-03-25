@@ -344,7 +344,7 @@ export default function StaffPage() {
   if (loading) {
     return (
       <div className="space-y-5">
-        <PageHeader title="Staff Management" />
+        <PageHeader title="Staff Management" onRefresh={loadData} />
         <div className="p-4 space-y-4">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-[400px] w-full" />
@@ -356,7 +356,7 @@ export default function StaffPage() {
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <div className="space-y-5">
-        <PageHeader title="Staff Management">
+        <PageHeader title="Staff Management" onRefresh={loadData}>
           <TabsList>
             <TabsTrigger value="staff" className="gap-2">
               <UserCog className="h-4 w-4" /> Staff Members

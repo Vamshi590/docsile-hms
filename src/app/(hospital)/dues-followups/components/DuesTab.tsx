@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
 import { Loader2, IndianRupee, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -23,7 +23,7 @@ import { getDues, markDueAsPaid } from "../actions"
 import type { DueRecord, DuesSummary } from "../actions"
 import { formatDateLong, formatCurrency } from "@/lib/utils"
 
-export function DuesTab() {
+export function DuesTab({ refreshRef }: { refreshRef?: React.MutableRefObject<(() => void) | null> }) {
   const [dues, setDues] = useState<DueRecord[]>([])
   const [summary, setSummary] = useState<DuesSummary>({
     totalOutstanding: 0, opdCount: 0, opdTotal: 0, ipdCount: 0, ipdTotal: 0, labCount: 0, labTotal: 0, pharmacyCount: 0, pharmacyTotal: 0,
@@ -56,6 +56,12 @@ export function DuesTab() {
   }, [search, typeFilter, dateFrom, dateTo, sortBy])
 
   useEffect(() => { loadDues() }, [loadDues])
+
+  // Expose refresh to parent
+  useEffect(() => {
+    if (refreshRef) refreshRef.current = loadDues
+    return () => { if (refreshRef) refreshRef.current = null }
+  }, [refreshRef, loadDues])
 
   async function handleMarkPaid() {
     if (!payTarget) return

@@ -23,7 +23,7 @@ export function LoginForm() {
     })
     setLoading(false)
     if (result.success) {
-      router.push("/patients")
+      router.push("/dashboard")
       router.refresh()
     } else {
       toast.error(result.error)

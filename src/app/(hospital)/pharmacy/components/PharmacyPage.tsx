@@ -22,7 +22,7 @@ export default function PharmacyPage() {
 
   return (
     <div className="space-y-0">
-      <PageHeader title="Pharmacy" description="Billing, inventory & suppliers">
+      <PageHeader title="Pharmacy" description="Billing, inventory & suppliers" onRefresh={() => getStockSummary().then(setSummary)}>
         <div className="flex items-center gap-2">
           {summary.lowStock > 0 && (
             <StatBadge value={summary.lowStock} label="Low Stock" variant="destructive" />
