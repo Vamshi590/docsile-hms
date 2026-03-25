@@ -22,6 +22,7 @@ import {
   Quote,
   Heart,
   Phone,
+  UserCog,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -54,6 +55,7 @@ const modules = [
   { href: "/reports", icon: FileBarChart, label: "Reports", description: "Patient history, visit records, prescriptions and billing reports", iconBg: "bg-sky-50", iconColor: "text-sky-600" },
   { href: "/license-tracker", icon: ScrollText, label: "Licenses", description: "Track hospital licenses, registrations and renewal dates", iconBg: "bg-indigo-50", iconColor: "text-indigo-600" },
   { href: "/data", icon: DatabaseZap, label: "Data Export", description: "Select, filter and export hospital data in CSV or Excel", iconBg: "bg-cyan-50", iconColor: "text-cyan-700" },
+  { href: "/staff", icon: UserCog, label: "Staff", description: "Manage staff members, roles and module-level permissions", iconBg: "bg-purple-50", iconColor: "text-purple-600" },
   { href: "/settings", icon: Settings, label: "Configurations", description: "Hospital profile, service templates and user management", iconBg: "bg-slate-100", iconColor: "text-slate-600" },
 ]
 

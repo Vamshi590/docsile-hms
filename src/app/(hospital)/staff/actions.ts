@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import bcrypt from "bcryptjs"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
 import { requireAdmin } from "@/lib/auth"
 import { z } from "zod"
@@ -79,11 +80,12 @@ export async function createStaffMember(data: z.infer<typeof StaffSchema>) {
     })
     if (authError) throw authError
 
+    const hashedPassword = await bcrypt.hash(validated.data.password, 10)
     const now = new Date().toISOString()
     await supabase.from("User").insert({
       id: authData.user.id,
       email: validated.data.email,
-      passwordHash: "supabase-auth",
+      passwordHash: hashedPassword,
       fullName: validated.data.fullName,
       phone: validated.data.phone || null,
       role: validated.data.role,
@@ -132,8 +134,14 @@ export async function updateStaffMember(
     if (data.salaryType !== undefined) updateData.salaryType = data.salaryType || null
 
     if (data.password) {
-      const adminSupabase = await createServiceClient()
-      await adminSupabase.auth.admin.updateUserById(id, { password: data.password })
+      const hashedPassword = await bcrypt.hash(data.password, 10)
+      updateData.passwordHash = hashedPassword
+      try {
+        const adminSupabase = await createServiceClient()
+        await adminSupabase.auth.admin.updateUserById(id, { password: data.password })
+      } catch {
+        // Supabase Auth sync is best-effort; passwordHash is the source of truth
+      }
     }
 
     await supabase.from("User").update(updateData).eq("id", id)
@@ -165,9 +173,22 @@ export async function resetStaffPassword(id: string, newPassword: string) {
   await requireAdmin()
   if (newPassword.length < 6) return { success: false, error: "Password must be at least 6 characters" }
   try {
-    const adminSupabase = await createServiceClient()
-    const { error } = await adminSupabase.auth.admin.updateUserById(id, { password: newPassword })
+    const hashedPassword = await bcrypt.hash(newPassword, 10)
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("User")
+      .update({ passwordHash: hashedPassword, updatedAt: new Date().toISOString() })
+      .eq("id", id)
     if (error) throw error
+
+    // Best-effort sync with Supabase Auth
+    try {
+      const adminSupabase = await createServiceClient()
+      await adminSupabase.auth.admin.updateUserById(id, { password: newPassword })
+    } catch {
+      // Supabase Auth sync is best-effort; passwordHash is the source of truth
+    }
+
     return { success: true }
   } catch {
     return { success: false, error: "Failed to reset password" }

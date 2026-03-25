@@ -78,21 +78,21 @@ function StatCard({
   subtitle?: string
 }) {
   return (
-    <Card className="relative overflow-hidden group hover:shadow-md transition-all duration-200">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
+    <Card className="relative overflow-hidden group hover:shadow-sm transition-all duration-200 border-border/40 shadow-sm">
+      <CardContent className="px-5 py-4">
+        <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
-            <p className="text-2xl font-bold text-foreground mt-1 truncate">{value}</p>
+            <p className="text-xs font-medium text-muted-foreground">{title}</p>
+            <p className="text-xl font-bold text-foreground mt-0.5 truncate">{value}</p>
             {change !== undefined && (
-              <div className={`flex items-center gap-1 mt-1.5 text-xs font-medium ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                {change >= 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
-                <span>{Math.abs(change)}% from prev period</span>
+              <div className={`flex items-center gap-1 mt-1 text-[11px] font-medium ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                {change >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                <span>{Math.abs(change)}% from previous period</span>
               </div>
             )}
-            {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
+            {subtitle && <p className="text-[11px] text-muted-foreground mt-1">{subtitle}</p>}
           </div>
-          <div className={`h-11 w-11 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
+          <div className={`h-9 w-9 rounded-full ${iconBg} flex items-center justify-center shrink-0 ml-3`}>
             <div className={iconColor}>{icon}</div>
           </div>
         </div>
@@ -105,9 +105,9 @@ function StatCard({
 
 function ChartCard({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <Card className={`overflow-hidden ${className}`}>
-      <CardContent className="p-5">
-        <h3 className="text-sm font-semibold text-foreground mb-4">{title}</h3>
+    <Card className={`overflow-hidden border-border/40 shadow-sm ${className}`}>
+      <CardContent className="px-6 py-5">
+        <h3 className="text-base font-bold text-foreground mb-6">{title}</h3>
         {children}
       </CardContent>
     </Card>
@@ -247,17 +247,17 @@ export default function AnalyticsPage() {
   // ─── LOADING SKELETON ──────────────────────────────
 
   const Skeleton = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <Card key={i} className="animate-pulse">
-          <CardContent className="p-5">
-            <div className="flex justify-between">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Card key={i} className="animate-pulse border-border/40 shadow-sm">
+          <CardContent className="px-5 py-4">
+            <div className="flex items-center justify-between">
               <div className="space-y-2 flex-1">
-                <div className="h-3 bg-gray-200 rounded w-24" />
-                <div className="h-7 bg-gray-200 rounded w-20" />
-                <div className="h-3 bg-gray-200 rounded w-32" />
+                <div className="h-3 bg-gray-100 rounded w-24" />
+                <div className="h-6 bg-gray-100 rounded w-20" />
+                <div className="h-2.5 bg-gray-100 rounded w-32" />
               </div>
-              <div className="h-11 w-11 bg-gray-200 rounded-xl" />
+              <div className="h-9 w-9 bg-gray-100 rounded-full" />
             </div>
           </CardContent>
         </Card>
@@ -283,35 +283,36 @@ export default function AnalyticsPage() {
     }))
 
     return (
-      <div className="space-y-6">
-        {/* Stat Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="space-y-8">
+        {/* Key Metrics — 3 per row like the reference */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           <StatCard title="Total Patients" value={overview.totalPatients} change={overview.patientChange}
-            icon={<Users className="h-5 w-5" />} iconBg="bg-blue-50" iconColor="text-blue-500"
+            icon={<Users className="h-4 w-4" />} iconBg="bg-blue-50" iconColor="text-blue-500"
             subtitle={`${overview.newPatientsToday} registered today`} />
-          <StatCard title="Total Revenue" value={fmt(overview.totalRevenue)} change={overview.revenueChange}
-            icon={<IndianRupee className="h-5 w-5" />} iconBg="bg-emerald-50" iconColor="text-emerald-500" />
-          <StatCard title="Collected" value={fmt(overview.totalCollected)}
-            icon={<CreditCard className="h-5 w-5" />} iconBg="bg-green-50" iconColor="text-green-600"
-            subtitle="Actual cash received" />
           <StatCard title="Pending Dues" value={fmt(overview.totalDues)}
-            icon={<Receipt className="h-5 w-5" />} iconBg="bg-amber-50" iconColor="text-amber-500" />
+            icon={<Receipt className="h-4 w-4" />} iconBg="bg-amber-50" iconColor="text-amber-500" />
+          <StatCard title="Avg. Daily Patients" value={overview.totalPatients > 0 ? Math.round(overview.totalPatients / 30) : 0}
+            change={overview.patientChange}
+            icon={<Users className="h-4 w-4" />} iconBg="bg-violet-50" iconColor="text-violet-500" />
+        </div>
+
+        {/* Revenue + Financial Cards — 4 per row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+          <StatCard title="Total Revenue" value={fmt(overview.totalRevenue)} change={overview.revenueChange}
+            icon={<IndianRupee className="h-4 w-4" />} iconBg="bg-emerald-50" iconColor="text-emerald-500" />
+          <StatCard title="Collected" value={fmt(overview.totalCollected)}
+            icon={<CreditCard className="h-4 w-4" />} iconBg="bg-green-50" iconColor="text-green-600" />
           <StatCard title="Total Expenses" value={fmt(overview.totalExpenses)}
-            icon={<Wallet className="h-5 w-5" />} iconBg="bg-red-50" iconColor="text-red-500" />
+            icon={<Wallet className="h-4 w-4" />} iconBg="bg-red-50" iconColor="text-red-500" />
           <StatCard title="Net Cash Flow" value={fmt(overview.totalCollected - overview.totalExpenses)}
             icon={(overview.totalCollected - overview.totalExpenses) >= 0
-              ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
+              ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
             iconBg={(overview.totalCollected - overview.totalExpenses) >= 0 ? "bg-emerald-50" : "bg-red-50"}
             iconColor={(overview.totalCollected - overview.totalExpenses) >= 0 ? "text-emerald-500" : "text-red-500"} />
-          <StatCard title="In-Patients" value={overview.totalInpatients}
-            icon={<BedDouble className="h-5 w-5" />} iconBg="bg-violet-50" iconColor="text-violet-500"
-            subtitle={`${overview.activeInpatients} currently admitted`} />
-          <StatCard title="Surgeries" value={overview.totalSurgeries}
-            icon={<Scissors className="h-5 w-5" />} iconBg="bg-pink-50" iconColor="text-pink-500" />
         </div>
 
         {/* Revenue Breakdown Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5">
           <StatCard title="Consultation" value={fmt(overview.totalConsultationRevenue)}
             icon={<Stethoscope className="h-4 w-4" />} iconBg="bg-blue-50" iconColor="text-blue-500" />
           <StatCard title="Labs" value={fmt(overview.totalLabRevenue)}
@@ -325,32 +326,32 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Charts Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ChartCard title="Age Distribution">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <ChartCard title="Patients by Age Group">
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={ageGroups}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                  <Tooltip content={<CustomTooltip />} cursor={false} />
-                  <Bar dataKey="count" name="Patients" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={36} />
+                <BarChart data={ageGroups} barCategoryGap="25%">
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
+                  <Bar dataKey="count" name="Patients" fill="#93b5f7" radius={[6, 6, 6, 6]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </ChartCard>
 
-          <ChartCard title="Revenue by Category">
+          <ChartCard title="Revenue Trend">
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={revenueByCategory}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="category" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtShort} stroke="#94a3b8" />
-                  <Tooltip content={<CustomTooltip currency />} cursor={false} />
-                  <Bar dataKey="amount" name="Revenue" radius={[4, 4, 0, 0]} barSize={36}>
-                    {revenueByCategory.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
+                <BarChart data={revenueByCategory} barCategoryGap="25%">
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="category" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={fmtShort} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip currency />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
+                  <Bar dataKey="amount" name="Revenue" radius={[6, 6, 6, 6]} barSize={40} fill="#93b5f7">
+                    {revenueByCategory.map((_, i) => (
+                      <Cell key={i} fill="#93b5f7" />
                     ))}
                   </Bar>
                 </BarChart>
@@ -360,7 +361,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Charts Row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <ChartCard title="Expense Breakdown">
             <div className="h-64 flex items-center justify-center">
               {expenseBreakdown.length > 0 ? (
@@ -431,7 +432,7 @@ export default function AnalyticsPage() {
   // ─── TRENDS TAB ────────────────────────────────────
 
   const renderTrends = () => (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Patient Trend */}
       <ChartCard title="Daily Patient Volume">
         <div className="h-80">
@@ -439,15 +440,15 @@ export default function AnalyticsPage() {
             <AreaChart data={timeSeries}>
               <defs>
                 <linearGradient id="colorP" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#93b5f7" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#93b5f7" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} stroke="#94a3b8" />
-              <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+              <CartesianGrid vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => v.slice(5)} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
               <Tooltip content={<CustomTooltip />} cursor={false} />
-              <Area type="monotone" dataKey="patients" name="Patients" stroke="#3b82f6" fill="url(#colorP)" strokeWidth={2.5} dot={{ r: 3, fill: "#3b82f6" }} />
+              <Area type="monotone" dataKey="patients" name="Patients" stroke="#93b5f7" fill="url(#colorP)" strokeWidth={2.5} dot={{ r: 3, fill: "#93b5f7" }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -457,20 +458,20 @@ export default function AnalyticsPage() {
       <ChartCard title="Revenue vs Expenses">
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={timeSeries}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} stroke="#94a3b8" />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtShort} stroke="#94a3b8" />
-              <Tooltip content={<CustomTooltip currency />} cursor={false} />
+            <BarChart data={timeSeries} barCategoryGap="25%">
+              <CartesianGrid vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={(v) => v.slice(5)} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={fmtShort} axisLine={false} tickLine={false} />
+              <Tooltip content={<CustomTooltip currency />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="collected" name="Collected" fill="#10b981" radius={[4, 4, 0, 0]} barSize={16} />
-              <Bar dataKey="expenses" name="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={16} />
+              <Bar dataKey="collected" name="Collected" fill="#86d4a8" radius={[6, 6, 6, 6]} barSize={18} />
+              <Bar dataKey="expenses" name="Expenses" fill="#f5a3a3" radius={[6, 6, 6, 6]} barSize={18} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </ChartCard>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Top Services */}
         <ChartCard title="Top Services by Revenue">
           {topServices.length > 0 ? (
@@ -537,12 +538,12 @@ export default function AnalyticsPage() {
         <ChartCard title="Top Referral Sources">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={referrals.slice(0, 8)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="#94a3b8" interval={0} />
-                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <Tooltip content={<CustomTooltip />} cursor={false} />
-                <Bar dataKey="count" name="Patients" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={32} />
+              <BarChart data={referrals.slice(0, 8)} barCategoryGap="25%">
+                <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} interval={0} />
+                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
+                <Bar dataKey="count" name="Patients" fill="#b4a7f5" radius={[6, 6, 6, 6]} barSize={36} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -565,40 +566,40 @@ export default function AnalyticsPage() {
     ]
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-5">
           {summaryCards.map((card, i) => (
-            <Card key={i} className="relative overflow-hidden group hover:shadow-md transition-all">
-              <div className={`absolute top-0 right-0 w-20 h-20 ${card.bg} rounded-full -mr-10 -mt-10 group-hover:scale-110 transition-transform`} />
-              <CardContent className="p-5 relative">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{card.title}</p>
-                <p className={`text-2xl font-bold mt-1.5 ${card.color}`}>{fmt(card.value)}</p>
-                <p className="text-xs text-muted-foreground mt-1">{card.desc}</p>
+            <Card key={i} className="relative overflow-hidden group hover:shadow-sm transition-all border-border/40 shadow-sm">
+              <div className={`absolute top-0 right-0 w-16 h-16 ${card.bg} rounded-full -mr-8 -mt-8 group-hover:scale-110 transition-transform`} />
+              <CardContent className="px-5 py-4 relative">
+                <p className="text-xs font-medium text-muted-foreground">{card.title}</p>
+                <p className={`text-xl font-bold mt-1 ${card.color}`}>{fmt(card.value)}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">{card.desc}</p>
               </CardContent>
             </Card>
           ))}
         </div>
 
         {/* Net Cash Flow Card */}
-        <Card className={`border-2 ${financial.netCashFlow >= 0 ? "border-emerald-200 bg-emerald-50/30" : "border-red-200 bg-red-50/30"}`}>
-          <CardContent className="p-6 flex items-center justify-between">
+        <Card className={`border ${financial.netCashFlow >= 0 ? "border-emerald-200 bg-emerald-50/20" : "border-red-200 bg-red-50/20"} shadow-sm`}>
+          <CardContent className="px-6 py-5 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Net Cash Flow (Collected - Expenses)</p>
-              <p className={`text-3xl font-bold mt-1 ${financial.netCashFlow >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              <p className="text-xs font-medium text-muted-foreground">Net Cash Flow (Collected - Expenses)</p>
+              <p className={`text-2xl font-bold mt-1 ${financial.netCashFlow >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                 {fmt(financial.netCashFlow)}
               </p>
             </div>
-            <div className={`h-14 w-14 rounded-2xl flex items-center justify-center ${financial.netCashFlow >= 0 ? "bg-emerald-100" : "bg-red-100"}`}>
+            <div className={`h-10 w-10 rounded-full flex items-center justify-center ${financial.netCashFlow >= 0 ? "bg-emerald-100" : "bg-red-100"}`}>
               {financial.netCashFlow >= 0
-                ? <TrendingUp className="h-7 w-7 text-emerald-600" />
-                : <TrendingDown className="h-7 w-7 text-red-600" />}
+                ? <TrendingUp className="h-5 w-5 text-emerald-600" />
+                : <TrendingDown className="h-5 w-5 text-red-600" />}
             </div>
           </CardContent>
         </Card>
 
         {/* Financial Summary Table */}
-        <Card>
+        <Card className="border-border/40 shadow-sm">
           <CardContent className="p-0">
             <div className="px-5 py-4 border-b border-border bg-muted/30">
               <h3 className="text-sm font-semibold text-foreground">Financial Summary</h3>
@@ -640,7 +641,7 @@ export default function AnalyticsPage() {
         </Card>
 
         {/* Daily Ledger */}
-        <Card>
+        <Card className="border-border/40 shadow-sm">
           <CardContent className="p-0">
             <div className="px-5 py-4 border-b border-border bg-muted/30">
               <h3 className="text-sm font-semibold text-foreground">Daily Ledger</h3>
@@ -709,9 +710,9 @@ export default function AnalyticsPage() {
   // ─── REPORTS TAB ───────────────────────────────────
 
   const renderReports = () => (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Top Services Table */}
-      <Card>
+      <Card className="border-border/40 shadow-sm">
         <CardContent className="p-0">
           <div className="px-5 py-4 border-b border-border bg-muted/30">
             <h3 className="text-sm font-semibold text-foreground">Top Services Report</h3>
@@ -746,7 +747,7 @@ export default function AnalyticsPage() {
       </Card>
 
       {/* Doctor Report */}
-      <Card>
+      <Card className="border-border/40 shadow-sm">
         <CardContent className="p-0">
           <div className="px-5 py-4 border-b border-border bg-muted/30">
             <h3 className="text-sm font-semibold text-foreground">Doctor Performance Report</h3>
@@ -784,7 +785,7 @@ export default function AnalyticsPage() {
       </Card>
 
       {/* Status Distribution Report */}
-      <Card>
+      <Card className="border-border/40 shadow-sm">
         <CardContent className="p-0">
           <div className="px-5 py-4 border-b border-border bg-muted/30">
             <h3 className="text-sm font-semibold text-foreground">Patient Status Distribution</h3>
@@ -833,7 +834,7 @@ export default function AnalyticsPage() {
 
       {/* Referral Report */}
       {referrals.length > 0 && (
-        <Card>
+        <Card className="border-border/40 shadow-sm">
           <CardContent className="p-0">
             <div className="px-5 py-4 border-b border-border bg-muted/30">
               <h3 className="text-sm font-semibold text-foreground">Referral Sources Report</h3>
@@ -867,76 +868,91 @@ export default function AnalyticsPage() {
   // ─── RENDER ────────────────────────────────────────
 
   return (
-    <div className="space-y-0 animate-fade-in bg-gray-50 min-h-screen">
+    <div className="space-y-0 animate-fade-in min-h-screen -mx-4 -mt-6">
       {/* Header */}
-      <PageHeader title="Analytics Dashboard" onRefresh={loadData}>
-        {/* Time Filter Controls */}
-        <div className="flex items-center gap-2">
-          <div className="bg-muted rounded-lg p-0.5 flex">
-            {(["today", "week", "month", "year", "custom"] as TimeFilter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150 capitalize ${
-                  filter === f ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {f === "week" ? "7 Days" : f === "month" ? "30 Days" : f === "year" ? "1 Year" : f}
-              </button>
-            ))}
+      <div className="bg-white border-b border-border/60 px-8 py-5 sticky top-0 z-20">
+        <div className="max-w-[1320px] mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div>
+              <h1 className="text-xl font-bold text-foreground tracking-tight">Analytics Dashboard</h1>
+            </div>
+          </div>
+          {/* Time Filter Controls */}
+          <div className="flex items-center gap-3">
+            <div className="bg-muted/50 border border-border/40 rounded-full p-0.5 flex">
+              {(["today", "week", "month", "custom"] as TimeFilter[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-150 capitalize ${
+                    filter === f
+                      ? "bg-primary text-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f === "week" ? "This Week" : f === "month" ? "This Month" : f === "custom" ? "Custom" : "Today"}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </PageHeader>
+      </div>
 
       {/* Custom Date Range */}
       {filter === "custom" && (
-        <div className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border -mx-6">
-          <label className="text-xs font-medium text-muted-foreground">From:</label>
-          <input type="date" value={customRange.start}
-            onChange={(e) => setCustomRange((p) => ({ ...p, start: e.target.value }))}
-            className="px-2.5 py-1.5 border border-border rounded-md text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
-          <label className="text-xs font-medium text-muted-foreground">To:</label>
-          <input type="date" value={customRange.end}
-            onChange={(e) => setCustomRange((p) => ({ ...p, end: e.target.value }))}
-            className="px-2.5 py-1.5 border border-border rounded-md text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+        <div className="bg-white border-b border-border/40 px-8">
+          <div className="max-w-[1320px] mx-auto flex items-center gap-3 py-3">
+            <label className="text-xs font-medium text-muted-foreground">From:</label>
+            <input type="date" value={customRange.start}
+              onChange={(e) => setCustomRange((p) => ({ ...p, start: e.target.value }))}
+              className="px-2.5 py-1.5 border border-border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+            <label className="text-xs font-medium text-muted-foreground">To:</label>
+            <input type="date" value={customRange.end}
+              onChange={(e) => setCustomRange((p) => ({ ...p, end: e.target.value }))}
+              className="px-2.5 py-1.5 border border-border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+          </div>
         </div>
       )}
 
-      {/* Tab Navigation */}
-      <div className="flex gap-0 border-b border-border -mx-6 px-6 bg-card">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-5 py-3 text-xs font-semibold border-b-2 transition-all duration-150 ${
-              tab === t.key
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Tab Navigation — sticky below header */}
+      <div className="bg-white border-b border-border/40 px-8 sticky top-[65px] z-10">
+        <div className="max-w-[1320px] mx-auto flex gap-0">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-5 py-3.5 text-sm font-medium border-b-2 transition-all duration-150 ${
+                tab === t.key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Content */}
-      <div className="pt-6">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-16">
-            <div className="h-10 w-10 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin" />
-            <p className="mt-4 text-sm text-muted-foreground">Loading analytics...</p>
-          </div>
-        ) : (
-          <>
-            {tab === "overview" && renderOverview()}
-            {tab === "trends" && renderTrends()}
-            {tab === "financial" && renderFinancial()}
-            {tab === "reports" && renderReports()}
-            {tab === "calls" && (
-              <CallAnalyticsTab startDate={callDateRange.startDate} endDate={callDateRange.endDate} />
-            )}
-          </>
-        )}
+      <div className="px-8 pt-8 pb-12">
+        <div className="max-w-[1320px] mx-auto">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16">
+              <div className="h-10 w-10 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin" />
+              <p className="mt-4 text-sm text-muted-foreground">Loading analytics...</p>
+            </div>
+          ) : (
+            <>
+              {tab === "overview" && renderOverview()}
+              {tab === "trends" && renderTrends()}
+              {tab === "financial" && renderFinancial()}
+              {tab === "reports" && renderReports()}
+              {tab === "calls" && (
+                <CallAnalyticsTab startDate={callDateRange.startDate} endDate={callDateRange.endDate} />
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
