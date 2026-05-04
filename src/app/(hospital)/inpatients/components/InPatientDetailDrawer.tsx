@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -282,7 +283,7 @@ export function InPatientDetailDrawer({ inpatient, open, onClose, onUpdate }: Pr
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Discharge Date</Label>
-                  <Input type="date" value={dischargeDate} onChange={e => setDischargeDate(e.target.value)} />
+                  <DatePicker value={dischargeDate} onChange={(d) => setDischargeDate(d)} />
                 </div>
               </div>
               <Textarea

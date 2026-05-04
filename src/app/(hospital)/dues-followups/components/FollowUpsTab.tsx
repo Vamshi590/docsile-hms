@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
 import { CalendarClock } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { FilterBar, SearchInput } from "@/components/layout/header"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -131,16 +131,14 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
             </SelectContent>
           </Select>
           <div className="filter-divider" />
-          <Input
-            type="date"
+          <DatePicker
             value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
+            onChange={(d) => setDateFrom(d)}
             className="w-36 text-sm bg-white h-8 border-border/60"
           />
-          <Input
-            type="date"
+          <DatePicker
             value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
+            onChange={(d) => setDateTo(d)}
             className="w-36 text-sm bg-white h-8 border-border/60"
           />
           <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none">

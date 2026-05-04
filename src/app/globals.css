@@ -75,6 +75,18 @@
   --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
 }
 
+/* ─── Universal Page Spacing ────────────────────────── */
+/*     Edit these vars to respace every page at once.   */
+:root {
+  --page-px: 2rem;  /* sides  — change here to respace all pages */
+  --page-pt: 1.5rem;  /* top    */
+  --page-pb: 2rem;    /* bottom */
+}
+
+.page-container {
+  padding: var(--page-pt) var(--page-px) var(--page-pb);
+}
+
 /* ─── Base Styles ──────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -155,10 +167,43 @@ input[type="number"] {
   display: none;
 }
 
+/* ─── Scrollbar Auto (hidden until hover) ────────────── */
+.scrollbar-auto {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scrollbar-auto::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollbar-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-auto::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+.scrollbar-auto:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+}
+.scrollbar-auto:hover {
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
 /* ─── Animations ─────────────────────────────────────── */
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slide-in-from-right {
@@ -222,6 +267,14 @@ input[type="number"] {
   animation: fade-in 0.15s ease-out;
 }
 
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-fade-up {
+  animation: fade-up 0.45s ease-out both;
+}
+
 .animate-slide-in-right {
   animation: slide-in-from-right 0.2s ease-out;
 }
@@ -267,6 +320,13 @@ input[type="number"] {
 
 .data-table tbody tr:hover {
   background-color: var(--color-surface);
+}
+
+/* ─── Pointer cursor on interactive elements ─────────────── */
+button, [role="button"],
+input[type="submit"], input[type="button"], input[type="reset"],
+input[type="checkbox"], input[type="radio"], select {
+  cursor: pointer;
 }
 
 .data-table tbody td {

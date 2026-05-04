@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -661,18 +662,16 @@ export function DataExportPage() {
         {/* Date range */}
         <div className="flex items-center gap-1.5">
           <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-          <Input
-            type="date"
+          <DatePicker
             value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
+            onChange={(d) => setDateFrom(d)}
             className="h-9 w-[140px] text-sm"
             placeholder="From"
           />
           <span className="text-muted-foreground text-xs">to</span>
-          <Input
-            type="date"
+          <DatePicker
             value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
+            onChange={(d) => setDateTo(d)}
             className="h-9 w-[140px] text-sm"
             placeholder="To"
           />

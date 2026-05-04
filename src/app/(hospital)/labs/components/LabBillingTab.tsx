@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { Search, User, FileText, AlertTriangle, CheckCircle2, Filter, Loader2, FlaskConical, ChevronDown, History } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -524,9 +524,8 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
               </TableRow>
             ) : (
               bills.map((bill) => (
-                <>
+                <React.Fragment key={bill.id}>
                   <TableRow
-                    key={bill.id}
                     className="cursor-pointer"
                     onClick={() => setExpandedBill(expandedBill === bill.id ? null : bill.id)}
                   >
@@ -567,7 +566,7 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
                     </TableCell>
                   </TableRow>
                   {expandedBill === bill.id && (
-                    <TableRow key={`${bill.id}-detail`}>
+                    <TableRow>
                       <TableCell colSpan={8} className="bg-muted/30 px-8 py-3">
                         <div className="text-xs font-medium text-muted-foreground mb-1.5">Investigations:</div>
                         <div className="space-y-0.5">
@@ -590,7 +589,7 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </React.Fragment>
               ))
             )}
           </TableBody>

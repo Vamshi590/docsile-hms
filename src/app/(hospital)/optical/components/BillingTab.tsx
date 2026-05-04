@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { Eye, Loader2, Plus, Search, Trash2, X, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
@@ -548,11 +549,11 @@ export function BillingTab() {
               <div className="flex gap-2 items-end">
                 <div className="space-y-1">
                   <Label className="text-xs">From</Label>
-                  <Input type="date" value={historyDateFrom} onChange={(e) => setHistoryDateFrom(e.target.value)} className="h-8 text-sm w-40" />
+                  <DatePicker value={historyDateFrom} onChange={(d) => setHistoryDateFrom(d)} className="h-8 text-sm w-40" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">To</Label>
-                  <Input type="date" value={historyDateTo} onChange={(e) => setHistoryDateTo(e.target.value)} className="h-8 text-sm w-40" />
+                  <DatePicker value={historyDateTo} onChange={(d) => setHistoryDateTo(d)} className="h-8 text-sm w-40" />
                 </div>
                 <Button size="sm" className="h-8" onClick={loadHistory}>Search</Button>
               </div>
@@ -677,10 +678,9 @@ export function BillingTab() {
               {/* Delivery */}
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Expected Delivery</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   value={deliveryDate}
-                  onChange={(e) => setDeliveryDate(e.target.value)}
+                  onChange={(d) => setDeliveryDate(d)}
                   className="h-8 text-sm border-gray-200 focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0"
                 />
               </div>

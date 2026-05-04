@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Separator } from "@/components/ui/separator"
 import { cn, calculateAge, formatCurrency, todayISO } from "@/lib/utils"
 import { EditableComboboxWithAdd } from "@/components/ui/combobox"
+import { DatePicker } from "@/components/ui/date-picker"
 import {
   createPatient,
   updatePatientInfo,
@@ -530,11 +531,10 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                           <Label>Date</Label>
-                          <Input
-                            type="date"
-                            className="bg-white focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 focus:outline-none placeholder:text-gray-300"
+                          <DatePicker
                             value={patientData.appointmentDate}
-                            onChange={e => setPatientData(prev => ({ ...prev, appointmentDate: e.target.value }))}
+                            onChange={(d) => setPatientData(prev => ({ ...prev, appointmentDate: d }))}
+                            className="w-full bg-white"
                           />
                         </div>
                         <div className="space-y-1.5">
@@ -564,11 +564,11 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
                         </div>
                         <div className="space-y-1.5">
                           <Label>Date of Birth</Label>
-                          <Input
-                            type="date"
-                            className="bg-white focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 focus:outline-none placeholder:text-gray-300"
+                          <DatePicker
                             value={patientData.dateOfBirth}
-                            onChange={e => handleDobChange(e.target.value)}
+                            onChange={(d) => handleDobChange(d)}
+                            className="w-full bg-white"
+                            maxDate={todayISO()}
                           />
                         </div>
                         <div className="space-y-1.5">

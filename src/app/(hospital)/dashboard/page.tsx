@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
+import { getISTDayBounds } from "@/lib/utils"
 import { DashboardClient } from "./DashboardClient"
 
 function getGreeting(hour: number) {
@@ -10,11 +11,15 @@ function getGreeting(hour: number) {
 
 export default async function DashboardPage() {
   const user = (await getSession())!
-  const now = new Date()
-  const greeting = getGreeting(now.getHours())
 
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const tomorrow = new Date(today.getTime() + 86400000)
+  const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }))
+  const greeting = getGreeting(nowIST.getHours())
+  const parts = user.fullName.split(" ")
+  const firstName = parts[0].toLowerCase() === "dr." || parts[0].toLowerCase() === "dr"
+    ? (parts[1] ?? parts[0])
+    : parts[0]
+
+  const { start: today, end: tomorrow } = getISTDayBounds()
 
   const supabase = await createClient()
   const [opdResult, ipdResult, activeIPResult] = await Promise.all([
@@ -39,6 +44,11 @@ export default async function DashboardPage() {
   return (
     <DashboardClient
       greeting={greeting}
+      firstName={firstName}
+      userRole={user.role}
+      opdCount={opdResult.count ?? 0}
+      ipdCount={ipdResult.count ?? 0}
+      activeInpatients={activeIPResult.count ?? 0}
     />
   )
 }

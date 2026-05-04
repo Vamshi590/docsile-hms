@@ -9,6 +9,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -1002,7 +1003,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Follow-up Date</Label>
-                  <Input type="date" value={followUpDate} onChange={e => { setFollowUpDate(e.target.value); setFollowUpDays("") }} className="bg-white h-9" />
+                  <DatePicker value={followUpDate} onChange={(d) => { setFollowUpDate(d); setFollowUpDays("") }} className="bg-white h-9" />
                 </div>
               </div>
             </div>
@@ -1023,7 +1024,7 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Discharge Date</Label>
-                  <Input type="date" value={dischargeDate} onChange={e => setDischargeDate(e.target.value)} className="bg-white" />
+                  <DatePicker value={dischargeDate} onChange={(d) => setDischargeDate(d)} className="bg-white" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Condition at Discharge</Label>

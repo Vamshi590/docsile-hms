@@ -2,8 +2,7 @@
 
 import { useState } from "react"
 import { ChevronUp, ChevronDown, MoreVertical, Pencil, Trash2 } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { formatCurrency, calculateAge } from "@/lib/utils"
+import { cn, formatCurrency, calculateAge } from "@/lib/utils"
 import { PatientStatusBadge } from "./PatientStatusBadge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -11,12 +10,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/table"
 
 export type PatientRow = {
@@ -49,11 +43,12 @@ interface PatientTableProps {
   userRole?: string
   onEdit?: (patient: PatientRow) => void
   onDelete?: (patient: PatientRow) => void
+  emptyLabel?: string
 }
 
-type SortKey = "patientId" | "name" | "status" | "appointmentDate" | "createdAt"
+type SortKey = "token" | "name" | "status" | "createdAt"
 
-export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, onDelete }: PatientTableProps) {
+export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, onDelete, emptyLabel }: PatientTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("createdAt")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
@@ -75,13 +70,9 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
 
   const sorted = [...patients].sort((a, b) => {
     let av: string | number = "", bv: string | number = ""
-    if (sortKey === "patientId") { av = a.patientId; bv = b.patientId }
+    if (sortKey === "token") { av = tokenMap.get(a.id) ?? 0; bv = tokenMap.get(b.id) ?? 0 }
     else if (sortKey === "name") { av = a.firstName + (a.lastName ?? ""); bv = b.firstName + (b.lastName ?? "") }
     else if (sortKey === "status") { av = a.status; bv = b.status }
-    else if (sortKey === "appointmentDate") {
-      av = new Date(a.appointmentDate).getTime()
-      bv = new Date(b.appointmentDate).getTime()
-    }
     else if (sortKey === "createdAt") {
       av = new Date(a.createdAt).getTime()
       bv = new Date(b.createdAt).getTime()
@@ -92,35 +83,30 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
   })
 
   function SortIcon({ k }: { k: SortKey }) {
-    if (sortKey !== k) return <span className="opacity-30 ml-1 text-[10px]">↕</span>
+    if (sortKey !== k) return <span className="opacity-25 ml-1 text-[10px]">↕</span>
     return sortDir === "asc"
       ? <ChevronUp className="h-3 w-3 ml-0.5 inline text-primary" />
       : <ChevronDown className="h-3 w-3 ml-0.5 inline text-primary" />
   }
 
-  const sortableHeadClass = "cursor-pointer select-none hover:text-foreground transition-colors"
+  const sortable = "cursor-pointer select-none hover:text-foreground transition-colors"
 
   const headers = (
     <TableHeader>
-      <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
-        <TableHead className="w-12 text-center">Token</TableHead>
-        <TableHead className={cn("w-[4.5rem]", sortableHeadClass)} onClick={() => handleSort("createdAt")}>
-          Time <SortIcon k="createdAt" />
+      <TableRow className="bg-muted/40 hover:bg-muted/40 border-b border-border/60">
+        <TableHead className={cn("w-16 text-center", sortable)} onClick={() => handleSort("token")}>
+          # <SortIcon k="token" />
         </TableHead>
-        <TableHead className={sortableHeadClass} onClick={() => handleSort("patientId")}>
-          Patient ID <SortIcon k="patientId" />
+        <TableHead className={sortable} onClick={() => handleSort("name")}>
+          Patient <SortIcon k="name" />
         </TableHead>
-        <TableHead className={sortableHeadClass} onClick={() => handleSort("name")}>
-          Name <SortIcon k="name" />
-        </TableHead>
-        <TableHead>Age / Gender</TableHead>
-        <TableHead>Phone</TableHead>
+        <TableHead>Details</TableHead>
         <TableHead>Doctor</TableHead>
-        <TableHead className={sortableHeadClass} onClick={() => handleSort("status")}>
+        <TableHead className={sortable} onClick={() => handleSort("status")}>
           Status <SortIcon k="status" />
         </TableHead>
-        <TableHead>Receipt</TableHead>
-        <TableHead className="w-12"></TableHead>
+        <TableHead className="text-right">Amount</TableHead>
+        <TableHead className="w-10" />
       </TableRow>
     </TableHeader>
   )
@@ -131,18 +117,35 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
         <Table>
           {headers}
           <TableBody>
-            {Array.from({ length: 7 }).map((_, i) => (
+            {Array.from({ length: 8 }).map((_, i) => (
               <TableRow key={i} className="hover:bg-transparent">
-                <TableCell className="text-center"><Skeleton className="h-6 w-7 rounded mx-auto" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                <TableCell><Skeleton className="h-5 w-16 rounded" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                <TableCell className="text-center">
+                  <div className="space-y-1 flex flex-col items-center">
+                    <Skeleton className="h-5 w-7 rounded" />
+                    <Skeleton className="h-3 w-10 rounded" />
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-14 rounded" />
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                </TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-6" /></TableCell>
+                <TableCell><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
+                <TableCell className="text-right">
+                  <div className="space-y-1 items-end flex flex-col">
+                    <Skeleton className="h-4 w-14" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                </TableCell>
+                <TableCell><Skeleton className="h-6 w-6 rounded" /></TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -155,9 +158,9 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
     return (
       <div className="rounded-xl border border-border/60 bg-white py-20 text-center shadow-sm">
         <div className="text-3xl mb-3">📋</div>
-        <p className="text-base font-semibold text-foreground">No patients found</p>
+        <p className="text-base font-semibold text-foreground">{emptyLabel ?? "No patients found"}</p>
         <p className="text-sm text-muted-foreground mt-1.5">
-          Try a different date or use Add Patient to register a new patient
+          Try a different date or use Add Patient to register
         </p>
       </div>
     )
@@ -170,65 +173,81 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
         <TableBody>
           {sorted.map((patient) => {
             const age = patient.age ?? calculateAge(patient.dateOfBirth) ?? "—"
-            const latestInvoice = patient.prescriptions?.[0]
+            const invoice = patient.prescriptions?.[0]
             const fullName = `${patient.firstName} ${patient.lastName ?? ""}`.trim()
             const genderShort = patient.gender === "MALE" ? "M" : patient.gender === "FEMALE" ? "F" : "O"
+            const token = tokenMap.get(patient.id) ?? "—"
+            const time = new Date(patient.createdAt).toLocaleTimeString("en-IN", {
+              hour: "2-digit", minute: "2-digit", hour12: false,
+            })
 
             return (
               <TableRow
                 key={patient.id}
                 onClick={() => onRowClick(patient)}
-                className="cursor-pointer group hover:bg-primary/[0.02] transition-colors"
+                className="cursor-pointer group hover:bg-primary/[0.025] transition-colors"
               >
+                {/* # — token + time */}
                 <TableCell className="text-center">
-                  <span className="inline-flex items-center justify-center h-6 min-w-7 rounded bg-primary/10 border border-primary/20 border-dashed text-xs font-bold text-primary tabular-nums px-1.5">
-                    {tokenMap.get(patient.id)}
-                  </span>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="inline-flex items-center justify-center h-6 min-w-7 rounded bg-primary/10 border border-primary/20 border-dashed text-xs font-bold text-primary tabular-nums px-1.5">
+                      {token}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/60 tabular-nums leading-none">{time}</span>
+                  </div>
                 </TableCell>
-                <TableCell className="text-muted-foreground text-sm tabular-nums whitespace-nowrap">
-                  {new Date(patient.createdAt).toLocaleTimeString("en-IN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </TableCell>
+
+                {/* Patient — name + ID */}
                 <TableCell>
-                  <span className="font-mono text-xs font-semibold text-foreground bg-muted/60 px-2 py-0.5 rounded">
+                  <div className="font-semibold text-sm text-foreground leading-snug">{fullName}</div>
+                  <span className="font-mono text-[10px] font-medium text-muted-foreground/70 bg-muted/50 px-1.5 py-0.5 rounded mt-0.5 inline-block">
                     {patient.patientId}
                   </span>
                 </TableCell>
+
+                {/* Details — age/gender + phone */}
                 <TableCell>
-                  <span className="font-semibold text-sm text-foreground">{fullName}</span>
+                  <div className="text-sm text-muted-foreground whitespace-nowrap">{age}y · {genderShort}</div>
+                  <div className="text-xs text-muted-foreground/70 tabular-nums mt-0.5">{patient.phone}</div>
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                  {age}y / {genderShort}
-                </TableCell>
-                <TableCell className="text-sm text-foreground tabular-nums">{patient.phone}</TableCell>
+
+                {/* Doctor */}
                 <TableCell className="text-sm text-muted-foreground">
-                  {patient.doctorName ?? <span className="text-muted-foreground/50">—</span>}
+                  {patient.doctorName ?? <span className="text-muted-foreground/30">—</span>}
                 </TableCell>
+
+                {/* Status */}
                 <TableCell>
                   <PatientStatusBadge status={patient.status as never} />
                 </TableCell>
-                <TableCell>
-                  {latestInvoice ? (
+
+                {/* Amount */}
+                <TableCell className="text-right">
+                  {invoice ? (
                     <div>
-                      <span className="font-semibold text-sm text-foreground tabular-nums">
-                        {formatCurrency(latestInvoice.total)}
-                      </span>
-                      {latestInvoice.balanceDue > 0 && (
-                        <p className="text-[11px] text-orange-600 font-medium mt-0.5 tabular-nums">
-                          Due: {formatCurrency(latestInvoice.balanceDue)}
-                        </p>
+                      <div className="font-semibold text-sm text-foreground tabular-nums">
+                        {formatCurrency(invoice.total)}
+                      </div>
+                      {invoice.balanceDue > 0 && (
+                        <div className="text-[11px] text-orange-600 font-medium tabular-nums mt-0.5">
+                          Due: {formatCurrency(invoice.balanceDue)}
+                        </div>
                       )}
                     </div>
                   ) : (
-                    <span className="text-muted-foreground/50">—</span>
+                    <span className="text-muted-foreground/30 text-sm">—</span>
                   )}
                 </TableCell>
+
+                {/* Actions */}
                 <TableCell onClick={e => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon-sm" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -252,7 +271,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
           })}
         </TableBody>
       </Table>
-      <div className="px-4 py-2.5 border-t border-border/40 bg-muted/20">
+      <div className="px-4 py-2.5 border-t border-border/40 bg-muted/20 flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
           {patients.length} patient{patients.length !== 1 ? "s" : ""}
         </span>

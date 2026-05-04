@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
 import { Loader2, IndianRupee, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { FilterBar, SearchInput } from "@/components/layout/header"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -118,17 +118,15 @@ export function DuesTab({ refreshRef }: { refreshRef?: React.MutableRefObject<((
             </SelectContent>
           </Select>
           <div className="filter-divider" />
-          <Input
-            type="date"
+          <DatePicker
             value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
+            onChange={(d) => setDateFrom(d)}
             className="w-36 text-sm bg-white h-8 border-border/60"
             placeholder="From"
           />
-          <Input
-            type="date"
+          <DatePicker
             value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
+            onChange={(d) => setDateTo(d)}
             className="w-36 text-sm bg-white h-8 border-border/60"
             placeholder="To"
           />

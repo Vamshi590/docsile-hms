@@ -94,17 +94,20 @@ export async function getPatients(filters: {
   const supabase = await createClient()
   const { date, search, status, type = "OPD" } = filters
 
-  let dateBounds: { start: Date; end: Date } | null = null
-  if (date) {
-    dateBounds = getISTDayBounds(date)
-  }
-
-  // Build select with nested relations
+  // Slim select — removes nested InvoiceItem/Payment (saves 80%+ payload)
   let query = supabase
     .from("Patient")
-    .select("*, prescriptions:Prescription(*, items:InvoiceItem(*), payments:Payment(*)), eyeReadings:EyeReading(*)")
+    .select("*, prescriptions:Prescription(id, prescriptionNumber, subtotal, balanceDue, total, status, doctorName, prescriptionDate, createdAt), eyeReadings:EyeReading(id, readingDate, createdAt)")
     .eq("patientType", type)
     .order("createdAt", { ascending: true })
+
+  // Server-side date filter — eliminates loading entire patient history
+  if (date) {
+    const dateBounds = getISTDayBounds(date)
+    query = query
+      .gte("appointmentDate", dateBounds.start.toISOString())
+      .lt("appointmentDate", dateBounds.end.toISOString())
+  }
 
   if (status) {
     query = query.eq("status", status)
@@ -123,50 +126,17 @@ export async function getPatients(filters: {
     return []
   }
 
-  // Filter by date bounds client-side (for appointment date OR prescription date match)
-  let filtered = patients ?? []
-  const isInBounds = dateBounds
-    ? (dateStr: string) => {
-        const t = new Date(dateStr).getTime()
-        return t >= dateBounds.start.getTime() && t <= dateBounds.end.getTime()
-      }
-    : null
-
-  if (isInBounds) {
-    filtered = filtered.filter((p: Record<string, unknown>) => {
-      const prescriptions = (p.prescriptions ?? []) as { prescriptionDate: string }[]
-      const appointmentDate = p.appointmentDate as string
-      const hasPrescriptionInRange = prescriptions.some(
-        (rx) => isInBounds(rx.prescriptionDate)
-      )
-      const hasAppointmentInRange = appointmentDate && isInBounds(appointmentDate)
-      return hasPrescriptionInRange || hasAppointmentInRange
-    })
-  }
-
-  // Filter prescriptions and eyeReadings to date bounds, limit counts
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return filtered.map((p: any) => {
+  return (patients ?? []).map((p: any) => {
     let prescriptions = (p.prescriptions ?? []) as {
       id: string; status: string; doctorName: string | null; createdAt: string;
-      prescriptionDate: string; items: unknown[]; payments: unknown[]
+      prescriptionDate: string; subtotal: number; balanceDue: number; total: number; prescriptionNumber: string;
     }[]
     let eyeReadings = (p.eyeReadings ?? []) as { id: string; readingDate: string; createdAt: string }[]
 
-    if (isInBounds) {
-      prescriptions = prescriptions.filter(
-        (rx) => isInBounds(rx.prescriptionDate)
-      )
-      eyeReadings = eyeReadings.filter(
-        (er) => isInBounds(er.readingDate)
-      )
-    }
-
-    // Sort prescriptions desc by createdAt, take 1
+    // Sort descending, keep only most recent
     prescriptions.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     prescriptions = prescriptions.slice(0, 1)
-
-    // Take 1 eye reading
     eyeReadings = eyeReadings.slice(0, 1)
 
     const hasWorkup = eyeReadings.length > 0

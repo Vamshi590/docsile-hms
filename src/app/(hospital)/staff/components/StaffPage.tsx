@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -685,7 +686,7 @@ export default function StaffPage() {
             </div>
             <div className="space-y-2">
               <Label>Date of Joining</Label>
-              <Input type="date" value={form.joiningDate} onChange={(e) => setForm({ ...form, joiningDate: e.target.value })} />
+              <DatePicker value={form.joiningDate} onChange={(d) => setForm({ ...form, joiningDate: d })} />
             </div>
             <div className="space-y-2">
               <Label>Blood Group</Label>

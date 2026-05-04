@@ -1,5 +1,9 @@
+"use client"
+
 import { ReactNode, useState, useCallback } from "react"
 import { cn } from "@/lib/utils"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 
 interface PageHeaderProps {
   title: string
@@ -134,9 +138,11 @@ interface DateNavigatorProps {
 }
 
 export function DateNavigator({ date, onDateChange, onPrev, onNext, onToday, isToday }: DateNavigatorProps) {
+  const [open, setOpen] = useState(false)
+
   const formatted = (() => {
     try {
-      const d = new Date(date + "T00:00:00")
+      const d = new Date(date + "T00:00:00+05:30")
       return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
     } catch { return date }
   })()
@@ -151,28 +157,32 @@ export function DateNavigator({ date, onDateChange, onPrev, onNext, onToday, isT
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
         </svg>
       </button>
-      <div className="relative">
-        <button
-          className="h-8 px-3 flex items-center gap-2 rounded-lg border border-border/60 bg-white hover:bg-muted/40 transition-colors text-sm font-medium text-foreground"
-          onClick={() => {
-            const input = document.getElementById("__date-nav-input") as HTMLInputElement
-            input?.showPicker?.()
-          }}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            className="h-8 px-3 flex items-center gap-2 rounded-lg border border-border/60 bg-white hover:bg-muted/40 transition-colors text-sm font-medium text-foreground"
+            aria-label="Pick a date"
+          >
+            <svg className="h-3.5 w-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+            </svg>
+            <span>{formatted}</span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="center"
+          sideOffset={6}
+          className="w-auto p-0 rounded-2xl border border-border/60 shadow-xl"
         >
-          <svg className="h-3.5 w-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-          </svg>
-          <span>{formatted}</span>
-        </button>
-        <input
-          id="__date-nav-input"
-          type="date"
-          value={date}
-          onChange={e => onDateChange(e.target.value)}
-          className="absolute inset-0 opacity-0 cursor-pointer"
-          tabIndex={-1}
-        />
-      </div>
+          <Calendar
+            value={date}
+            onChange={(d) => {
+              onDateChange(d)
+              setOpen(false)
+            }}
+          />
+        </PopoverContent>
+      </Popover>
       <button
         onClick={onNext}
         className="h-8 w-8 flex items-center justify-center rounded-lg border border-border/60 bg-white hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground"

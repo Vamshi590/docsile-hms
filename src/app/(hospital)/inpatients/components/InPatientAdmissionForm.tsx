@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -434,10 +435,9 @@ export default function InPatientAdmissionForm({ open, onClose, onSuccess, editI
               </div>
               <div>
                 <Label>Date of Birth</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   value={dateOfBirth}
-                  onChange={e => setDateOfBirth(e.target.value)}
+                  onChange={(d) => setDateOfBirth(d)}
                   className="mt-1 bg-white text-base font-medium"
                 />
               </div>

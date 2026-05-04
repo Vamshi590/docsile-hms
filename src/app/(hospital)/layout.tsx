@@ -23,7 +23,7 @@ export default async function HospitalLayout({
         hospitalName={hospitalName}
       />
       <main className="h-full overflow-y-auto">
-        <div className="min-h-full px-4 pt-6 pb-8">{children}</div>
+        <div className="min-h-full page-container">{children}</div>
       </main>
       <InstallPrompt />
     </div>
