@@ -13,6 +13,21 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/table"
 
+type InvoiceItem = { id: string; description: string; category?: string }
+
+type Prescription = {
+  id: string
+  prescriptionNumber: string
+  subtotal: number
+  balanceDue: number
+  total: number
+  status: string
+  doctorName: string | null
+  prescriptionDate: string
+  createdAt: string
+  items?: InvoiceItem[]
+}
+
 export type PatientRow = {
   id: string
   patientId: string
@@ -29,8 +44,7 @@ export type PatientRow = {
   department: string | null
   guardianName?: string | null
   address?: string | null
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  prescriptions?: any[]
+  prescriptions?: Prescription[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   eyeReadings?: any[]
   [key: string]: unknown
@@ -52,7 +66,6 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
   const [sortKey, setSortKey] = useState<SortKey>("createdAt")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
-  // Stable token numbers based on registration time — unaffected by column sort
   const tokenMap = new Map(
     [...patients]
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
@@ -60,12 +73,8 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
   )
 
   function handleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir(d => d === "asc" ? "desc" : "asc")
-    } else {
-      setSortKey(key)
-      setSortDir("asc")
-    }
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc")
+    else { setSortKey(key); setSortDir("asc") }
   }
 
   const sorted = [...patients].sort((a, b) => {
@@ -73,10 +82,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
     if (sortKey === "token") { av = tokenMap.get(a.id) ?? 0; bv = tokenMap.get(b.id) ?? 0 }
     else if (sortKey === "name") { av = a.firstName + (a.lastName ?? ""); bv = b.firstName + (b.lastName ?? "") }
     else if (sortKey === "status") { av = a.status; bv = b.status }
-    else if (sortKey === "createdAt") {
-      av = new Date(a.createdAt).getTime()
-      bv = new Date(b.createdAt).getTime()
-    }
+    else { av = new Date(a.createdAt).getTime(); bv = new Date(b.createdAt).getTime() }
     if (av < bv) return sortDir === "asc" ? -1 : 1
     if (av > bv) return sortDir === "asc" ? 1 : -1
     return 0
@@ -89,20 +95,22 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
       : <ChevronDown className="h-3 w-3 ml-0.5 inline text-primary" />
   }
 
-  const sortable = "cursor-pointer select-none hover:text-foreground transition-colors"
+  const sh = "cursor-pointer select-none hover:text-foreground transition-colors"
 
   const headers = (
     <TableHeader>
       <TableRow className="bg-muted/40 hover:bg-muted/40 border-b border-border/60">
-        <TableHead className={cn("w-16 text-center", sortable)} onClick={() => handleSort("token")}>
+        <TableHead className={cn("w-16 text-center", sh)} onClick={() => handleSort("token")}>
           # <SortIcon k="token" />
         </TableHead>
-        <TableHead className={sortable} onClick={() => handleSort("name")}>
+        <TableHead className={sh} onClick={() => handleSort("name")}>
           Patient <SortIcon k="name" />
         </TableHead>
-        <TableHead>Details</TableHead>
+        <TableHead>Age / Gender</TableHead>
+        <TableHead>Phone</TableHead>
         <TableHead>Doctor</TableHead>
-        <TableHead className={sortable} onClick={() => handleSort("status")}>
+        <TableHead>Services</TableHead>
+        <TableHead className={sh} onClick={() => handleSort("status")}>
           Status <SortIcon k="status" />
         </TableHead>
         <TableHead className="text-right">Amount</TableHead>
@@ -120,7 +128,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
             {Array.from({ length: 8 }).map((_, i) => (
               <TableRow key={i} className="hover:bg-transparent">
                 <TableCell className="text-center">
-                  <div className="space-y-1 flex flex-col items-center">
+                  <div className="flex flex-col items-center gap-1">
                     <Skeleton className="h-5 w-7 rounded" />
                     <Skeleton className="h-3 w-10 rounded" />
                   </div>
@@ -138,9 +146,15 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
                   </div>
                 </TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    <Skeleton className="h-5 w-20 rounded" />
+                    <Skeleton className="h-5 w-16 rounded" />
+                  </div>
+                </TableCell>
                 <TableCell><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
                 <TableCell className="text-right">
-                  <div className="space-y-1 items-end flex flex-col">
+                  <div className="flex flex-col items-end gap-1">
                     <Skeleton className="h-4 w-14" />
                     <Skeleton className="h-3 w-16" />
                   </div>
@@ -160,7 +174,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
         <div className="text-3xl mb-3">📋</div>
         <p className="text-base font-semibold text-foreground">{emptyLabel ?? "No patients found"}</p>
         <p className="text-sm text-muted-foreground mt-1.5">
-          Try a different date or use Add Patient to register
+          Try adjusting your filters or select a different date
         </p>
       </div>
     )
@@ -174,6 +188,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
           {sorted.map((patient) => {
             const age = patient.age ?? calculateAge(patient.dateOfBirth) ?? "—"
             const invoice = patient.prescriptions?.[0]
+            const services = invoice?.items ?? []
             const fullName = `${patient.firstName} ${patient.lastName ?? ""}`.trim()
             const genderShort = patient.gender === "MALE" ? "M" : patient.gender === "FEMALE" ? "F" : "O"
             const token = tokenMap.get(patient.id) ?? "—"
@@ -187,7 +202,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
                 onClick={() => onRowClick(patient)}
                 className="cursor-pointer group hover:bg-primary/[0.025] transition-colors"
               >
-                {/* # — token + time */}
+                {/* # — token + registration time */}
                 <TableCell className="text-center">
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="inline-flex items-center justify-center h-6 min-w-7 rounded bg-primary/10 border border-primary/20 border-dashed text-xs font-bold text-primary tabular-nums px-1.5">
@@ -200,20 +215,42 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
                 {/* Patient — name + ID */}
                 <TableCell>
                   <div className="font-semibold text-sm text-foreground leading-snug">{fullName}</div>
-                  <span className="font-mono text-[10px] font-medium text-muted-foreground/70 bg-muted/50 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                  <span className="font-mono text-[10px] font-medium text-muted-foreground/60 bg-muted/50 px-1.5 py-0.5 rounded mt-0.5 inline-block">
                     {patient.patientId}
                   </span>
                 </TableCell>
 
-                {/* Details — age/gender + phone */}
+                {/* Details — age / gender / phone */}
                 <TableCell>
                   <div className="text-sm text-muted-foreground whitespace-nowrap">{age}y · {genderShort}</div>
-                  <div className="text-xs text-muted-foreground/70 tabular-nums mt-0.5">{patient.phone}</div>
+                  <div className="text-xs text-muted-foreground/60 tabular-nums mt-0.5">{patient.phone}</div>
+                </TableCell>
+                <TableCell className="text-sm text-foreground tabular-nums">{patient.phone}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {patient.doctorName ?? <span className="text-muted-foreground/25">—</span>}
                 </TableCell>
 
-                {/* Doctor */}
-                <TableCell className="text-sm text-muted-foreground">
-                  {patient.doctorName ?? <span className="text-muted-foreground/30">—</span>}
+                {/* Services */}
+                <TableCell>
+                  {services.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      {services.slice(0, 2).map((s) => (
+                        <span
+                          key={s.id}
+                          className="text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded font-medium leading-snug w-fit max-w-[180px] break-words"
+                        >
+                          {s.description}
+                        </span>
+                      ))}
+                      {services.length > 2 && (
+                        <span className="text-[10px] text-muted-foreground/50 font-medium">
+                          +{services.length - 2} more
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground/25 text-sm">—</span>
+                  )}
                 </TableCell>
 
                 {/* Status */}
@@ -235,7 +272,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
                       )}
                     </div>
                   ) : (
-                    <span className="text-muted-foreground/30 text-sm">—</span>
+                    <span className="text-muted-foreground/25 text-sm">—</span>
                   )}
                 </TableCell>
 

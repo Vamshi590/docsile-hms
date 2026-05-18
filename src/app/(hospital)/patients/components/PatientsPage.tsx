@@ -1,13 +1,15 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { toast } from "sonner"
 import {
-  Plus, MoreVertical, Pencil, Trash2, Loader2, RefreshCw, UserSearch, X,
+  Plus, MoreVertical, Pencil, Trash2, Loader2,
+  RefreshCw, UserSearch, X, SlidersHorizontal,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { BreadcrumbHeader, FilterBar, DateNavigator, SearchInput } from "@/components/layout/header"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { BreadcrumbHeader, DateNavigator, SearchInput } from "@/components/layout/header"
+import { Popover, PopoverContent, PopoverTrigger, PopoverArrow } from "@/components/ui/popover"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { PatientTable, PatientRow } from "./PatientTable"
@@ -20,7 +22,7 @@ import { ExistingPatientSearch } from "./ExistingPatientSearch"
 import { AddServicesModal } from "./AddServicesModal"
 import { getPatients, searchExistingPatients, getCurrentUserRole, deletePatient } from "../actions"
 import { getInPatients, deleteInPatient } from "@/app/(hospital)/inpatients/actions"
-import { todayISO, toLocalDateISO, cn } from "@/lib/utils"
+import { todayISO, toLocalDateISO, cn, calculateAge } from "@/lib/utils"
 import type { InPatient } from "@/lib/types"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -43,16 +45,20 @@ export function PatientsPage() {
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL")
+  const [genderFilter, setGenderFilter] = useState<"ALL" | "MALE" | "FEMALE" | "OTHER">("ALL")
+  const [doctorFilter, setDoctorFilter] = useState("ALL")
+  const [ageRange, setAgeRange] = useState<[number, number]>([0, 100])
   const [patients, setPatients] = useState<PatientRow[]>([])
   const [inpatients, setInpatients] = useState<InPatient[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [showFindPatient, setShowFindPatient] = useState(false)
+  const [filterOpen, setFilterOpen] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(null)
   const [selectedInpatient, setSelectedInpatient] = useState<InPatient | null>(null)
   const [existingPatientId, setExistingPatientId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState("")
 
-  const [showFindPatient, setShowFindPatient] = useState(false)
   const [editPatient, setEditPatient] = useState<PatientRow | null>(null)
   const [editInpatient, setEditInpatient] = useState<InPatient | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ type: "OPD" | "IPD"; id: string; name: string } | null>(null)
@@ -79,13 +85,24 @@ export function PatientsPage() {
   useEffect(() => { loadPatients() }, [loadPatients])
   useEffect(() => { getCurrentUserRole().then(r => setUserRole(r.role)) }, [])
 
-  // Silent auto-refresh every 60s when not in a detail view
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isInDetailView) loadPatients(true)
     }, 60_000)
     return () => clearInterval(interval)
   }, [loadPatients, isInDetailView])
+
+  function handleTabChange(next: "OPD" | "IPD") {
+    setTab(next)
+    setSelectedPatient(null)
+    setSelectedInpatient(null)
+    setStatusFilter("ALL")
+    setGenderFilter("ALL")
+    setDoctorFilter("ALL")
+    setAgeRange([0, 100])
+    setSearch("")
+    setDebouncedSearch("")
+  }
 
   function handleSearchChange(value: string) {
     setSearch(value)
@@ -104,7 +121,6 @@ export function PatientsPage() {
     setSelectedDate(toLocalDateISO(d))
   }
 
-  // Stat counts — always from the full unfiltered day list
   const stats = {
     total: patients.length,
     registered: patients.filter(p => p.status === "REGISTERED").length,
@@ -113,18 +129,39 @@ export function PatientsPage() {
     done: patients.filter(p => ["VISITED", "COMPLETED", "MEDICAL_ONLY"].includes(p.status)).length,
   }
 
-  // Client-side status filter on the already-fetched day's data
-  const filteredPatients = statusFilter === "ALL"
-    ? patients
-    : patients.filter(p =>
-        OPD_STATUS_FILTERS.find(f => f.key === statusFilter)?.statuses.includes(p.status) ?? true
-      )
+  const doctorOptions = useMemo(
+    () => Array.from(new Set(patients.map(p => p.doctorName).filter(Boolean) as string[])).sort(),
+    [patients]
+  )
+
+  const filteredPatients = useMemo(() => patients.filter(p => {
+    if (statusFilter !== "ALL" && !(OPD_STATUS_FILTERS.find(f => f.key === statusFilter)?.statuses.includes(p.status) ?? false)) return false
+    if (genderFilter !== "ALL" && p.gender !== genderFilter) return false
+    if (doctorFilter !== "ALL" && p.doctorName !== doctorFilter) return false
+    const age = p.age ?? calculateAge(p.dateOfBirth) ?? null
+    if (age !== null && (age < ageRange[0] || age > ageRange[1])) return false
+    return true
+  }), [patients, statusFilter, genderFilter, doctorFilter, ageRange])
 
   function countForFilter(key: StatusFilter) {
     if (key === "ALL") return patients.length
     return OPD_STATUS_FILTERS.find(f => f.key === key)?.statuses.reduce(
       (sum, s) => sum + patients.filter(p => p.status === s).length, 0
     ) ?? 0
+  }
+
+  const activeFilterCount = [
+    statusFilter !== "ALL",
+    genderFilter !== "ALL",
+    doctorFilter !== "ALL",
+    ageRange[0] !== 0 || ageRange[1] !== 100,
+  ].filter(Boolean).length
+
+  function clearAllFilters() {
+    setStatusFilter("ALL")
+    setGenderFilter("ALL")
+    setDoctorFilter("ALL")
+    setAgeRange([0, 100])
   }
 
   async function handleDelete() {
@@ -169,18 +206,8 @@ export function PatientsPage() {
 
   return (
     <>
-      <Tabs
-        value={tab}
-        onValueChange={(v) => {
-          setTab(v as "OPD" | "IPD")
-          setSelectedPatient(null)
-          setSelectedInpatient(null)
-          setStatusFilter("ALL")
-          setSearch("")
-          setDebouncedSearch("")
-        }}
-      >
-        {/* ── Header ── */}
+      <Tabs value={tab} onValueChange={v => handleTabChange(v as "OPD" | "IPD")}>
+        {/* ─── Global Header ─────────────────────────────────────────────── */}
         {isInDetailView ? (
           <BreadcrumbHeader
             onBack={() => { setSelectedPatient(null); setSelectedInpatient(null) }}
@@ -192,41 +219,65 @@ export function PatientsPage() {
             }
           />
         ) : (
-          <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-3.5 -mx-6 -mt-6 sticky top-0 z-20">
-            {/* Left: title + live stat pills */}
-            <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 rounded-b-2xl px-6 py-3.5 -mx-6 -mt-6 mb-5 sticky top-0 z-20">
+            {/* Left: title + live stat pills (global summary) */}
+            <div className="flex items-center gap-3 min-w-0">
               <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none shrink-0">Patients</h1>
               {tab === "OPD" && !loading && patients.length > 0 && (
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-muted-foreground tabular-nums">{stats.total} total</span>
-                  <StatPill count={stats.registered} label="reg" filterKey="REGISTERED"
-                    activeColor="bg-blue-500 text-white" inactiveColor="bg-blue-50 text-blue-600 hover:bg-blue-100" />
-                  <StatPill count={stats.workup} label="workup" filterKey="WORKUP"
-                    activeColor="bg-amber-500 text-white" inactiveColor="bg-amber-50 text-amber-600 hover:bg-amber-100" />
-                  <StatPill count={stats.doctor} label="doctor" filterKey="DOCTOR"
-                    activeColor="bg-violet-500 text-white" inactiveColor="bg-violet-50 text-violet-600 hover:bg-violet-100" />
-                  <StatPill count={stats.done} label="done" filterKey="DONE"
-                    activeColor="bg-green-500 text-white" inactiveColor="bg-green-50 text-green-600 hover:bg-green-100" />
+                  {stats.registered > 0 && (
+                    <span className="text-[11px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-semibold tabular-nums">
+                      {stats.registered} reg
+                    </span>
+                  )}
+                  {stats.workup > 0 && (
+                    <span className="text-[11px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full font-semibold tabular-nums">
+                      {stats.workup} workup
+                    </span>
+                  )}
+                  {stats.doctor > 0 && (
+                    <span className="text-[11px] bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded-full font-semibold tabular-nums">
+                      {stats.doctor} doctor
+                    </span>
+                  )}
+                  {stats.done > 0 && (
+                    <span className="text-[11px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded-full font-semibold tabular-nums">
+                      {stats.done} done
+                    </span>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Right: tabs + find patient + add patient */}
+            {/* Right: tab switcher + primary action */}
             <div className="flex items-center gap-2 shrink-0">
-              <TabsList className="bg-muted/50 border border-border/40">
-                <TabsTrigger
-                  value="OPD"
-                  className="text-sm px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
-                >
-                  Out-Patients
-                </TabsTrigger>
-                <TabsTrigger
-                  value="IPD"
-                  className="text-sm px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
-                >
-                  In-Patients
-                </TabsTrigger>
-              </TabsList>
+              {/* Pill toggle */}
+              <div className="relative inline-flex items-center bg-slate-100 border border-slate-200/80 rounded-full p-1 shadow-inner">
+                {/* Sliding indicator — only `left` transitions, no squish */}
+                <div
+                  aria-hidden
+                  className="absolute top-1 bottom-1 rounded-full bg-primary shadow-md transition-[left] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+                  style={{
+                    left: tab === "OPD" ? "4px" : "calc(50%)",
+                    width: "calc(50% - 4px)",
+                  }}
+                />
+                {(["OPD", "IPD"] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => handleTabChange(t)}
+                    className="relative z-10 w-[108px] text-center py-1.5 rounded-full text-sm font-medium select-none focus-visible:outline-none"
+                  >
+                    <span className={cn(
+                      "transition-colors duration-200",
+                      tab === t ? "text-white" : "text-slate-500 hover:text-slate-700"
+                    )}>
+                      {t === "OPD" ? "Out-Patients" : "In-Patients"}
+                    </span>
+                  </button>
+                ))}
+              </div>
               <Button onClick={() => setShowAdd(true)} size="sm" className="gap-1.5 h-9">
                 <Plus className="h-4 w-4" />
                 Add Patient
@@ -235,12 +286,37 @@ export function PatientsPage() {
           </div>
         )}
 
-        {/* ── Filter bar — list view only ── */}
-        {!isInDetailView && (
-          <FilterBar>
-            <div className="flex items-center gap-2.5 flex-wrap flex-1 min-w-0">
-              {tab === "OPD" ? (
-                <>
+        {/* ─── Detail views ──────────────────────────────────────────────── */}
+        {selectedInpatient ? (
+          <div>
+            <InPatientDetailPage
+              inpatient={selectedInpatient}
+              onBack={() => setSelectedInpatient(null)}
+              onUpdate={async () => { await loadPatients(); setSelectedInpatient(null) }}
+              variant="info"
+            />
+          </div>
+        ) : selectedPatient ? (
+          <div>
+            <PatientDetail
+              patientId={selectedPatient.patientId}
+              onBack={() => setSelectedPatient(null)}
+              onUpdate={loadPatients}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Blur overlay for filter popover */}
+            {filterOpen && (
+              <div className="fixed inset-0 z-10 backdrop-blur-[2px] bg-background/20 pointer-events-none" />
+            )}
+
+            {/* ─── OPD ─────────────────────────────────────────────────── */}
+            <TabsContent value="OPD" className="mt-0">
+              {/* Table controls — right above the table */}
+              <div className="flex items-center justify-between gap-3 mb-3">
+                {/* Left: date + search + filter */}
+                <div className="flex items-center gap-2">
                   <DateNavigator
                     date={selectedDate}
                     onDateChange={setSelectedDate}
@@ -253,99 +329,219 @@ export function PatientsPage() {
                   <SearchInput
                     value={search}
                     onChange={handleSearchChange}
-                    placeholder="Search by ID, name, phone..."
+                    placeholder="Search by name, ID, phone..."
                     className="w-52"
                   />
-                  <div className="filter-divider" />
-                  {OPD_STATUS_FILTERS.map(f => {
-                    const count = countForFilter(f.key)
-                    return (
-                      <button
-                        key={f.key}
-                        onClick={() => setStatusFilter(f.key)}
-                        className={cn("filter-chip", statusFilter === f.key && "active")}
-                      >
-                        {f.label}
-                        {f.key !== "ALL" && count > 0 && (
-                          <span className={cn(
-                            "ml-1 text-[10px] font-bold tabular-nums",
-                            statusFilter === f.key ? "text-primary" : "text-muted-foreground/60"
-                          )}>
-                            {count}
+
+                  {/* Filter panel */}
+                  <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+                    <PopoverTrigger asChild>
+                      <button className={cn(
+                        "h-8 px-3 flex items-center gap-1.5 rounded-full border text-sm font-medium transition-all",
+                        activeFilterCount > 0
+                          ? "border-primary/40 bg-primary/5 text-primary"
+                          : "border-border/60 bg-white text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                      )}>
+                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                        Filters
+                        {activeFilterCount > 0 && (
+                          <span className="h-4 min-w-4 px-0.5 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+                            {activeFilterCount}
                           </span>
                         )}
                       </button>
-                    )
-                  })}
-                </>
-              ) : (
-                <SearchInput
-                  value={search}
-                  onChange={handleSearchChange}
-                  placeholder="Search inpatients..."
-                  className="w-64"
-                />
-              )}
-            </div>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="start"
+                      sideOffset={6}
+                      className="w-96 p-0 rounded-2xl shadow-2xl border border-border/50 overflow-hidden"
+                    >
+                      <PopoverArrow className="fill-slate-300" width={16} height={8} />
+                      <div className="px-4 py-3 border-b border-border/50 bg-muted/30 flex items-center justify-between">
+                        <p className="text-xs font-semibold text-foreground">Filters</p>
+                        {activeFilterCount > 0 && (
+                          <button
+                            onClick={clearAllFilters}
+                            className="text-[11px] text-primary hover:text-primary/70 font-medium transition-colors"
+                          >
+                            Clear all
+                          </button>
+                        )}
+                      </div>
+                      <div className="p-4 space-y-5">
 
-            {/* Right side: find existing patient + refresh */}
-            <div className="flex items-center gap-2 shrink-0">
-              {showFindPatient ? (
-                <div className="flex items-center gap-1.5 animate-fade-in">
-                  <ExistingPatientSearch
-                    onSelect={(patient: SearchResult) => {
-                      setExistingPatientId(patient.patientId)
-                      setShowFindPatient(false)
-                    }}
-                  />
+                        {/* Status */}
+                        <div>
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Status</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {OPD_STATUS_FILTERS.map(f => {
+                              const count = countForFilter(f.key)
+                              const isActive = statusFilter === f.key
+                              return (
+                                <button
+                                  key={f.key}
+                                  onClick={() => setStatusFilter(f.key)}
+                                  className={cn(
+                                    "h-7 px-2.5 rounded-full text-xs font-medium transition-all border",
+                                    isActive
+                                      ? "bg-primary text-white border-primary shadow-sm"
+                                      : "bg-white text-muted-foreground border-border/60 hover:border-primary/30 hover:text-foreground hover:bg-muted/30"
+                                  )}
+                                >
+                                  {f.label}
+                                  {f.key !== "ALL" && count > 0 && (
+                                    <span className={cn("ml-1.5 tabular-nums", isActive ? "text-white/70" : "text-muted-foreground/60")}>
+                                      {count}
+                                    </span>
+                                  )}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Gender */}
+                        <div>
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Gender</p>
+                          <div className="flex gap-1.5">
+                            {(["ALL", "MALE", "FEMALE", "OTHER"] as const).map(g => (
+                              <button
+                                key={g}
+                                onClick={() => setGenderFilter(g)}
+                                className={cn(
+                                  "h-7 px-2.5 rounded-full text-xs font-medium transition-all border flex-1",
+                                  genderFilter === g
+                                    ? "bg-primary text-white border-primary shadow-sm"
+                                    : "bg-white text-muted-foreground border-border/60 hover:border-primary/30 hover:text-foreground hover:bg-muted/30"
+                                )}
+                              >
+                                {g === "ALL" ? "All" : g === "MALE" ? "Male" : g === "FEMALE" ? "Female" : "Other"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Age range */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Age Range</p>
+                            <span className="text-[11px] font-semibold text-foreground tabular-nums">
+                              {ageRange[0]}–{ageRange[1]}y
+                            </span>
+                          </div>
+                          <div className="relative h-5 flex items-center">
+                            <div className="absolute left-0 right-0 h-1.5 bg-muted rounded-full" />
+                            <div
+                              className="absolute h-1.5 bg-primary rounded-full"
+                              style={{
+                                left: `${ageRange[0]}%`,
+                                right: `${100 - ageRange[1]}%`,
+                              }}
+                            />
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={ageRange[0]}
+                              onChange={e => {
+                                const v = Number(e.target.value)
+                                if (v <= ageRange[1]) setAgeRange([v, ageRange[1]])
+                              }}
+                              className="absolute w-full appearance-none bg-transparent cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:cursor-pointer"
+                            />
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={ageRange[1]}
+                              onChange={e => {
+                                const v = Number(e.target.value)
+                                if (v >= ageRange[0]) setAgeRange([ageRange[0], v])
+                              }}
+                              className="absolute w-full appearance-none bg-transparent cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:cursor-pointer"
+                            />
+                          </div>
+                          <div className="flex justify-between mt-1">
+                            <span className="text-[10px] text-muted-foreground/60">0</span>
+                            <span className="text-[10px] text-muted-foreground/60">100</span>
+                          </div>
+                        </div>
+
+                        {/* Doctor */}
+                        {doctorOptions.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Doctor</p>
+                            <div className="flex flex-col gap-1 max-h-36 overflow-y-auto pr-1">
+                              <button
+                                onClick={() => setDoctorFilter("ALL")}
+                                className={cn(
+                                  "text-left h-7 px-2.5 rounded-full text-xs font-medium transition-all border",
+                                  doctorFilter === "ALL"
+                                    ? "bg-primary text-white border-primary shadow-sm"
+                                    : "bg-white text-muted-foreground border-border/60 hover:border-primary/30 hover:text-foreground hover:bg-muted/30"
+                                )}
+                              >
+                                All doctors
+                              </button>
+                              {doctorOptions.map(d => (
+                                <button
+                                  key={d}
+                                  onClick={() => setDoctorFilter(d)}
+                                  className={cn(
+                                    "text-left h-7 px-2.5 rounded-full text-xs font-medium transition-all border truncate",
+                                    doctorFilter === d
+                                      ? "bg-primary text-white border-primary shadow-sm"
+                                      : "bg-white text-muted-foreground border-border/60 hover:border-primary/30 hover:text-foreground hover:bg-muted/30"
+                                  )}
+                                  title={d}
+                                >
+                                  {d}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Right: find existing patient + refresh */}
+                <div className="flex items-center gap-2">
+                  {showFindPatient ? (
+                    <div className="flex items-center gap-1.5 animate-fade-in">
+                      <ExistingPatientSearch
+                        onSelect={(patient: SearchResult) => {
+                          setExistingPatientId(patient.patientId)
+                          setShowFindPatient(false)
+                        }}
+                      />
+                      <button
+                        onClick={() => setShowFindPatient(false)}
+                        className="h-7 w-7 flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowFindPatient(true)}
+                      className="h-8 px-3 flex items-center gap-1.5 rounded-full border border-border/60 bg-white hover:bg-muted/40 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <UserSearch className="h-3.5 w-3.5" />
+                      Find Patient
+                    </button>
+                  )}
                   <button
-                    onClick={() => setShowFindPatient(false)}
-                    className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                    onClick={() => loadPatients()}
+                    className="h-8 w-8 flex items-center justify-center rounded-full border border-border/60 bg-white hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Refresh"
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
                   </button>
                 </div>
-              ) : (
-                <button
-                  onClick={() => setShowFindPatient(true)}
-                  className="h-8 px-2.5 flex items-center gap-1.5 rounded-lg border border-border/60 bg-white hover:bg-muted/40 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <UserSearch className="h-3.5 w-3.5" />
-                  Find Patient
-                </button>
-              )}
-              <button
-                onClick={() => loadPatients()}
-                className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                title="Refresh"
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-              </button>
-            </div>
-          </FilterBar>
-        )}
+              </div>
 
-        {/* ── Detail views ── */}
-        {selectedInpatient ? (
-          <div className="mt-5">
-            <InPatientDetailPage
-              inpatient={selectedInpatient}
-              onBack={() => setSelectedInpatient(null)}
-              onUpdate={async () => { await loadPatients(); setSelectedInpatient(null) }}
-              variant="info"
-            />
-          </div>
-        ) : selectedPatient ? (
-          <div className="mt-5">
-            <PatientDetail
-              patientId={selectedPatient.patientId}
-              onBack={() => setSelectedPatient(null)}
-              onUpdate={loadPatients}
-            />
-          </div>
-        ) : (
-          <>
-            <TabsContent value="OPD" className="mt-0">
               <PatientTable
                 patients={filteredPatients}
                 loading={loading}
@@ -358,14 +554,32 @@ export function PatientsPage() {
                   name: `${p.firstName} ${p.lastName ?? ""}`.trim(),
                 })}
                 emptyLabel={
-                  statusFilter !== "ALL"
-                    ? `No ${OPD_STATUS_FILTERS.find(f => f.key === statusFilter)?.label.toLowerCase()} patients today`
+                  activeFilterCount > 0
+                    ? "No patients match the selected filters"
                     : undefined
                 }
               />
             </TabsContent>
 
-            <TabsContent value="IPD" className="mt-4">
+            {/* ─── IPD ─────────────────────────────────────────────────── */}
+            <TabsContent value="IPD" className="mt-0">
+              {/* Table controls */}
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <SearchInput
+                  value={search}
+                  onChange={handleSearchChange}
+                  placeholder="Search by name, IP number, phone..."
+                  className="w-64"
+                />
+                <button
+                  onClick={() => loadPatients()}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg border border-border/60 bg-white hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
+                  title="Refresh"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                </button>
+              </div>
+
               <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
                 <Table>
                   <TableHeader>
@@ -449,10 +663,12 @@ export function PatientsPage() {
                               <InPatientStatusBadge status={patient.status} />
                             </TableCell>
                             <TableCell className="text-right">
-                              <span className={cn(
-                                "font-semibold text-sm tabular-nums",
-                                patient.balanceAmount > 0 ? "text-orange-600" : "text-green-600"
-                              )}>
+                              <span
+                                className={`font-semibold text-sm tabular-nums ${patient.balanceAmount > 0
+                                    ? "text-orange-600"
+                                    : "text-green-600"
+                                  }`}
+                              >
                                 ₹{patient.balanceAmount.toLocaleString("en-IN")}
                               </span>
                             </TableCell>
@@ -497,7 +713,7 @@ export function PatientsPage() {
         )}
       </Tabs>
 
-      {/* ── Modals ── */}
+      {/* ─── Modals ─────────────────────────────────────────────────────── */}
       {tab === "OPD" ? (
         <PatientRegistrationStepper
           open={showAdd}

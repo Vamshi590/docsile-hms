@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/layout/Sidebar"
+import { AppBreadcrumb } from "@/components/layout/AppBreadcrumb"
 import { getSession } from "@/lib/auth"
 import { getHospitalProfile } from "@/lib/db"
 import { InstallPrompt } from "@/components/pwa/InstallPrompt"
@@ -23,6 +24,7 @@ export default async function HospitalLayout({
         hospitalName={hospitalName}
       />
       <main className="h-full overflow-y-auto">
+        <AppBreadcrumb />
         <div className="min-h-full page-container">{children}</div>
       </main>
       <InstallPrompt />

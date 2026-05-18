@@ -97,7 +97,7 @@ export async function getPatients(filters: {
   // Slim select — removes nested InvoiceItem/Payment (saves 80%+ payload)
   let query = supabase
     .from("Patient")
-    .select("*, prescriptions:Prescription(id, prescriptionNumber, subtotal, balanceDue, total, status, doctorName, prescriptionDate, createdAt), eyeReadings:EyeReading(id, readingDate, createdAt)")
+    .select("*, prescriptions:Prescription(id, prescriptionNumber, subtotal, balanceDue, total, status, doctorName, prescriptionDate, createdAt, items:InvoiceItem(id, description, category)), eyeReadings:EyeReading(id, readingDate, createdAt)")
     .eq("patientType", type)
     .order("createdAt", { ascending: true })
 
