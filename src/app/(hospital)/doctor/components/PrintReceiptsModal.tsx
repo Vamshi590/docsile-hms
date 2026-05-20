@@ -11,6 +11,7 @@ import { ReadingsReceipt } from "@/components/receipts/ReadingsReceipt"
 import { ClinicalFindingsReceipt } from "@/components/receipts/ClinicalFindingsReceipt"
 import { ReadingsAndFindings } from "@/components/receipts/ReadingsAndFindings"
 import { getReceiptData } from "../actions"
+import { printReceiptsHtml } from "@/lib/print-receipts"
 import { formatDate, calculateAge } from "@/lib/utils"
 
 type ReceiptData = Awaited<ReturnType<typeof getReceiptData>>
@@ -46,44 +47,10 @@ export function PrintReceiptsModal({ open, onClose, patientId, patientName }: Pr
 
   function handlePrint() {
     if (!printRef.current) return
-    const content = printRef.current.innerHTML
-
-    const printWindow = window.open("", "_blank", "width=800,height=1000")
-    if (!printWindow) return
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Print - ${patientName}</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <style>
-          @media print {
-            body { margin: 0; padding: 0; }
-            @page { size: A4 portrait; margin: 0; }
-            .receipt-page {
-              width: 210mm;
-              min-height: 297mm;
-              padding: 8mm;
-              page-break-after: always;
-            }
-            .receipt-page:last-child { page-break-after: auto; }
-            .no-break { page-break-inside: avoid; }
-          }
-        </style>
-      </head>
-      <body>
-        ${content}
-      </body>
-      </html>
-    `)
-    printWindow.document.close()
-
-    // Wait for tailwind to load, then print
-    setTimeout(() => {
-      printWindow.print()
-      printWindow.close()
-    }, 1000)
+    printReceiptsHtml({
+      title: `Print - ${patientName}`,
+      contentHtml: printRef.current.innerHTML,
+    })
   }
 
   if (!data && !loading) return null
