@@ -6,6 +6,10 @@
  *
  * The HTML should consist of one or more elements with class `receipt-page`,
  * each of which becomes a separate printed page.
+ *
+ * `contentHtml` is injected without sanitization — callers MUST pass a string
+ * from a trusted source (e.g. `ref.current.innerHTML` snapshot of React-rendered
+ * DOM). Never pass user-typed text.
  */
 export function printReceiptsHtml(opts: {
   title: string
