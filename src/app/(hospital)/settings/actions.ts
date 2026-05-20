@@ -9,7 +9,6 @@ import {
   validateDefaultPrintConfig,
   mergeDefaultPrintIntoSettings,
   type DefaultPrintConfig,
-  EMPTY_DEFAULT_PRINT_CONFIG,
 } from "@/lib/default-print"
 
 // ─── Service Templates ────────────────────────────────────────────────────────
@@ -825,6 +824,3 @@ export async function saveDefaultPrintConfig(input: DefaultPrintConfig) {
     return { success: false as const, error: msg }
   }
 }
-
-// Re-export the empty constant so client components don't have to import from two places.
-export { EMPTY_DEFAULT_PRINT_CONFIG } from "@/lib/default-print"
