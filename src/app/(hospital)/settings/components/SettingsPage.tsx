@@ -232,6 +232,12 @@ export default function SettingsPage({
   const initialTab = searchParams.get("tab") || "services"
   const [tab, setTab] = useState(initialTab)
 
+  // Sync local state when the URL changes externally (back/forward, deep links).
+  useEffect(() => {
+    const urlTab = searchParams.get("tab") || "services"
+    if (urlTab !== tab) setTab(urlTab)
+  }, [searchParams, tab])
+
   function handleTabChange(next: string) {
     setTab(next)
     const params = new URLSearchParams(searchParams.toString())
