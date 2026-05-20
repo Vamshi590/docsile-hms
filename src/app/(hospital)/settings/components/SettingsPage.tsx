@@ -37,6 +37,8 @@ import {
 import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/layout/header"
 import { Loader2 } from "lucide-react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { PrintDefaultsTab } from "./PrintDefaultsTab"
 import {
   getServiceTemplates,
   createServiceTemplate,
@@ -225,6 +227,18 @@ export default function SettingsPage({
 }: {
   initialServices: ServiceTemplate[]
 }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const initialTab = searchParams.get("tab") || "services"
+  const [tab, setTab] = useState(initialTab)
+
+  function handleTabChange(next: string) {
+    setTab(next)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("tab", next)
+    router.replace(`/settings?${params.toString()}`, { scroll: false })
+  }
+
   return (
     <div className="space-y-0">
       <PageHeader
@@ -233,19 +247,20 @@ export default function SettingsPage({
       />
 
       <div className="pt-5">
-        <Tabs defaultValue="services">
+        <Tabs value={tab} onValueChange={handleTabChange}>
           <div className="border-b border-border mb-6">
             <TabsList className="bg-transparent h-auto p-0 rounded-none gap-0 -mb-px">
               {(
                 [
-                  { value: "services",      label: "Service Templates" },
-                  { value: "prescriptions", label: "Prescription Templates" },
-                  { value: "inpatient",     label: "Inpatient Templates" },
-                  { value: "medicines",     label: "Medicine Templates" },
-                  { value: "packages",      label: "IPD Packages" },
-                  { value: "surgeries",     label: "Predefined Surgeries" },
-                  { value: "hospital",      label: "Hospital Profile" },
-                  { value: "users",         label: "Users" },
+                  { value: "services",       label: "Service Templates" },
+                  { value: "prescriptions",  label: "Prescription Templates" },
+                  { value: "inpatient",      label: "Inpatient Templates" },
+                  { value: "medicines",      label: "Medicine Templates" },
+                  { value: "packages",       label: "IPD Packages" },
+                  { value: "surgeries",      label: "Predefined Surgeries" },
+                  { value: "hospital",       label: "Hospital Profile" },
+                  { value: "print-defaults", label: "Print Defaults" },
+                  { value: "users",          label: "Users" },
                 ] as const
               ).map(({ value, label }) => (
                 <TabsTrigger
@@ -265,6 +280,7 @@ export default function SettingsPage({
           <TabsContent value="packages"><PackagesTab /></TabsContent>
           <TabsContent value="surgeries"><SurgeriesTab /></TabsContent>
           <TabsContent value="hospital"><HospitalTab /></TabsContent>
+          <TabsContent value="print-defaults"><PrintDefaultsTab /></TabsContent>
           <TabsContent value="users"><UsersTab /></TabsContent>
         </Tabs>
       </div>
