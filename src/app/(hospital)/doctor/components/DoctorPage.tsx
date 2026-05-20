@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
-import { Loader2, Printer, Settings2, RefreshCw } from "lucide-react"
+import { Loader2, Printer, Settings2, Settings, RefreshCw, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { updateUserPreferences } from "@/lib/user-preferences"
 import { BreadcrumbHeader, FilterBar, DateNavigator, SearchInput, StatBadge } from "@/components/layout/header"
@@ -16,8 +16,12 @@ import { PrescriptionForm, type PrescriptionFormHandle, type PrescriptionReferen
 import { PrintReceiptsModal } from "./PrintReceiptsModal"
 import { AskSithaAI } from "./AskSithaAI"
 import { EyeReadingForm, type EyeReadingFormHandle } from "../../workup/components/EyeReadingForm"
-import { getDoctorQueue, getPatientForConsultation } from "../actions"
+import { getDoctorQueue, getPatientForConsultation, getReceiptData } from "../actions"
 import { cn, formatDate, formatCurrency, calculateAge, todayISO, toLocalDateISO } from "@/lib/utils"
+import { useRouter } from "next/navigation"
+import { printReceiptsHtml } from "@/lib/print-receipts"
+import { QuickPrintRenderer } from "./QuickPrintRenderer"
+import type { DefaultPrintConfig } from "@/lib/default-print"
 
 type QueueItem = Awaited<ReturnType<typeof getDoctorQueue>>[0]
 type PatientDetail = Awaited<ReturnType<typeof getPatientForConsultation>>
@@ -92,12 +96,14 @@ export function DoctorPage({
   initialDate,
   initialReferenceData,
   initialColumns,
+  initialDefaultPrint,
 }: {
   initialQueue: QueueItem[]
   initialDate: string
   initialReferenceData: PrescriptionReferenceData
   /** User's saved column preference from DB. null when the user has never customized. */
   initialColumns: string[] | null
+  initialDefaultPrint: DefaultPrintConfig
 }) {
   const [date, setDate] = useState(initialDate)
   const [search, setSearch] = useState("")
@@ -110,6 +116,15 @@ export function DoctorPage({
   const [referenceData, setReferenceData] = useState<PrescriptionReferenceData>(initialReferenceData)
 
   const [printPatient, setPrintPatient] = useState<{ patientId: string; name: string } | null>(null)
+
+  const router = useRouter()
+  const [defaultPrint] = useState<DefaultPrintConfig>(initialDefaultPrint)
+  const [quickPrintData, setQuickPrintData] = useState<{
+    data: Awaited<ReturnType<typeof getReceiptData>>
+    patientName: string
+  } | null>(null)
+  const [quickPrinting, setQuickPrinting] = useState<string | null>(null)
+  const quickPrintRef = useRef<HTMLDivElement>(null)
 
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(() => {
     const validKeys = new Set(QUEUE_COLUMNS.map(c => c.key))
@@ -183,6 +198,30 @@ export function DoctorPage({
     setSelectedPatient(null)
   }
 
+  async function handleQuickPrint(patient: QueueItem) {
+    if (defaultPrint.items.length === 0) return
+    const patientName = `${patient.firstName} ${patient.lastName ?? ""}`.trim()
+    setQuickPrinting(patient.patientId)
+    try {
+      const data = await getReceiptData(patient.patientId)
+      setQuickPrintData({ data, patientName })
+      setTimeout(() => {
+        const html = quickPrintRef.current?.innerHTML ?? ""
+        if (!html) {
+          toast.error("Nothing to print")
+          return
+        }
+        printReceiptsHtml({ title: `Print - ${patientName}`, contentHtml: html })
+        setTimeout(() => setQuickPrintData(null), 1500)
+      }, 50)
+    } catch (err) {
+      console.error("Quick print error:", err)
+      toast.error("Failed to load receipt data")
+    } finally {
+      setQuickPrinting(null)
+    }
+  }
+
   async function handleSaveAll() {
     setSavingAll(true)
     try {
@@ -239,6 +278,13 @@ export function DoctorPage({
               title="Refresh"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              onClick={() => router.push("/settings?tab=print-defaults")}
+              className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title="Print settings"
+            >
+              <Settings className="h-3.5 w-3.5" />
             </button>
           </div>
           <StatBadge value={queue.length} label="in queue" variant="info" />
@@ -711,17 +757,42 @@ export function DoctorPage({
                         )
                       case "print":
                         return (
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            className="text-muted-foreground hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
-                            onClick={e => {
-                              e.stopPropagation()
-                              setPrintPatient({ patientId: patient.patientId, name: fullName })
-                            }}
-                          >
-                            <Printer className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-0.5">
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              disabled={defaultPrint.items.length === 0 || quickPrinting === patient.patientId}
+                              className={
+                                defaultPrint.items.length === 0
+                                  ? "text-muted-foreground/40"
+                                  : "text-primary opacity-70 group-hover:opacity-100 transition-opacity"
+                              }
+                              title={
+                                defaultPrint.items.length === 0
+                                  ? "Configure defaults in Settings → Print Defaults"
+                                  : "Quick print (default receipts)"
+                              }
+                              onClick={e => {
+                                e.stopPropagation()
+                                handleQuickPrint(patient)
+                              }}
+                            >
+                              {quickPrinting === patient.patientId
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <Zap className="h-4 w-4" />}
+                            </Button>
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              className="text-muted-foreground hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
+                              onClick={e => {
+                                e.stopPropagation()
+                                setPrintPatient({ patientId: patient.patientId, name: fullName })
+                              }}
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
+                          </div>
                         )
                     }
                   }
@@ -767,6 +838,13 @@ export function DoctorPage({
           onClose={() => setPrintPatient(null)}
           patientId={printPatient.patientId}
           patientName={printPatient.name}
+        />
+      )}
+      {quickPrintData && (
+        <QuickPrintRenderer
+          ref={quickPrintRef}
+          data={quickPrintData.data}
+          items={defaultPrint.items}
         />
       )}
     </>
