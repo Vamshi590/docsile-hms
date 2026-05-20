@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth"
 import { z } from "zod"
+import {
+  parseDefaultPrintConfig,
+  validateDefaultPrintConfig,
+  mergeDefaultPrintIntoSettings,
+  type DefaultPrintConfig,
+  EMPTY_DEFAULT_PRINT_CONFIG,
+} from "@/lib/default-print"
 
 // ─── Service Templates ────────────────────────────────────────────────────────
 
@@ -770,3 +777,54 @@ export async function deleteMedicineMaster(id: string) {
     return { success: false, error: "Failed to delete medicine" }
   }
 }
+
+// ─── Default Print Config ─────────────────────────────────────────────────────
+
+export async function getDefaultPrintConfig(): Promise<DefaultPrintConfig> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("HospitalProfile")
+    .select("settings")
+    .limit(1)
+    .single()
+  return parseDefaultPrintConfig(data?.settings)
+}
+
+export async function saveDefaultPrintConfig(input: DefaultPrintConfig) {
+  await requireAuth()
+  const supabase = await createClient()
+  try {
+    const config = validateDefaultPrintConfig(input)
+    const { data: existing } = await supabase
+      .from("HospitalProfile")
+      .select("id, settings")
+      .limit(1)
+      .single()
+    const nextSettings = mergeDefaultPrintIntoSettings(existing?.settings, config)
+    const now = new Date().toISOString()
+    if (!existing) {
+      await supabase.from("HospitalProfile").insert({
+        name: "My Hospital",
+        settings: nextSettings,
+        createdAt: now,
+        updatedAt: now,
+      })
+    } else {
+      await supabase
+        .from("HospitalProfile")
+        .update({ settings: nextSettings, updatedAt: now })
+        .eq("id", existing.id)
+    }
+    const { invalidateHospitalCache } = await import("@/lib/db")
+    invalidateHospitalCache()
+    revalidatePath("/settings")
+    revalidatePath("/doctor")
+    return { success: true as const }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to save default print config"
+    return { success: false as const, error: msg }
+  }
+}
+
+// Re-export the empty constant so client components don't have to import from two places.
+export { EMPTY_DEFAULT_PRINT_CONFIG } from "@/lib/default-print"
