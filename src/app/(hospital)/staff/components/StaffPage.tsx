@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -136,11 +136,17 @@ const MODULE_COLORS: Record<string, string> = {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function StaffPage() {
+export default function StaffPage({
+  initialStaff,
+  initialRoles,
+}: {
+  initialStaff: StaffMember[]
+  initialRoles: RoleType[]
+}) {
   const [activeTab, setActiveTab] = useState("staff")
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
-  const [staff, setStaff] = useState<StaffMember[]>([])
+  const [staff, setStaff] = useState<StaffMember[]>(initialStaff)
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("ALL")
   const [statusFilter, setStatusFilter] = useState("ALL")
@@ -150,10 +156,12 @@ export default function StaffPage() {
   const [newPassword, setNewPassword] = useState("")
   const [showStaffDetail, setShowStaffDetail] = useState<StaffMember | null>(null)
 
-  const [roles, setRoles] = useState<RoleType[]>([])
+  const [roles, setRoles] = useState<RoleType[]>(initialRoles)
   const [showRoleDialog, setShowRoleDialog] = useState(false)
   const [editingRole, setEditingRole] = useState<RoleType | null>(null)
-  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(
+    initialRoles.length > 0 ? initialRoles[0].id : null,
+  )
 
   const [form, setForm] = useState({
     email: "", password: "", fullName: "", phone: "", role: "RECEPTIONIST",
@@ -183,7 +191,14 @@ export default function StaffPage() {
     }
   }, [])
 
-  useEffect(() => { loadData() }, [loadData])
+  const skipFirstLoad = useRef(true)
+  useEffect(() => {
+    if (skipFirstLoad.current) {
+      skipFirstLoad.current = false
+      return
+    }
+    loadData()
+  }, [loadData])
 
   const filteredStaff = staff.filter((s) => {
     const matchesSearch =

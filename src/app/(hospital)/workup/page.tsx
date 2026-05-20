@@ -1,11 +1,14 @@
-import dynamic from "next/dynamic"
-import { PageSkeleton } from "@/components/layout/PageSkeleton"
+import { WorkupPage } from "./components/WorkupPage"
+import { getWorkupQueue } from "./actions"
+import { todayISO } from "@/lib/utils"
 
-const WorkupPage = dynamic(
-  () => import("./components/WorkupPage").then((mod) => ({ default: mod.WorkupPage })),
-  { loading: () => <PageSkeleton /> }
-)
-
-export default async function Page() {
-  return <WorkupPage />
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>
+}) {
+  const params = await searchParams
+  const date = params.date ?? todayISO()
+  const queue = await getWorkupQueue(date)
+  return <WorkupPage initialQueue={queue} initialDate={date} />
 }

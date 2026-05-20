@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   Plus, BarChart2, TrendingUp, IndianRupee, X,
-  MoreVertical, Pencil, Trash2, Loader2, RefreshCw
+  MoreVertical, Pencil, Trash2, Loader2, RefreshCw,
+  Users, UserPlus, Clock, CheckCircle2, Settings
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -19,8 +21,12 @@ import { InPatientDetailPage } from "@/app/(hospital)/inpatients/components/InPa
 import { PatientDetail } from "./PatientDetail"
 import { ExistingPatientSearch } from "./ExistingPatientSearch"
 import { AddServicesModal } from "./AddServicesModal"
-import { getPatients, searchExistingPatients, getCurrentUserRole, deletePatient } from "../actions"
-import { getInPatients, deleteInPatient } from "@/app/(hospital)/inpatients/actions"
+import { getPatients, searchExistingPatients, deletePatient, getPatientRegistrationFormData } from "../actions"
+
+type AddFormData = Awaited<ReturnType<typeof getPatientRegistrationFormData>>
+import { getInPatients, deleteInPatient, getInPatientAdmissionFormData } from "@/app/(hospital)/inpatients/actions"
+
+type IpdAddFormData = Awaited<ReturnType<typeof getInPatientAdmissionFormData>>
 import { todayISO, formatDateLong, toLocalDateISO } from "@/lib/utils"
 import type { InPatient } from "@/lib/types"
 import {
@@ -30,18 +36,35 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 type SearchResult = Awaited<ReturnType<typeof searchExistingPatients>>[0]
 
-export function PatientsPage() {
+type PatientsPageProps = {
+  initialPatients: PatientRow[]
+  initialUserRole: string
+  initialDate: string
+  initialSearch: string
+}
+
+export function PatientsPage({
+  initialPatients,
+  initialUserRole,
+  initialDate,
+  initialSearch,
+}: PatientsPageProps) {
+  const router = useRouter()
   const [tab, setTab] = useState<"OPD" | "IPD">("OPD")
-  const [selectedDate, setSelectedDate] = useState(todayISO())
-  const [search, setSearch] = useState("")
-  const [patients, setPatients] = useState<PatientRow[]>([])
+  const [selectedDate, setSelectedDate] = useState(initialDate)
+  const [search, setSearch] = useState(initialSearch)
+  const [patients, setPatients] = useState<PatientRow[]>(initialPatients)
   const [inpatients, setInpatients] = useState<InPatient[]>([])
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [addLoading, setAddLoading] = useState(false)
+  const [addFormData, setAddFormData] = useState<AddFormData | null>(null)
+  const [ipdAddLoading, setIpdAddLoading] = useState(false)
+  const [ipdAddFormData, setIpdAddFormData] = useState<IpdAddFormData | null>(null)
   const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(null)
   const [showStats, setShowStats] = useState(false)
   const [existingPatientId, setExistingPatientId] = useState<string | null>(null)
-  const [userRole, setUserRole] = useState("")
+  const userRole = initialUserRole
 
   // Edit/Delete state
   const [editPatient, setEditPatient] = useState<PatientRow | null>(null)
@@ -50,6 +73,31 @@ export function PatientsPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: "OPD" | "IPD"; id: string; name: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+
+  async function handleAddPatientClick() {
+    if (tab === "OPD") {
+      if (addLoading) return
+      setAddLoading(true)
+      try {
+        const data = await getPatientRegistrationFormData()
+        setAddFormData(data)
+        setShowAdd(true)
+      } finally {
+        setAddLoading(false)
+      }
+      return
+    }
+    // IPD
+    if (ipdAddLoading) return
+    setIpdAddLoading(true)
+    try {
+      const data = await getInPatientAdmissionFormData()
+      setIpdAddFormData(data)
+      setShowAdd(true)
+    } finally {
+      setIpdAddLoading(false)
+    }
+  }
 
   async function loadPatients() {
     setLoading(true)
@@ -66,8 +114,16 @@ export function PatientsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadPatients() }, [selectedDate, tab])
-  useEffect(() => { getCurrentUserRole().then(r => setUserRole(r.role)) }, [])
+  // Initial OPD data + role come from the server (see page.tsx).
+  // Skip the first effect run so we don't re-fetch what we already have.
+  const skipFirstLoad = useRef(true)
+  useEffect(() => {
+    if (skipFirstLoad.current) {
+      skipFirstLoad.current = false
+      return
+    }
+    loadPatients()
+  }, [selectedDate, tab])
 
   function prevDay() {
     const d = new Date(selectedDate + "T00:00:00")
@@ -84,13 +140,29 @@ export function PatientsPage() {
   const inProgress = patients.filter(p => ["IN_WORKUP", "WORKUP_DONE", "WITH_DOCTOR"].includes(p.status)).length
   const visited = patients.filter(p => ["VISITED", "COMPLETED", "MEDICAL_ONLY"].includes(p.status)).length
   const totalRevenue = patients.reduce((sum, p) => {
-    const invoices = (p as { invoices?: { amountPaid: number }[] }).invoices ?? []
-    return sum + invoices.reduce((s, inv) => s + inv.amountPaid, 0)
+    const rxs = (p.prescriptions ?? []) as { amountPaid?: number }[]
+    return sum + rxs.reduce((s, rx) => s + (rx.amountPaid ?? 0), 0)
   }, 0)
   const totalBalance = patients.reduce((sum, p) => {
-    const invoices = (p as { invoices?: { balanceDue: number }[] }).invoices ?? []
-    return sum + invoices.reduce((s, inv) => s + inv.balanceDue, 0)
+    const rxs = (p.prescriptions ?? []) as { balanceDue?: number }[]
+    return sum + rxs.reduce((s, rx) => s + (rx.balanceDue ?? 0), 0)
   }, 0)
+  const paymentBreakdown = (() => {
+    const m = new Map<string, number>()
+    for (const p of patients) {
+      const rxs = (p.prescriptions ?? []) as { payments?: { amount: number; paymentMode: string | null }[] }[]
+      for (const rx of rxs) {
+        for (const pay of rx.payments ?? []) {
+          if (!pay.amount) continue
+          const mode = (pay.paymentMode ?? "Other").trim() || "Other"
+          m.set(mode, (m.get(mode) ?? 0) + pay.amount)
+        }
+      }
+    }
+    return Array.from(m.entries())
+      .filter(([, amt]) => amt > 0)
+      .sort((a, b) => b[1] - a[1])
+  })()
 
   async function handleDelete() {
     if (!deleteTarget) return
@@ -156,8 +228,17 @@ export function PatientsPage() {
                 <BarChart2 className="h-3.5 w-3.5" />
                 Stats
               </button>
-              <Button onClick={() => setShowAdd(true)} size="sm" className="gap-1.5 h-9">
-                <Plus className="h-4 w-4" />
+              <Button
+                onClick={handleAddPatientClick}
+                disabled={addLoading || ipdAddLoading}
+                size="sm"
+                className="gap-1.5 h-9"
+              >
+                {(addLoading || ipdAddLoading) ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
                 Add Patient
               </Button>
             </div>
@@ -185,9 +266,19 @@ export function PatientsPage() {
                 className="w-64"
               />
             </div>
-            <ExistingPatientSearch
-              onSelect={(patient: SearchResult) => setExistingPatientId(patient.patientId)}
-            />
+            <div className="flex items-center gap-2">
+              <ExistingPatientSearch
+                onSelect={(patient: SearchResult) => setExistingPatientId(patient.patientId)}
+              />
+              <button
+                onClick={() => router.push("/settings")}
+                title="Configurations"
+                aria-label="Open configurations"
+                className="h-9 w-9 flex items-center justify-center rounded-lg border border-border/60 bg-white hover:bg-muted/40 hover:text-foreground transition-colors text-muted-foreground"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            </div>
           </FilterBar>
         )}
 
@@ -251,12 +342,20 @@ export function PatientsPage() {
                         </TableRow>
                       ))
                     ) : inpatients.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
-                          <div className="text-3xl mb-3">🏥</div>
-                          <div className="font-medium text-foreground">No inpatients found</div>
-                          <div className="text-xs mt-1.5">
-                            {search ? "Try a different search term" : "Use Add Patient to admit a new inpatient"}
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell colSpan={8} className="text-center py-12 px-6">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src="/illustrations/no-inpatients.svg"
+                            alt=""
+                            className="mx-auto mb-6 h-44 w-auto select-none"
+                            draggable={false}
+                          />
+                          <div className="font-semibold text-base text-foreground">No in-patients admitted</div>
+                          <div className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
+                            {search
+                              ? "Try a different search term, or clear the search to see all admissions."
+                              : <>Use <span className="font-medium text-foreground">Add Patient</span> to admit a new in-patient.</>}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -365,7 +464,7 @@ export function PatientsPage() {
           <div className="relative bg-white rounded-2xl shadow-[0_20px_60px_-8px_rgba(0,0,0,0.2)] w-full max-w-md p-6 animate-zoom-in mx-4">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Today&apos;s Stats</h2>
+                <h2 className="text-lg font-semibold text-foreground tracking-tight">Today&apos;s Stats</h2>
                 <p className="text-sm text-muted-foreground mt-0.5">{formatDateLong(selectedDate)}</p>
               </div>
               <button
@@ -378,39 +477,84 @@ export function PatientsPage() {
 
             <div className="grid grid-cols-2 gap-3 mb-5">
               {[
-                { label: "Total Patients", value: patients.length, color: "text-foreground", bg: "bg-slate-50" },
-                { label: "Registered", value: registered, color: "text-blue-600", bg: "bg-blue-50" },
-                { label: "In Progress", value: inProgress, color: "text-amber-600", bg: "bg-amber-50" },
-                { label: "Visited", value: visited, color: "text-green-600", bg: "bg-green-50" },
+                {
+                  label: "Total Patients", value: patients.length, Icon: Users,
+                  tile: "bg-muted/40 border-border/60",
+                  chip: "bg-foreground/5 text-foreground",
+                  value_cls: "text-foreground",
+                },
+                {
+                  label: "Registered", value: registered, Icon: UserPlus,
+                  tile: "bg-primary/5 border-primary/15",
+                  chip: "bg-primary/10 text-primary",
+                  value_cls: "text-primary",
+                },
+                {
+                  label: "In Progress", value: inProgress, Icon: Clock,
+                  tile: "bg-warning/5 border-warning/15",
+                  chip: "bg-warning/10 text-warning",
+                  value_cls: "text-warning",
+                },
+                {
+                  label: "Visited", value: visited, Icon: CheckCircle2,
+                  tile: "bg-success/5 border-success/15",
+                  chip: "bg-success/10 text-success",
+                  value_cls: "text-success",
+                },
               ].map(s => (
-                <div key={s.label} className={`${s.bg} rounded-xl px-4 py-3`}>
-                  <p className="text-xs font-medium text-muted-foreground mb-1">{s.label}</p>
-                  <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                <div key={s.label} className={`rounded-xl border p-4 ${s.tile}`}>
+                  <div className={`inline-flex items-center justify-center h-7 w-7 rounded-lg mb-2.5 ${s.chip}`}>
+                    <s.Icon className="h-3.5 w-3.5" />
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1 leading-none">{s.label}</p>
+                  <p className={`text-2xl font-semibold tabular-nums tracking-tight ${s.value_cls}`}>{s.value}</p>
                 </div>
               ))}
             </div>
 
-            <div className="border-t border-[#e2e8f0] pt-4 space-y-2.5">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Revenue Summary
-              </p>
-              <div className="flex items-center justify-between rounded-xl bg-green-50 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <IndianRupee className="h-4 w-4 text-green-600" />
-                  <span className="text-sm font-medium text-green-800">Collected Today</span>
+            <div className="pt-4 border-t border-border/60">
+              <p className="text-xs font-semibold text-muted-foreground mb-3">Revenue</p>
+              <div className="space-y-2">
+                <div className="rounded-xl border border-success/15 bg-success/5 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-success/10 text-success">
+                        <IndianRupee className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-sm font-medium text-foreground">Collected Today</span>
+                    </div>
+                    <span className="text-base font-semibold tabular-nums text-success">
+                      &#8377;{totalRevenue.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  {paymentBreakdown.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-3 pl-[42px]">
+                      {paymentBreakdown.map(([mode, amount]) => (
+                        <span
+                          key={mode}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-white border border-success/20 px-2.5 py-1 text-xs"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                          <span className="font-medium text-foreground">{mode}</span>
+                          <span className="font-semibold tabular-nums text-success">
+                            &#8377;{amount.toLocaleString("en-IN")}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <span className="text-lg font-bold text-green-700">
-                  &#8377;{totalRevenue.toLocaleString("en-IN")}
-                </span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl bg-orange-50 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-orange-500" />
-                  <span className="text-sm font-medium text-orange-800">Balance Due</span>
+                <div className="flex items-center justify-between rounded-xl border border-warning/15 bg-warning/5 px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-warning/10 text-warning">
+                      <TrendingUp className="h-3.5 w-3.5" />
+                    </div>
+                    <span className="text-sm font-medium text-foreground">Balance Due</span>
+                  </div>
+                  <span className="text-base font-semibold tabular-nums text-warning">
+                    &#8377;{totalBalance.toLocaleString("en-IN")}
+                  </span>
                 </div>
-                <span className="text-lg font-bold text-orange-600">
-                  &#8377;{totalBalance.toLocaleString("en-IN")}
-                </span>
               </div>
             </div>
           </div>
@@ -420,15 +564,17 @@ export function PatientsPage() {
       {tab === "OPD" ? (
         <PatientRegistrationStepper
           open={showAdd}
-          onClose={() => setShowAdd(false)}
+          onClose={() => { setShowAdd(false); setAddFormData(null) }}
           patientType="OPD"
           onSuccess={loadPatients}
+          initialData={addFormData}
         />
       ) : (
         <InPatientAdmissionForm
           open={showAdd}
-          onClose={() => setShowAdd(false)}
-          onSuccess={() => { setShowAdd(false); loadPatients() }}
+          onClose={() => { setShowAdd(false); setIpdAddFormData(null) }}
+          onSuccess={() => { setShowAdd(false); setIpdAddFormData(null); loadPatients() }}
+          initialData={ipdAddFormData}
         />
       )}
 

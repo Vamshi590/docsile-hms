@@ -25,6 +25,7 @@ import {
   UserCog,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ROUTE_MODULES } from "@/lib/module-gate"
 
 const quotes = [
   { text: "The good physician treats the disease; the great physician treats the patient who has the disease.", author: "Sir William Osler" },
@@ -61,10 +62,17 @@ const modules = [
 
 interface DashboardClientProps {
   greeting: string
-
+  enabledModules: string[]
 }
 
-export function DashboardClient({ greeting }: DashboardClientProps) {
+export function DashboardClient({ greeting, enabledModules }: DashboardClientProps) {
+  // Filter the modules grid: keep always-on routes (those not in ROUTE_MODULES like
+  // /dues-followups, /data, /staff, /settings) + gated routes that ARE enabled.
+  const visibleModules = modules.filter((mod) => {
+    const moduleCode = ROUTE_MODULES[mod.href]
+    if (!moduleCode) return true // always-on
+    return enabledModules.includes(moduleCode)
+  })
   const [mounted, setMounted] = useState(false)
   const [quoteIndex, setQuoteIndex] = useState(0)
   const [quoteFading, setQuoteFading] = useState(false)
@@ -138,7 +146,7 @@ export function DashboardClient({ greeting }: DashboardClientProps) {
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Modules</p>
         <div className="grid grid-cols-3 gap-4">
-          {modules.map((mod, i) => (
+          {visibleModules.map((mod, i) => (
             <Link
               key={mod.href}
               href={mod.href}

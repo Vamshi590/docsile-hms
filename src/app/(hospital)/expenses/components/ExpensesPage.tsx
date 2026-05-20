@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { format } from "date-fns"
 import { Plus, Settings2, Search, Pencil, Trash2 } from "lucide-react"
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts"
@@ -65,10 +65,16 @@ function formatAmountShort(amount: number): string {
   return amount.toString()
 }
 
-export default function ExpensesPage() {
-  const [categories, setCategories] = useState<ExpenseCategory[]>([])
-  const [expenses, setExpenses] = useState<ExpenseWithCategory[]>([])
-  const [loading, setLoading] = useState(true)
+export default function ExpensesPage({
+  initialCategories,
+  initialExpenses,
+}: {
+  initialCategories: ExpenseCategory[]
+  initialExpenses: ExpenseWithCategory[]
+}) {
+  const [categories, setCategories] = useState<ExpenseCategory[]>(initialCategories)
+  const [expenses, setExpenses] = useState<ExpenseWithCategory[]>(initialExpenses)
+  const [loading, setLoading] = useState(false)
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("today")
   const [customStart, setCustomStart] = useState("")
@@ -101,8 +107,25 @@ export default function ExpensesPage() {
     }
   }, [timeFilter, customStart, customEnd])
 
-  useEffect(() => { refreshCategories() }, [refreshCategories])
-  useEffect(() => { fetchExpenses() }, [fetchExpenses])
+  // Initial categories + today's expenses come from the server (see page.tsx).
+  // Skip the first run for both effects; re-fetch only on user actions / filter changes.
+  const skipCategoriesFirst = useRef(true)
+  useEffect(() => {
+    if (skipCategoriesFirst.current) {
+      skipCategoriesFirst.current = false
+      return
+    }
+    refreshCategories()
+  }, [refreshCategories])
+
+  const skipExpensesFirst = useRef(true)
+  useEffect(() => {
+    if (skipExpensesFirst.current) {
+      skipExpensesFirst.current = false
+      return
+    }
+    fetchExpenses()
+  }, [fetchExpenses])
 
   // Client-side filtering and sorting
   const filteredExpenses = useMemo(() => {

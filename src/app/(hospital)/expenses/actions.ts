@@ -36,7 +36,9 @@ export async function seedDefaultCategories() {
       updatedAt: now,
     }))
   )
-  revalidatePath("/expenses")
+  // No revalidatePath here: the function is idempotent and is also called
+  // from `page.tsx` during SSR, where revalidatePath is forbidden. Callers
+  // that need revalidation should call it themselves after their own mutation.
 }
 
 // ─── Category CRUD ───────────────────────────────────────────────────────────

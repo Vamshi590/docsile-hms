@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { PageHeader, StatBadge } from "@/components/layout/header"
 import { LabConfigTab } from "./LabConfigTab"
@@ -20,17 +20,16 @@ export type LabWithCount = {
   _count: { investigations: number }
 }
 
-export default function LabsPage() {
-  const [labs, setLabs] = useState<LabWithCount[]>([])
-  const [loading, setLoading] = useState(true)
+export default function LabsPage({ initialLabs }: { initialLabs: LabWithCount[] }) {
+  const [labs, setLabs] = useState<LabWithCount[]>(initialLabs)
+  const [loading, setLoading] = useState(false)
 
   const refreshLabs = useCallback(async () => {
+    setLoading(true)
     const data = await getLabs()
     setLabs(data as LabWithCount[])
     setLoading(false)
   }, [])
-
-  useEffect(() => { refreshLabs() }, [refreshLabs])
 
   const activeCount = labs.filter((l) => l.isActive).length
 

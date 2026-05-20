@@ -119,6 +119,9 @@ export async function updateHospitalProfile(data: {
   website?: string
   registrationNo?: string
   gstin?: string
+  registrationFeeEnabled?: boolean
+  registrationFeeAmount?: number
+  registrationFeeDefaultChecked?: boolean
 }) {
   await requireAuth()
   const supabase = await createClient()
@@ -134,6 +137,9 @@ export async function updateHospitalProfile(data: {
         website: data.website ?? null,
         registrationNo: data.registrationNo ?? null,
         gstin: data.gstin ?? null,
+        registrationFeeEnabled: data.registrationFeeEnabled ?? false,
+        registrationFeeAmount: data.registrationFeeAmount ?? 0,
+        registrationFeeDefaultChecked: data.registrationFeeDefaultChecked ?? true,
         createdAt: now,
         updatedAt: now,
       })
@@ -146,6 +152,9 @@ export async function updateHospitalProfile(data: {
       if (data.website !== undefined) updateData.website = data.website
       if (data.registrationNo !== undefined) updateData.registrationNo = data.registrationNo
       if (data.gstin !== undefined) updateData.gstin = data.gstin
+      if (data.registrationFeeEnabled !== undefined) updateData.registrationFeeEnabled = data.registrationFeeEnabled
+      if (data.registrationFeeAmount !== undefined) updateData.registrationFeeAmount = data.registrationFeeAmount
+      if (data.registrationFeeDefaultChecked !== undefined) updateData.registrationFeeDefaultChecked = data.registrationFeeDefaultChecked
       await supabase.from("HospitalProfile").update(updateData).eq("id", existing.id)
     }
     const { invalidateHospitalCache } = await import("@/lib/db")
@@ -543,6 +552,118 @@ export async function deletePredefinedPackage(id: string) {
   } catch {
     return { success: false, error: "Failed to delete package" }
   }
+}
+
+// ─── Predefined Surgeries ────────────────────────────────────────────────────
+
+export async function getPredefinedSurgeries(includeInactive: boolean = false) {
+  const supabase = await createClient()
+  let q = supabase
+    .from("PredefinedSurgery")
+    .select("*")
+    .order("sortOrder", { ascending: true })
+    .order("name", { ascending: true })
+  if (!includeInactive) q = q.eq("isActive", true)
+  const { data, error } = await q
+  if (error) {
+    console.error("getPredefinedSurgeries error:", error)
+    return []
+  }
+  return data ?? []
+}
+
+export async function createPredefinedSurgery(data: {
+  name: string
+  department?: string | null
+  doctorNames?: string[]
+  onDutyDoctors?: string[]
+  provisionDiagnosis?: string | null
+  operationProcedure?: string | null
+  operationDetails?: string | null
+  sortOrder?: number
+}) {
+  const user = await requireAuth()
+  if (!data.name?.trim()) {
+    return { success: false as const, error: "Surgery name is required" }
+  }
+  try {
+    const supabase = await createClient()
+    const now = new Date().toISOString()
+    const { data: row, error } = await supabase
+      .from("PredefinedSurgery")
+      .insert({
+        name: data.name.trim(),
+        department: data.department ?? null,
+        doctorNames: JSON.stringify(data.doctorNames ?? []),
+        onDutyDoctors: JSON.stringify(data.onDutyDoctors ?? []),
+        provisionDiagnosis: data.provisionDiagnosis ?? null,
+        operationProcedure: data.operationProcedure ?? null,
+        operationDetails: data.operationDetails ?? null,
+        isActive: true,
+        sortOrder: data.sortOrder ?? 0,
+        createdBy: user.id,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select("*")
+      .single()
+    if (error) throw error
+    revalidatePath("/settings")
+    return { success: true as const, data: row }
+  } catch (e) {
+    console.error("createPredefinedSurgery error:", e)
+    return { success: false as const, error: "Failed to create surgery template" }
+  }
+}
+
+export async function updatePredefinedSurgery(id: string, data: {
+  name?: string
+  department?: string | null
+  doctorNames?: string[]
+  onDutyDoctors?: string[]
+  provisionDiagnosis?: string | null
+  operationProcedure?: string | null
+  operationDetails?: string | null
+  isActive?: boolean
+  sortOrder?: number
+}) {
+  await requireAuth()
+  try {
+    const supabase = await createClient()
+    const update: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+    if (data.name !== undefined)               update.name = data.name.trim()
+    if (data.department !== undefined)         update.department = data.department
+    if (data.doctorNames !== undefined)        update.doctorNames = JSON.stringify(data.doctorNames)
+    if (data.onDutyDoctors !== undefined)      update.onDutyDoctors = JSON.stringify(data.onDutyDoctors)
+    if (data.provisionDiagnosis !== undefined) update.provisionDiagnosis = data.provisionDiagnosis
+    if (data.operationProcedure !== undefined) update.operationProcedure = data.operationProcedure
+    if (data.operationDetails !== undefined)   update.operationDetails = data.operationDetails
+    if (data.isActive !== undefined)           update.isActive = data.isActive
+    if (data.sortOrder !== undefined)          update.sortOrder = data.sortOrder
+    const { error } = await supabase.from("PredefinedSurgery").update(update).eq("id", id)
+    if (error) throw error
+    revalidatePath("/settings")
+    return { success: true as const }
+  } catch (e) {
+    console.error("updatePredefinedSurgery error:", e)
+    return { success: false as const, error: "Failed to update surgery template" }
+  }
+}
+
+export async function deletePredefinedSurgery(id: string) {
+  await requireAuth()
+  // Soft-delete: same pattern as deletePredefinedPackage
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from("PredefinedSurgery")
+    .update({ isActive: false, updatedAt: new Date().toISOString() })
+    .eq("id", id)
+  if (error) {
+    console.error("deletePredefinedSurgery error:", error)
+    return { success: false as const, error: "Failed to delete surgery template" }
+  }
+  revalidatePath("/settings")
+  return { success: true as const }
 }
 
 // ─── Medicine Master ──────────────────────────────────────────────────────────

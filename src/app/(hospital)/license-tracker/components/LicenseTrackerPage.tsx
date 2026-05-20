@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { format, differenceInDays } from "date-fns";
 import {
   Plus,
@@ -83,9 +83,9 @@ function getLicenseStatus(expiryDate: Date | string, reminderDays: number) {
   };
 }
 
-export default function LicenseTrackerPage() {
-  const [licenses, setLicenses] = useState<License[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function LicenseTrackerPage({ initialLicenses }: { initialLicenses: License[] }) {
+  const [licenses, setLicenses] = useState<License[]>(initialLicenses);
+  const [loading, setLoading] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -105,10 +105,6 @@ export default function LicenseTrackerPage() {
       setLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    fetchLicenses();
-  }, [fetchLicenses]);
 
   // Get unique categories for filter
   const categories = useMemo(() => {

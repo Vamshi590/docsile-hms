@@ -11,6 +11,9 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
   Table,
   TableHeader,
   TableBody,
@@ -119,6 +122,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
         <TableHead className={sortableHeadClass} onClick={() => handleSort("status")}>
           Status <SortIcon k="status" />
         </TableHead>
+        <TableHead>Services</TableHead>
         <TableHead>Receipt</TableHead>
         <TableHead className="w-12"></TableHead>
       </TableRow>
@@ -141,6 +145,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-6" /></TableCell>
               </TableRow>
@@ -153,17 +158,24 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
 
   if (patients.length === 0) {
     return (
-      <div className="rounded-xl border border-border/60 bg-white py-20 text-center shadow-sm">
-        <div className="text-3xl mb-3">📋</div>
-        <p className="text-base font-semibold text-foreground">No patients found</p>
-        <p className="text-sm text-muted-foreground mt-1.5">
-          Try a different date or use Add Patient to register a new patient
+      <div className="rounded-xl border border-border/60 bg-white py-14 px-6 text-center shadow-sm">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/illustrations/no-opd-patients.svg"
+          alt=""
+          className="mx-auto mb-6 h-44 w-auto select-none"
+          draggable={false}
+        />
+        <p className="text-base font-semibold text-foreground">No out-patients yet</p>
+        <p className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
+          Try a different date, or click <span className="font-medium text-foreground">Add Patient</span> to register a new visit.
         </p>
       </div>
     )
   }
 
   return (
+    <TooltipProvider delayDuration={150}>
     <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
       <Table>
         {headers}
@@ -199,15 +211,65 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
                 <TableCell>
                   <span className="font-semibold text-sm text-foreground">{fullName}</span>
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                  {age}y / {genderShort}
+                <TableCell className="whitespace-nowrap">
+                  <span className="inline-flex items-baseline gap-1 text-sm text-foreground">
+                    <span className="font-medium tabular-nums">{age}</span>
+                    <span className="font-normal">y</span>
+                    <span className="text-foreground/30 mx-0.5">·</span>
+                    <span className="font-medium">{genderShort}</span>
+                  </span>
                 </TableCell>
                 <TableCell className="text-sm text-foreground tabular-nums">{patient.phone}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {patient.doctorName ?? <span className="text-muted-foreground/50">—</span>}
+                <TableCell>
+                  {patient.doctorName ? (
+                    <span className="text-sm font-medium text-foreground">
+                      {patient.doctorName.startsWith("Dr") ? patient.doctorName : `Dr. ${patient.doctorName}`}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground/50">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <PatientStatusBadge status={patient.status as never} />
+                </TableCell>
+                <TableCell>
+                  {(() => {
+                    const items = (latestInvoice?.items ?? []) as { description: string; sortOrder?: number }[]
+                    if (items.length === 0) return <span className="text-muted-foreground/50">—</span>
+                    const sortedItems = [...items].sort(
+                      (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+                    )
+                    const extra = sortedItems.length - 1
+                    return (
+                      <Tooltip delayDuration={150}>
+                        <TooltipTrigger asChild>
+                          <div className="inline-flex items-center gap-1 max-w-[200px] cursor-default">
+                            <span className="inline-flex items-center h-6 px-2 rounded-md bg-muted/70 border border-border/40 text-[12px] font-medium text-foreground truncate">
+                              {sortedItems[0].description}
+                            </span>
+                            {extra > 0 && (
+                              <span className="inline-flex items-center justify-center h-6 px-1.5 rounded-md bg-muted/70 border border-border/40 text-[11px] font-semibold text-muted-foreground tabular-nums shrink-0">
+                                +{extra}
+                              </span>
+                            )}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="start" className="max-w-xs px-3 py-2">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                            Services ({sortedItems.length})
+                          </p>
+                          <ul className="space-y-1 text-xs">
+                            {sortedItems.map((it, i) => (
+                              <li key={i} className="flex items-start gap-1.5">
+                                <span className="text-muted-foreground/60 mt-0.5">•</span>
+                                <span className="text-foreground">{it.description}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </TooltipContent>
+                      </Tooltip>
+                    )
+                  })()}
                 </TableCell>
                 <TableCell>
                   {latestInvoice ? (
@@ -258,5 +320,6 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
         </span>
       </div>
     </div>
+    </TooltipProvider>
   )
 }

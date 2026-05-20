@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { RefreshCw } from "lucide-react"
 import { BreadcrumbHeader, StatBadge, SearchInput } from "@/components/layout/header"
@@ -15,6 +15,7 @@ import { InsuranceBillPreview } from "./InsuranceBillPreview"
 import InsuranceClaimForm from "./InsuranceClaimForm"
 import InsuranceCompanyManager from "./InsuranceCompanyManager"
 import { getInsuranceClaims, getInsuranceCompanies } from "../actions"
+import { INSURANCE_STATUS_FILTER_OPTIONS, INSURANCE_STATUS_MAP } from "../_status-map"
 import { formatCurrency } from "@/lib/utils"
 import type { InsuranceClaim, InsuranceCompany } from "@/lib/types"
 
@@ -31,31 +32,27 @@ type Stats = {
 
 type SelectedClaim = { id: string; patientName: string; claimNumber: string }
 
-const STATUS_FILTER_OPTIONS = [
-  { label: "All Active", value: "" },
-  { label: "Preauth Pending", value: "preauth" },
-  { label: "Enhancement Pending", value: "enhancement" },
-  { label: "Settlement Pending", value: "settlement" },
-  { label: "Settled", value: "settled" },
-  { label: "Closed", value: "closed" },
-]
+const STATUS_FILTER_OPTIONS = INSURANCE_STATUS_FILTER_OPTIONS
 
-const STATUS_MAP: Record<string, string[]> = {
-  "": [],
-  preauth: ["PREAUTH_SUBMITTED", "PREAUTH_QUERY"],
-  enhancement: ["ENHANCEMENT_CLAIMED", "ENHANCEMENT_QUERY"],
-  settlement: ["FINAL_BILL_SUBMITTED"],
-  settled: ["SETTLED", "PARTIALLY_SETTLED"],
-  closed: ["CLOSED"],
-}
-
-export default function InsurancePage() {
-  const [claims, setClaims] = useState<InsuranceClaim[]>([])
-  const [companies, setCompanies] = useState<InsuranceCompany[]>([])
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState("")
+export default function InsurancePage({
+  initialClaims,
+  initialStats,
+  initialCompanies,
+  initialSearch,
+  initialStatusFilter,
+}: {
+  initialClaims: InsuranceClaim[]
+  initialStats: Stats | null
+  initialCompanies: InsuranceCompany[]
+  initialSearch: string
+  initialStatusFilter: string
+}) {
+  const [claims, setClaims] = useState<InsuranceClaim[]>(initialClaims)
+  const [companies, setCompanies] = useState<InsuranceCompany[]>(initialCompanies)
+  const [stats, setStats] = useState<Stats | null>(initialStats)
+  const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState(initialSearch)
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
   const [selectedClaim, setSelectedClaim] = useState<SelectedClaim | null>(null)
   const [billView, setBillView] = useState<{ type: "final" | "enhancement" | "cash" } | null>(null)
   const [claimFormOpen, setClaimFormOpen] = useState(false)
@@ -66,7 +63,7 @@ export default function InsurancePage() {
     const [result, comps] = await Promise.all([
       getInsuranceClaims({
         search: search.trim() || undefined,
-        statuses: STATUS_MAP[statusFilter]?.length ? STATUS_MAP[statusFilter] : undefined,
+        statuses: INSURANCE_STATUS_MAP[statusFilter]?.length ? INSURANCE_STATUS_MAP[statusFilter] : undefined,
         showClosed: statusFilter === "closed",
       }),
       getInsuranceCompanies(),
@@ -77,7 +74,12 @@ export default function InsurancePage() {
     setLoading(false)
   }, [search, statusFilter])
 
+  const skipFirstLoad = useRef(true)
   useEffect(() => {
+    if (skipFirstLoad.current) {
+      skipFirstLoad.current = false
+      return
+    }
     fetchData()
   }, [fetchData])
 

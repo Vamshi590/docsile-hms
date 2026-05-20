@@ -1,10 +1,7 @@
-import dynamic from "next/dynamic"
-import { PageSkeleton } from "@/components/layout/PageSkeleton"
-
-const LicenseTrackerPage = dynamic(() => import("./components/LicenseTrackerPage"), {
-  loading: () => <PageSkeleton />,
-})
+import LicenseTrackerPage from "./components/LicenseTrackerPage"
+import { getLicenses } from "./actions"
 
 export default async function LicenseTrackerRoute() {
-  return <LicenseTrackerPage />
+  const licenses = await getLicenses()
+  return <LicenseTrackerPage initialLicenses={licenses} />
 }

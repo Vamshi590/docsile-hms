@@ -1,21 +1,19 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { PageHeader, StatBadge } from "@/components/layout/header"
 import { BillingTab } from "./BillingTab"
 import { InventoryTab } from "./InventoryTab"
 import { getStockSummary } from "../actions"
 
+type StockSummary = Awaited<ReturnType<typeof getStockSummary>>
+
 const TAB_CLASS =
   "rounded-none px-3 py-2.5 text-sm font-medium border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
 
-export default function OpticalPage() {
-  const [summary, setSummary] = useState({ totalItems: 0, lowStock: 0 })
-
-  useEffect(() => {
-    getStockSummary().then(setSummary)
-  }, [])
+export default function OpticalPage({ initialSummary }: { initialSummary: StockSummary }) {
+  const [summary, setSummary] = useState<StockSummary>(initialSummary)
 
   return (
     <div className="space-y-0">

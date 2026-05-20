@@ -32,6 +32,9 @@ model User {
   salary           Float?
   salaryType       String? // MONTHLY, DAILY, PER_VISIT
 
+  // Per-user UI preferences (JSON object: { doctorColumns?: string[], ... })
+  preferences String @default("{}") @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -356,7 +359,7 @@ model InPatient {
   referredBy     String?
   department     String?
   doctorNames    String   @default("[]") @db.Text
-  onDutyDoctor   String?
+  onDutyDoctors  String   @default("[]") @db.Text
 
   operationName      String?
   operationDate      DateTime?
@@ -939,4 +942,24 @@ model OpticalBillItem {
 
   @@index([billId])
   @@index([stockId])
+}
+
+// ─── PREDEFINED SURGERIES ───────────────────────────
+model PredefinedSurgery {
+  id                 String   @id @default(cuid())
+  name               String   @unique
+  department         String?
+  doctorNames        String   @default("[]") @db.Text
+  onDutyDoctors      String   @default("[]") @db.Text
+  provisionDiagnosis String?
+  operationProcedure String?  @db.Text
+  operationDetails   String?  @db.Text
+  isActive           Boolean  @default(true)
+  sortOrder          Int      @default(0)
+  createdBy          String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([sortOrder])
 }

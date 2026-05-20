@@ -1,0 +1,54 @@
+<svg viewBox="0 0 400 280" xmlns="http://www.w3.org/2000/svg" fill="none" role="img" aria-label="No patients in refraction queue">
+  <!-- Soft floor shadow -->
+  <ellipse cx="200" cy="254" rx="135" ry="9" fill="#dbeafe"/>
+
+  <!-- Decorative sparkles -->
+  <circle cx="55" cy="60" r="3" fill="#bfdbfe"/>
+  <circle cx="350" cy="78" r="4" fill="#bfdbfe"/>
+  <circle cx="60" cy="210" r="2" fill="#bfdbfe"/>
+  <circle cx="345" cy="215" r="2.5" fill="#bfdbfe"/>
+  <circle cx="100" cy="32" r="2" fill="#93c5fd"/>
+  <circle cx="310" cy="42" r="2.5" fill="#93c5fd"/>
+  <g stroke="#93c5fd" stroke-width="2" stroke-linecap="round">
+    <path d="M35 140 L35 148 M31 144 L39 144"/>
+    <path d="M370 158 L370 166 M366 162 L374 162"/>
+  </g>
+
+  <!-- Snellen eye chart (left), slightly tilted -->
+  <g transform="rotate(-4 155 145)">
+    <!-- Paper shadow / back -->
+    <rect x="92" y="48" width="126" height="194" rx="10" fill="#3b82f6"/>
+    <!-- Paper face -->
+    <rect x="99" y="55" width="112" height="180" rx="6" fill="#ffffff"/>
+
+    <!-- Big E -->
+    <text x="155" y="96" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="900" font-size="34" fill="#1e293b">E</text>
+    <!-- F P -->
+    <text x="155" y="128" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="900" font-size="22" fill="#1e293b" letter-spacing="5">F P</text>
+    <!-- T O Z -->
+    <text x="155" y="156" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="16" fill="#475569" letter-spacing="4">T O Z</text>
+    <!-- L P E D -->
+    <text x="155" y="180" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="800" font-size="12" fill="#94a3b8" letter-spacing="3">L P E D</text>
+    <!-- P E C F D -->
+    <text x="155" y="200" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="700" font-size="9" fill="#cbd5e1" letter-spacing="2.5">P E C F D</text>
+    <!-- 20/20 label -->
+    <text x="155" y="222" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-weight="700" font-size="9" fill="#3b82f6" letter-spacing="1">20/20</text>
+  </g>
+
+  <!-- Eyeglasses (right), slightly tilted -->
+  <g transform="rotate(5 320 175)">
+    <!-- Left lens -->
+    <circle cx="275" cy="175" r="32" fill="#ffffff" stroke="#1d4ed8" stroke-width="5"/>
+    <!-- Right lens -->
+    <circle cx="355" cy="175" r="32" fill="#ffffff" stroke="#1d4ed8" stroke-width="5"/>
+    <!-- Bridge -->
+    <path d="M307 173 Q315 167 323 173" stroke="#1d4ed8" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <!-- Earpiece left (curling back) -->
+    <path d="M243 173 L228 168 Q220 167 220 173" stroke="#1d4ed8" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <!-- Earpiece right (curling back) -->
+    <path d="M387 173 L398 168" stroke="#1d4ed8" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <!-- Lens reflections -->
+    <path d="M263 164 Q268 158 277 158" stroke="#bfdbfe" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <path d="M343 164 Q348 158 357 158" stroke="#bfdbfe" stroke-width="3" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>

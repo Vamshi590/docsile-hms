@@ -1,11 +1,26 @@
-import dynamic from "next/dynamic"
-import { PageSkeleton } from "@/components/layout/PageSkeleton"
+import { DoctorPage } from "./components/DoctorPage"
+import { getDoctorQueue, getPrescriptionReferenceData } from "./actions"
+import { getUserPreferences } from "@/lib/user-preferences"
+import { todayISO } from "@/lib/utils"
 
-const DoctorPage = dynamic(
-  () => import("./components/DoctorPage").then((mod) => ({ default: mod.DoctorPage })),
-  { loading: () => <PageSkeleton /> }
-)
-
-export default async function Page() {
-  return <DoctorPage />
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>
+}) {
+  const params = await searchParams
+  const date = params.date ?? todayISO()
+  const [queue, referenceData, prefs] = await Promise.all([
+    getDoctorQueue(date),
+    getPrescriptionReferenceData(),
+    getUserPreferences(),
+  ])
+  return (
+    <DoctorPage
+      initialQueue={queue}
+      initialDate={date}
+      initialReferenceData={referenceData}
+      initialColumns={prefs.doctorColumns ?? null}
+    />
+  )
 }

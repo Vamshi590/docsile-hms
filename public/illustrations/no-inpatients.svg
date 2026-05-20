@@ -1,0 +1,53 @@
+<svg viewBox="0 0 400 280" xmlns="http://www.w3.org/2000/svg" fill="none" role="img" aria-label="No in-patients">
+  <!-- Soft floor shadow -->
+  <ellipse cx="220" cy="252" rx="160" ry="10" fill="#dbeafe"/>
+
+  <!-- Decorative sparkles -->
+  <circle cx="220" cy="50" r="3" fill="#bfdbfe"/>
+  <circle cx="290" cy="70" r="2.5" fill="#bfdbfe"/>
+  <circle cx="170" cy="40" r="2" fill="#93c5fd"/>
+  <circle cx="60" cy="190" r="2" fill="#bfdbfe"/>
+  <circle cx="350" cy="100" r="3" fill="#bfdbfe"/>
+
+  <!-- IV stand -->
+  <g>
+    <!-- Pole -->
+    <rect x="80" y="80" width="3" height="148" fill="#94a3b8"/>
+    <!-- Base wheel -->
+    <ellipse cx="81.5" cy="232" rx="14" ry="3" fill="#64748b"/>
+    <!-- IV bag -->
+    <path d="M73 78 Q73 62 81.5 62 Q90 62 90 78 L90 102 L73 102 Z" fill="#bfdbfe" stroke="#1e40af" stroke-width="1.5"/>
+    <!-- Liquid level -->
+    <path d="M73 88 L90 88 L90 102 L73 102 Z" fill="#3b82f6" opacity="0.4"/>
+    <!-- Drip chamber -->
+    <rect x="79" y="102" width="5" height="9" fill="#94a3b8"/>
+    <!-- Tube to bed -->
+    <path d="M81.5 111 Q 95 150 145 158" stroke="#cbd5e1" stroke-width="1.8" stroke-linecap="round"/>
+  </g>
+
+  <!-- Bed back rest -->
+  <rect x="120" y="98" width="8" height="110" rx="2" fill="#1d4ed8"/>
+  <rect x="125" y="105" width="55" height="55" rx="4" fill="#3b82f6"/>
+
+  <!-- Mattress / top sheet -->
+  <rect x="125" y="160" width="220" height="20" rx="4" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+  <!-- Bed sheet on mattress -->
+  <rect x="125" y="175" width="220" height="35" rx="2" fill="#e2e8f0"/>
+  <!-- Sheet fold suggestion -->
+  <path d="M125 200 Q 235 192 345 200" stroke="#cbd5e1" stroke-width="1.5" fill="none"/>
+
+  <!-- Pillow -->
+  <rect x="140" y="148" width="55" height="22" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+
+  <!-- Bed end (foot post) -->
+  <rect x="345" y="120" width="7" height="100" rx="2" fill="#1d4ed8"/>
+  <rect x="338" y="118" width="22" height="6" rx="2" fill="#3b82f6"/>
+
+  <!-- Bed legs -->
+  <rect x="128" y="208" width="5" height="24" fill="#1e3a8a"/>
+  <rect x="340" y="208" width="5" height="24" fill="#1e3a8a"/>
+
+  <!-- Heart-rate accent (medical hint) -->
+  <path d="M250 130 L260 130 L265 120 L272 140 L278 130 L295 130"
+        stroke="#3b82f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
+</svg>

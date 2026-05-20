@@ -32,7 +32,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  return NextResponse.next()
+  // Forward the current pathname to server components via a request header.
+  // Next does not expose the pathname directly in server layouts, so we set it
+  // here for the module-gate check downstream.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set("x-pathname", pathname)
+  return NextResponse.next({ request: { headers: requestHeaders } })
 }
 
 export const config = {

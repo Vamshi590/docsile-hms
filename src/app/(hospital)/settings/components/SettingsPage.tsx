@@ -22,7 +22,21 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { cn } from "@/lib/utils"
 import { PageHeader } from "@/components/layout/header"
+import { Loader2 } from "lucide-react"
 import {
   getServiceTemplates,
   createServiceTemplate,
@@ -49,6 +63,10 @@ import {
   createInpatientTemplate,
   updateInpatientTemplate,
   deleteInpatientTemplate,
+  getPredefinedSurgeries,
+  createPredefinedSurgery,
+  updatePredefinedSurgery,
+  deletePredefinedSurgery,
 } from "../actions"
 import type { ServiceTemplate, PackageInclusion } from "@/lib/types"
 import { EditableCombobox } from "@/components/ui/combobox"
@@ -176,6 +194,9 @@ type HospitalProfile = {
   website: string | null
   registrationNo: string | null
   gstin: string | null
+  registrationFeeEnabled?: boolean
+  registrationFeeAmount?: number
+  registrationFeeDefaultChecked?: boolean
 }
 
 type User = {
@@ -199,7 +220,11 @@ const ROLE_VARIANT: Record<string, "default" | "info" | "success" | "warning" | 
   NURSE: "secondary",
 }
 
-export default function SettingsPage() {
+export default function SettingsPage({
+  initialServices,
+}: {
+  initialServices: ServiceTemplate[]
+}) {
   return (
     <div className="space-y-0">
       <PageHeader
@@ -218,6 +243,7 @@ export default function SettingsPage() {
                   { value: "inpatient",     label: "Inpatient Templates" },
                   { value: "medicines",     label: "Medicine Templates" },
                   { value: "packages",      label: "IPD Packages" },
+                  { value: "surgeries",     label: "Predefined Surgeries" },
                   { value: "hospital",      label: "Hospital Profile" },
                   { value: "users",         label: "Users" },
                 ] as const
@@ -232,11 +258,12 @@ export default function SettingsPage() {
               ))}
             </TabsList>
           </div>
-          <TabsContent value="services"><ServicesTab /></TabsContent>
+          <TabsContent value="services"><ServicesTab initialServices={initialServices} /></TabsContent>
           <TabsContent value="prescriptions"><PrescriptionsTab /></TabsContent>
           <TabsContent value="inpatient"><InpatientTemplatesTab /></TabsContent>
           <TabsContent value="medicines"><MedicinesTab /></TabsContent>
           <TabsContent value="packages"><PackagesTab /></TabsContent>
+          <TabsContent value="surgeries"><SurgeriesTab /></TabsContent>
           <TabsContent value="hospital"><HospitalTab /></TabsContent>
           <TabsContent value="users"><UsersTab /></TabsContent>
         </Tabs>
@@ -247,9 +274,9 @@ export default function SettingsPage() {
 
 // ─── Services Tab ─────────────────────────────────────────────────────────────
 
-function ServicesTab() {
-  const [services, setServices] = useState<ServiceTemplate[]>([])
-  const [loading, setLoading] = useState(true)
+function ServicesTab({ initialServices }: { initialServices: ServiceTemplate[] }) {
+  const [services, setServices] = useState<ServiceTemplate[]>(initialServices)
+  const [loading, setLoading] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState("All")
   const [search, setSearch] = useState("")
   const [showInactive, setShowInactive] = useState(false)
@@ -265,7 +292,15 @@ function ServicesTab() {
     setLoading(false)
   }, [showInactive])
 
-  useEffect(() => { fetch() }, [fetch])
+  // initial data comes from props; re-fetch only when `showInactive` toggles
+  const skipFirstLoad = useRef(true)
+  useEffect(() => {
+    if (skipFirstLoad.current) {
+      skipFirstLoad.current = false
+      return
+    }
+    fetch()
+  }, [fetch])
 
   const filtered = services.filter(s => {
     if (categoryFilter !== "All" && s.category !== categoryFilter) return false
@@ -628,17 +663,24 @@ function HospitalTab() {
   const [website, setWebsite] = useState("")
   const [registrationNo, setRegistrationNo] = useState("")
   const [gstin, setGstin] = useState("")
+  const [regFeeEnabled, setRegFeeEnabled] = useState(false)
+  const [regFeeAmount, setRegFeeAmount] = useState("")
+  const [regFeeDefaultChecked, setRegFeeDefaultChecked] = useState(true)
 
   useEffect(() => {
     getHospitalProfile().then(p => {
       if (p) {
+        const hp = p as HospitalProfile
         setName(p.name)
-        setDisplayName((p as HospitalProfile).displayName ?? "")
+        setDisplayName(hp.displayName ?? "")
         setPhone(p.phone ?? "")
         setEmail(p.email ?? "")
-        setWebsite((p as HospitalProfile).website ?? "")
-        setRegistrationNo((p as HospitalProfile).registrationNo ?? "")
-        setGstin((p as HospitalProfile).gstin ?? "")
+        setWebsite(hp.website ?? "")
+        setRegistrationNo(hp.registrationNo ?? "")
+        setGstin(hp.gstin ?? "")
+        setRegFeeEnabled(hp.registrationFeeEnabled ?? false)
+        setRegFeeAmount(hp.registrationFeeAmount != null ? String(hp.registrationFeeAmount) : "")
+        setRegFeeDefaultChecked(hp.registrationFeeDefaultChecked ?? true)
       }
       setLoading(false)
     })
@@ -646,6 +688,7 @@ function HospitalTab() {
 
   async function handleSave() {
     setSaving(true)
+    const parsedAmount = parseFloat(regFeeAmount)
     const result = await updateHospitalProfile({
       name: name.trim(),
       displayName: displayName.trim() || undefined,
@@ -654,6 +697,9 @@ function HospitalTab() {
       website: website.trim() || undefined,
       registrationNo: registrationNo.trim() || undefined,
       gstin: gstin.trim() || undefined,
+      registrationFeeEnabled: regFeeEnabled,
+      registrationFeeAmount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
+      registrationFeeDefaultChecked: regFeeDefaultChecked,
     })
     setSaving(false)
     if (result.success) toast.success("Hospital profile updated")
@@ -696,6 +742,50 @@ function HospitalTab() {
           <div>
             <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">GSTIN</Label>
             <Input value={gstin} onChange={e => setGstin(e.target.value)} className="mt-1.5" placeholder="GST identification number" />
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-4 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Registration Fee</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Charge a one-time fee when registering a new out-patient.</p>
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <Label className="text-sm font-medium text-foreground">Enable registration fee</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">Show a Registration Fee option in Step 2 of patient registration.</p>
+            </div>
+            <Switch checked={regFeeEnabled} onCheckedChange={setRegFeeEnabled} />
+          </div>
+
+          <div className={cn("grid grid-cols-2 gap-4", !regFeeEnabled && "opacity-50 pointer-events-none")}>
+            <div>
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Amount (₹)</Label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                value={regFeeAmount}
+                onChange={e => setRegFeeAmount(e.target.value)}
+                className="mt-1.5"
+                placeholder="500"
+                disabled={!regFeeEnabled}
+              />
+            </div>
+            <div className="flex flex-col justify-end">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-1.5">Pre-check by default</Label>
+              <div className="h-9 flex items-center">
+                <Switch
+                  checked={regFeeDefaultChecked}
+                  onCheckedChange={setRegFeeDefaultChecked}
+                  disabled={!regFeeEnabled}
+                />
+                <span className="text-xs text-muted-foreground ml-2">
+                  {regFeeDefaultChecked ? "Checked when stepper opens" : "Unchecked by default"}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2708,6 +2798,279 @@ function MedicineFormDialog({
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={loading}>
             {loading ? "Saving..." : existing ? "Save Changes" : "Add Medicine"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Predefined Surgeries Tab ────────────────────────────────────────────────
+
+type SurgeryRow = {
+  id: string
+  name: string
+  department: string | null
+  doctorNames: string         // JSON
+  onDutyDoctors: string       // JSON
+  provisionDiagnosis: string | null
+  operationProcedure: string | null
+  operationDetails: string | null
+  isActive: boolean
+  sortOrder: number
+}
+
+function SurgeriesTab() {
+  const [surgeries, setSurgeries] = useState<SurgeryRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [showInactive, setShowInactive] = useState(false)
+  const [editItem, setEditItem] = useState<SurgeryRow | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    const data = await getPredefinedSurgeries(showInactive)
+    setSurgeries(data as SurgeryRow[])
+    setLoading(false)
+  }, [showInactive])
+
+  useEffect(() => { fetch() }, [fetch])
+
+  const filtered = surgeries.filter(s => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return s.name.toLowerCase().includes(q) || (s.department?.toLowerCase().includes(q) ?? false)
+  })
+
+  async function handleDelete() {
+    if (!deleteId) return
+    const result = await deletePredefinedSurgery(deleteId)
+    if (result.success) {
+      toast.success("Surgery template deleted")
+      setDeleteId(null)
+      await fetch()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search surgeries..."
+          className="max-w-sm"
+        />
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Checkbox checked={showInactive} onCheckedChange={v => setShowInactive(v === true)} />
+          Show inactive
+        </label>
+        <div className="ml-auto">
+          <Button size="sm" onClick={() => setAddOpen(true)}>+ Add Surgery</Button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-white overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead>Name</TableHead>
+              <TableHead>Department</TableHead>
+              <TableHead>Doctors</TableHead>
+              <TableHead>On-Duty</TableHead>
+              <TableHead className="w-20"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-5 w-full" /></TableCell></TableRow>
+              ))
+            ) : filtered.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-10 text-sm text-muted-foreground">
+                  No surgery templates {search ? "match your search" : "yet"}.
+                </TableCell>
+              </TableRow>
+            ) : filtered.map(s => {
+              let doctors: string[] = []
+              let onDuty: string[] = []
+              try { doctors = JSON.parse(s.doctorNames) } catch {}
+              try { onDuty   = JSON.parse(s.onDutyDoctors) } catch {}
+              return (
+                <TableRow key={s.id} className={s.isActive ? "" : "opacity-50"}>
+                  <TableCell className="font-medium">{s.name}</TableCell>
+                  <TableCell className="text-sm">{s.department ?? "—"}</TableCell>
+                  <TableCell className="text-sm">{doctors.join(", ") || "—"}</TableCell>
+                  <TableCell className="text-sm">{onDuty.join(", ") || "—"}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => setEditItem(s)}>Edit</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDeleteId(s.id)} className="text-destructive">Delete</Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      <SurgeryFormDialog
+        open={addOpen || !!editItem}
+        onClose={() => { setAddOpen(false); setEditItem(null) }}
+        editItem={editItem}
+        onSaved={async () => { setAddOpen(false); setEditItem(null); await fetch() }}
+      />
+
+      <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete surgery template?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The template will be deactivated. Existing in-patient records that reference this
+              operation are not affected (they store a snapshot of the values at admission time).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+function SurgeryFormDialog({
+  open, onClose, editItem, onSaved,
+}: {
+  open: boolean
+  onClose: () => void
+  editItem: SurgeryRow | null
+  onSaved: () => void
+}) {
+  const [name, setName] = useState("")
+  const [department, setDepartment] = useState("")
+  const [doctorNames, setDoctorNames] = useState<string[]>([""])
+  const [onDutyDoctors, setOnDutyDoctors] = useState<string[]>([""])
+  const [provisionDiagnosis, setProvisionDiagnosis] = useState("")
+  const [operationProcedure, setOperationProcedure] = useState("")
+  const [operationDetails, setOperationDetails] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    if (editItem) {
+      setName(editItem.name)
+      setDepartment(editItem.department ?? "")
+      try { setDoctorNames(JSON.parse(editItem.doctorNames) as string[]) } catch { setDoctorNames([""]) }
+      try { setOnDutyDoctors(JSON.parse(editItem.onDutyDoctors) as string[]) } catch { setOnDutyDoctors([""]) }
+      setProvisionDiagnosis(editItem.provisionDiagnosis ?? "")
+      setOperationProcedure(editItem.operationProcedure ?? "")
+      setOperationDetails(editItem.operationDetails ?? "")
+    } else {
+      setName(""); setDepartment("")
+      setDoctorNames([""]); setOnDutyDoctors([""])
+      setProvisionDiagnosis(""); setOperationProcedure(""); setOperationDetails("")
+    }
+  }, [open, editItem])
+
+  function updateRow(rows: string[], setter: (v: string[]) => void, i: number, v: string) {
+    setter(rows.map((x, j) => (j === i ? v : x)))
+  }
+  function addRow(rows: string[], setter: (v: string[]) => void) { setter([...rows, ""]) }
+  function removeRow(rows: string[], setter: (v: string[]) => void, i: number) {
+    if (rows.length > 1) setter(rows.filter((_, j) => j !== i))
+  }
+
+  async function handleSave() {
+    if (!name.trim()) { toast.error("Surgery name is required"); return }
+    setSaving(true)
+    const payload = {
+      name: name.trim(),
+      department: department.trim() || null,
+      doctorNames: doctorNames.map(d => d.trim()).filter(Boolean),
+      onDutyDoctors: onDutyDoctors.map(d => d.trim()).filter(Boolean),
+      provisionDiagnosis: provisionDiagnosis.trim() || null,
+      operationProcedure: operationProcedure.trim() || null,
+      operationDetails: operationDetails.trim() || null,
+    }
+    const result = editItem
+      ? await updatePredefinedSurgery(editItem.id, payload)
+      : await createPredefinedSurgery(payload)
+    setSaving(false)
+    if (result.success) {
+      toast.success(editItem ? "Surgery template updated" : "Surgery template created")
+      onSaved()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{editItem ? "Edit Surgery Template" : "Add Surgery Template"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <Label>Operation name *</Label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Phacoemulsification + IOL" />
+          </div>
+          <div>
+            <Label>Department</Label>
+            <Input value={department} onChange={e => setDepartment(e.target.value)} placeholder="e.g. Ophthalmology" />
+          </div>
+
+          <div>
+            <Label>Doctor names</Label>
+            <div className="space-y-2 mt-1">
+              {doctorNames.map((d, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input value={d} onChange={e => updateRow(doctorNames, setDoctorNames, i, e.target.value)} placeholder={`Doctor ${i + 1}`} />
+                  <Button type="button" size="sm" variant="ghost" onClick={() => removeRow(doctorNames, setDoctorNames, i)} disabled={doctorNames.length === 1}>−</Button>
+                </div>
+              ))}
+              <Button type="button" size="sm" variant="outline" onClick={() => addRow(doctorNames, setDoctorNames)}>+ Add doctor</Button>
+            </div>
+          </div>
+
+          <div>
+            <Label>On-duty doctors</Label>
+            <div className="space-y-2 mt-1">
+              {onDutyDoctors.map((d, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input value={d} onChange={e => updateRow(onDutyDoctors, setOnDutyDoctors, i, e.target.value)} placeholder={`On-duty doctor ${i + 1}`} />
+                  <Button type="button" size="sm" variant="ghost" onClick={() => removeRow(onDutyDoctors, setOnDutyDoctors, i)} disabled={onDutyDoctors.length === 1}>−</Button>
+                </div>
+              ))}
+              <Button type="button" size="sm" variant="outline" onClick={() => addRow(onDutyDoctors, setOnDutyDoctors)}>+ Add on-duty doctor</Button>
+            </div>
+          </div>
+
+          <div>
+            <Label>Provision diagnosis</Label>
+            <Input value={provisionDiagnosis} onChange={e => setProvisionDiagnosis(e.target.value)} />
+          </div>
+          <div>
+            <Label>Operation procedure</Label>
+            <Textarea value={operationProcedure} onChange={e => setOperationProcedure(e.target.value)} rows={3} />
+          </div>
+          <div>
+            <Label>Operation details</Label>
+            <Textarea value={operationDetails} onChange={e => setOperationDetails(e.target.value)} rows={3} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

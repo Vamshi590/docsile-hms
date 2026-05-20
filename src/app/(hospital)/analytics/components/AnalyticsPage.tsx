@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { format } from "date-fns"
 import {
   Users, IndianRupee, TrendingUp, TrendingDown,
@@ -136,23 +136,39 @@ function CustomTooltip({ active, payload, label, currency = false }: {
 
 // ─── MAIN COMPONENT ──────────────────────────────────
 
-export default function AnalyticsPage() {
+export default function AnalyticsPage({
+  initialOverview,
+  initialGender,
+  initialAgeGroups,
+  initialRevenueByCategory,
+  initialTimeSeries,
+  initialExpenseBreakdown,
+  initialStatusDist,
+}: {
+  initialOverview: AnalyticsOverview | null
+  initialGender: GenderDistribution | null
+  initialAgeGroups: AgeGroup[]
+  initialRevenueByCategory: RevenueByCategory[]
+  initialTimeSeries: TimeSeriesPoint[]
+  initialExpenseBreakdown: ExpenseByCategory[]
+  initialStatusDist: StatusDistribution[]
+}) {
   const [tab, setTab] = useState<Tab>("overview")
   const [filter, setFilter] = useState<TimeFilter>("month")
   const [customRange, setCustomRange] = useState({ start: "", end: "" })
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
-  // Data states
-  const [overview, setOverview] = useState<AnalyticsOverview | null>(null)
-  const [gender, setGender] = useState<GenderDistribution | null>(null)
-  const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([])
-  const [revenueByCategory, setRevenueByCategory] = useState<RevenueByCategory[]>([])
-  const [timeSeries, setTimeSeries] = useState<TimeSeriesPoint[]>([])
+  // Data states — seeded from server for the default Overview/month view.
+  const [overview, setOverview] = useState<AnalyticsOverview | null>(initialOverview)
+  const [gender, setGender] = useState<GenderDistribution | null>(initialGender)
+  const [ageGroups, setAgeGroups] = useState<AgeGroup[]>(initialAgeGroups)
+  const [revenueByCategory, setRevenueByCategory] = useState<RevenueByCategory[]>(initialRevenueByCategory)
+  const [timeSeries, setTimeSeries] = useState<TimeSeriesPoint[]>(initialTimeSeries)
   const [topServices, setTopServices] = useState<TopService[]>([])
-  const [expenseBreakdown, setExpenseBreakdown] = useState<ExpenseByCategory[]>([])
+  const [expenseBreakdown, setExpenseBreakdown] = useState<ExpenseByCategory[]>(initialExpenseBreakdown)
   const [financial, setFinancial] = useState<FinancialSummary | null>(null)
   const [doctorPerf, setDoctorPerf] = useState<DoctorPerformance[]>([])
-  const [statusDist, setStatusDist] = useState<StatusDistribution[]>([])
+  const [statusDist, setStatusDist] = useState<StatusDistribution[]>(initialStatusDist)
   const [referrals, setReferrals] = useState<{ name: string; count: number }[]>([])
 
   // Compute date strings for the Calls tab (CallAnalyticsTab needs yyyy-MM-dd strings)
@@ -242,7 +258,14 @@ export default function AnalyticsPage() {
     }
   }, [tab, filter, customRange])
 
-  useEffect(() => { loadData() }, [loadData])
+  const skipFirstLoad = useRef(true)
+  useEffect(() => {
+    if (skipFirstLoad.current) {
+      skipFirstLoad.current = false
+      return
+    }
+    loadData()
+  }, [loadData])
 
   // ─── LOADING SKELETON ──────────────────────────────
 

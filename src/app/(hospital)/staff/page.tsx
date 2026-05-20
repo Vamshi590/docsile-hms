@@ -1,12 +1,9 @@
-import dynamic from "next/dynamic"
+import StaffPage from "./components/StaffPage"
 import { requireAdmin } from "@/lib/auth"
-import { PageSkeleton } from "@/components/layout/PageSkeleton"
-
-const StaffPage = dynamic(() => import("./components/StaffPage"), {
-  loading: () => <PageSkeleton />,
-})
+import { getStaffMembers, getRoles } from "./actions"
 
 export default async function StaffRoute() {
   await requireAdmin()
-  return <StaffPage />
+  const [staff, roles] = await Promise.all([getStaffMembers(), getRoles()])
+  return <StaffPage initialStaff={staff} initialRoles={roles} />
 }

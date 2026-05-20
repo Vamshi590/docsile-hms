@@ -1,23 +1,44 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Eye, RefreshCw } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect, useRef } from "react"
+import { RefreshCw } from "lucide-react"
 import { BreadcrumbHeader, FilterBar, DateNavigator, SearchInput, StatBadge } from "@/components/layout/header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { EyeReadingForm } from "./EyeReadingForm"
+import { SightTypePicker } from "./SightTypePicker"
+import { AskSithaAI } from "../../doctor/components/AskSithaAI"
 import { getWorkupQueue } from "../actions"
 import { cn, formatDate, calculateAge, todayISO, toLocalDateISO } from "@/lib/utils"
 
 type QueueItem = Awaited<ReturnType<typeof getWorkupQueue>>[0]
 
-export function WorkupPage() {
-  const [date, setDate] = useState(todayISO())
+export function WorkupPage({
+  initialQueue,
+  initialDate,
+}: {
+  initialQueue: QueueItem[]
+  initialDate: string
+}) {
+  const [date, setDate] = useState(initialDate)
   const [search, setSearch] = useState("")
-  const [queue, setQueue] = useState<QueueItem[]>([])
+  const [queue, setQueue] = useState<QueueItem[]>(initialQueue)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<QueueItem | null>(null)
+  const [sightType, setSightType] = useState<string>("")
+
+  // Whenever a different patient is selected, seed sightType from their last
+  // saved present prescription so the picker shows the existing selection.
+  useEffect(() => {
+    if (!selected) { setSightType(""); return }
+    try {
+      const raw = selected.eyeReadings?.[0]?.presentPrescription
+      const parsed = raw ? JSON.parse(raw) : null
+      setSightType((parsed?.sightType as string) ?? "")
+    } catch {
+      setSightType("")
+    }
+  }, [selected])
 
   async function loadQueue() {
     setLoading(true)
@@ -26,7 +47,14 @@ export function WorkupPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadQueue() }, [date])
+  const skipFirstLoad = useRef(true)
+  useEffect(() => {
+    if (skipFirstLoad.current) {
+      skipFirstLoad.current = false
+      return
+    }
+    loadQueue()
+  }, [date])
 
   function prevDay() {
     const d = new Date(date + "T00:00:00")
@@ -106,35 +134,10 @@ export function WorkupPage() {
 
       {/* Inline detail view */}
       {selected ? (
-        <div className="mt-5 space-y-5">
+        <div className="mt-5 flex gap-4">
 
-          {/* Identity card */}
-          {/* <div className="bg-white rounded-2xl border border-border px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Avatar className="h-12 w-12">
-                <AvatarFallback className="text-base font-semibold bg-primary/10 text-primary">
-                  {getInitials(`${selected.firstName} ${selected.lastName ?? ""}`)}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h2 className="text-lg font-semibold text-foreground leading-tight">
-                  {selected.firstName} {selected.lastName}
-                </h2>
-                <p className="text-xs font-mono text-muted-foreground mt-0.5">{selected.patientId}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-5 text-sm text-muted-foreground">
-                <span>{selected.age ?? calculateAge(selected.dateOfBirth) ?? "—"} yrs · {selected.gender?.charAt(0)}</span>
-                {selected.phone && <span>{selected.phone}</span>}
-                <span>{formatDate(selected.appointmentDate)}</span>
-              </div>
-              <PatientStatusBadge status={selected.status as PatientStatus} />
-            </div>
-          </div> */}
-
-          {/* Eye reading form — full width */}
-          <div className="bg-white rounded-2xl border border-border overflow-hidden">
+          {/* Eye reading form */}
+          <div className="flex-1 min-w-0 bg-white rounded-2xl border border-border overflow-hidden">
             <EyeReadingForm
               patientId={selected.patientId}
               existingReading={
@@ -142,8 +145,6 @@ export function WorkupPage() {
                   ? JSON.stringify({
                       autoRefractometer: selected.eyeReadings[0].autoRefractometer
                         ? JSON.parse(selected.eyeReadings[0].autoRefractometer) : null,
-                      glassesReading: selected.eyeReadings[0].glassesReading
-                        ? JSON.parse(selected.eyeReadings[0].glassesReading) : null,
                       previousPrescription: selected.eyeReadings[0].previousPrescription
                         ? JSON.parse(selected.eyeReadings[0].previousPrescription) : null,
                       presentPrescription: selected.eyeReadings[0].presentPrescription
@@ -153,12 +154,21 @@ export function WorkupPage() {
                     })
                   : null
               }
+              sightTypeValue={sightType}
+              onSightTypeChange={setSightType}
+              hideSightType
               onSaved={async () => {
                 const data = await getWorkupQueue(date)
                 setQueue(data)
                 setSelected(null)
               }}
             />
+          </div>
+
+          {/* Right column: Sight Type + Ask Sitha AI */}
+          <div className="w-80 shrink-0 sticky top-4 self-start space-y-3 max-h-[calc(100vh-6rem)] overflow-y-auto pr-0.5">
+            <SightTypePicker value={sightType} onChange={setSightType} />
+            <AskSithaAI patientId={selected.patientId} />
           </div>
         </div>
       ) : (
@@ -175,7 +185,6 @@ export function WorkupPage() {
                   <TableHead className="hidden md:table-cell">Phone</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden lg:table-cell">Appointment</TableHead>
-                  <TableHead className="text-right pr-3">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -188,19 +197,24 @@ export function WorkupPage() {
                     <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
                     <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="text-right"><Skeleton className="h-7 w-16 rounded-lg ml-auto" /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-xl border border-border/60 bg-white py-20 text-center shadow-sm">
-            <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-muted/60 mb-4">
-              <Eye className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <p className="font-semibold text-foreground">No patients in workup queue</p>
-            <p className="text-sm text-muted-foreground mt-1.5">Patients appear here after registration</p>
+          <div className="rounded-xl border border-border/60 bg-white py-14 px-6 text-center shadow-sm">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/illustrations/no-refraction.svg"
+              alt=""
+              className="mx-auto mb-6 h-44 w-auto select-none"
+              draggable={false}
+            />
+            <p className="text-base font-semibold text-foreground">Queue is clear</p>
+            <p className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
+              No patients are waiting for refraction right now. New patients show up here automatically after registration.
+            </p>
           </div>
         ) : (
           <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
@@ -214,7 +228,6 @@ export function WorkupPage() {
                   <TableHead className="hidden md:table-cell">Phone</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="hidden lg:table-cell">Appointment</TableHead>
-                  <TableHead className="text-right pr-3">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -250,10 +263,19 @@ export function WorkupPage() {
                       <TableCell>
                         <span className="font-semibold text-sm text-foreground">{fullName}</span>
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell text-sm text-muted-foreground whitespace-nowrap">
-                        {age ? `${age}y` : "—"} / {genderShort}
+                      <TableCell className="hidden sm:table-cell whitespace-nowrap">
+                        {age ? (
+                          <span className="inline-flex items-baseline gap-1 text-sm text-foreground">
+                            <span className="font-medium tabular-nums">{age}</span>
+                            <span className="font-normal">y</span>
+                            <span className="text-foreground/30 mx-0.5">·</span>
+                            <span className="font-medium">{genderShort}</span>
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground tabular-nums">
+                      <TableCell className="hidden md:table-cell text-sm text-foreground tabular-nums">
                         {patient.phone || <span className="text-muted-foreground/50">—</span>}
                       </TableCell>
                       <TableCell>
@@ -265,18 +287,8 @@ export function WorkupPage() {
                           {sc.label}
                         </span>
                       </TableCell>
-                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground whitespace-nowrap">
+                      <TableCell className="hidden lg:table-cell text-sm font-medium text-foreground whitespace-nowrap">
                         {formatDate(patient.appointmentDate)}
-                      </TableCell>
-                      <TableCell className="text-right pr-4">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 gap-1.5 opacity-70 group-hover:opacity-100 transition-opacity"
-                          onClick={e => { e.stopPropagation(); setSelected(patient) }}
-                        >
-                          <Eye className="h-3.5 w-3.5" /> Open
-                        </Button>
                       </TableCell>
                     </TableRow>
                   )

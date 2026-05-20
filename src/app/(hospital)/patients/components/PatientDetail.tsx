@@ -86,6 +86,14 @@ export function PatientDetail({ patientId, onBack, onUpdate }: Props) {
     })
   }, [patientId])
 
+  // Auto-fill Amount Received with the current total so the user only needs
+  // to click Save Receipt for the common (paid-in-full) case.
+  useEffect(() => {
+    const sub = addedServices.reduce((s, i) => s + i.amount, 0)
+    const next = Math.max(0, sub - discount)
+    setAmountPaid(next)
+  }, [addedServices, discount])
+
   async function handleStatusChange(status: string) {
     if (!patient) return
     const result = await updatePatientStatus(patient.patientId, status)

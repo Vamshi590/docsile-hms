@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { PageHeader, StatBadge } from "@/components/layout/header"
@@ -10,15 +10,13 @@ import { SuppliersTab } from "./SuppliersTab"
 import { PurchaseOrdersTab } from "./PurchaseOrdersTab"
 import { getStockSummary } from "../actions"
 
+type StockSummary = Awaited<ReturnType<typeof getStockSummary>>
+
 const TAB_CLASS =
   "rounded-none px-3 py-2.5 text-sm font-medium border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
 
-export default function PharmacyPage() {
-  const [summary, setSummary] = useState({ totalItems: 0, lowStock: 0, nearExpiry: 0, expired: 0, stockValue: 0 })
-
-  useEffect(() => {
-    getStockSummary().then(setSummary)
-  }, [])
+export default function PharmacyPage({ initialSummary }: { initialSummary: StockSummary }) {
+  const [summary, setSummary] = useState<StockSummary>(initialSummary)
 
   return (
     <div className="space-y-0">

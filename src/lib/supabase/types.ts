@@ -721,6 +721,52 @@ export interface Database {
           updatedAt?: string
         }
       }
+      PredefinedSurgery: {
+        Row: {
+          id: string
+          name: string
+          department: string | null
+          doctorNames: string         // JSON-encoded string[]
+          onDutyDoctors: string       // JSON-encoded string[]
+          provisionDiagnosis: string | null
+          operationProcedure: string | null
+          operationDetails: string | null
+          isActive: boolean
+          sortOrder: number
+          createdBy: string
+          createdAt: string
+          updatedAt: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          department?: string | null
+          doctorNames?: string
+          onDutyDoctors?: string
+          provisionDiagnosis?: string | null
+          operationProcedure?: string | null
+          operationDetails?: string | null
+          isActive?: boolean
+          sortOrder?: number
+          createdBy: string
+          createdAt?: string
+          updatedAt?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          department?: string | null
+          doctorNames?: string
+          onDutyDoctors?: string
+          provisionDiagnosis?: string | null
+          operationProcedure?: string | null
+          operationDetails?: string | null
+          isActive?: boolean
+          sortOrder?: number
+          createdBy?: string
+          updatedAt?: string
+        }
+      }
       InPatient: {
         Row: {
           id: string
@@ -738,7 +784,7 @@ export interface Database {
           referredBy: string | null
           department: string | null
           doctorNames: string
-          onDutyDoctor: string | null
+          onDutyDoctors: string
           operationName: string | null
           operationDate: string | null
           operationProcedure: string | null
@@ -780,7 +826,7 @@ export interface Database {
           referredBy?: string | null
           department?: string | null
           doctorNames?: string
-          onDutyDoctor?: string | null
+          onDutyDoctors?: string
           operationName?: string | null
           operationDate?: string | null
           operationProcedure?: string | null
@@ -822,7 +868,7 @@ export interface Database {
           referredBy?: string | null
           department?: string | null
           doctorNames?: string
-          onDutyDoctor?: string | null
+          onDutyDoctors?: string
           operationName?: string | null
           operationDate?: string | null
           operationProcedure?: string | null

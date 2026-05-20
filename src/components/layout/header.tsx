@@ -1,4 +1,8 @@
+"use client"
+
 import { ReactNode, useState, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import { ChevronRight, Home } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface PageHeaderProps {
@@ -68,6 +72,8 @@ interface BreadcrumbHeaderProps {
 }
 
 export function BreadcrumbHeader({ onBack, backLabel, currentLabel, subtitle, children, className }: BreadcrumbHeaderProps) {
+  const router = useRouter()
+
   return (
     <div
       className={cn(
@@ -77,26 +83,31 @@ export function BreadcrumbHeader({ onBack, backLabel, currentLabel, subtitle, ch
         className
       )}
     >
-      <div className="flex items-center gap-2 min-w-0">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1 min-w-0 text-sm">
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="flex items-center gap-1.5 px-1.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+        >
+          <Home className="h-3.5 w-3.5" />
+          <span className="font-medium">Dashboard</span>
+        </button>
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors group"
+          className="px-1.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors font-medium truncate"
         >
-          <svg className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
-          <span className="text-lg font-semibold">{backLabel}</span>
+          {backLabel}
         </button>
-        <span className="text-muted-foreground/40 text-lg select-none">&gt;</span>
-        <div className="min-w-0">
-          <span className="text-lg font-semibold text-foreground truncate block">{currentLabel}</span>
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+        <div className="flex items-baseline gap-1.5 min-w-0 px-1.5 py-1">
+          <span className="font-semibold text-foreground truncate" aria-current="page">{currentLabel}</span>
+          {subtitle && (
+            <span className="text-xs font-mono text-muted-foreground/70 shrink-0">
+              {subtitle}
+            </span>
+          )}
         </div>
-        {subtitle && (
-          <span className="text-xs font-mono text-muted-foreground/70 ml-0.5 mt-0.5 shrink-0">
-            {subtitle}
-          </span>
-        )}
-      </div>
+      </nav>
       {children && (
         <div className="flex items-center gap-2.5 shrink-0">{children}</div>
       )}

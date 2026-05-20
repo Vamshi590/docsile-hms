@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { Check, ChevronRight, Loader2, Plus, Printer, Search, X } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,13 +16,12 @@ import {
   createPatient,
   updatePatientInfo,
   createPrescriptionWithBilling,
-  getNextPatientId,
-  getServiceTemplates,
-  getDropdownOptions,
+  getPatientRegistrationFormData,
   addDropdownOption,
 } from "../actions"
-import { getHospitalProfile } from "../../settings/actions"
 import { CashReceipt } from "@/components/receipts/CashReceipt"
+
+type BundledFormData = Awaited<ReturnType<typeof getPatientRegistrationFormData>>
 
 type ServiceItem = {
   id: string
@@ -108,9 +108,16 @@ interface Props {
   patientType: "OPD" | "IPD"
   onSuccess: () => void
   editPatient?: EditPatientData | null
+  /**
+   * If provided (typical for Add Patient — pre-fetched by parent before
+   * opening), the stepper skips its own data fetch and renders immediately
+   * with this data. No internal loader. The button caller is responsible
+   * for showing a loading state until this data is ready.
+   */
+  initialData?: BundledFormData | null
 }
 
-export function PatientRegistrationStepper({ open, onClose, patientType, onSuccess, editPatient }: Props) {
+export function PatientRegistrationStepper({ open, onClose, patientType, onSuccess, editPatient, initialData }: Props) {
   const isEditMode = !!editPatient
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -122,7 +129,7 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
 
   // Receipt data (step 3)
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null)
-  const [hospitalProfile, setHospitalProfile] = useState<Awaited<ReturnType<typeof getHospitalProfile>>>(null)
+  const [hospitalProfile, setHospitalProfile] = useState<BundledFormData["hospitalProfile"]>(null)
   const printRef = useRef<HTMLDivElement>(null)
 
   const [patientData, setPatientData] = useState<PatientFormData>({
@@ -172,6 +179,58 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
   const [amountPaid, setAmountPaid] = useState(0)
   const [paymentNotes, setPaymentNotes] = useState("")
 
+  // ── Registration fee (hospital-wide config; only for new registrations) ──
+  const REGISTRATION_FEE_ID = "__registration_fee__"
+  const regFeeConfig = (() => {
+    const hp = hospitalProfile as (BundledFormData["hospitalProfile"] & {
+      registrationFeeEnabled?: boolean
+      registrationFeeAmount?: number | string | null
+      registrationFeeDefaultChecked?: boolean
+    }) | null
+    return {
+      enabled: !!hp?.registrationFeeEnabled,
+      amount: Number(hp?.registrationFeeAmount ?? 0) || 0,
+      defaultChecked: hp?.registrationFeeDefaultChecked ?? true,
+    }
+  })()
+  const showRegistrationFee = regFeeConfig.enabled && !isEditMode
+  const [regFeeChecked, setRegFeeChecked] = useState(false)
+  const regFeeInitialized = useRef(false)
+
+  // Initialize the toggle from config once, after the hospital profile loads.
+  useEffect(() => {
+    if (regFeeInitialized.current) return
+    if (!hospitalProfile) return
+    if (showRegistrationFee) setRegFeeChecked(regFeeConfig.defaultChecked)
+    regFeeInitialized.current = true
+  }, [hospitalProfile, showRegistrationFee, regFeeConfig.defaultChecked])
+
+  // Keep selectedServices in sync with the toggle + amount.
+  useEffect(() => {
+    if (!showRegistrationFee) {
+      setSelectedServices(prev => prev.filter(s => s.id !== REGISTRATION_FEE_ID))
+      return
+    }
+    if (regFeeChecked) {
+      setSelectedServices(prev => {
+        const without = prev.filter(s => s.id !== REGISTRATION_FEE_ID)
+        return [
+          {
+            id: REGISTRATION_FEE_ID,
+            description: "Registration Fee",
+            category: "Registration",
+            quantity: 1,
+            unitPrice: regFeeConfig.amount,
+            amount: regFeeConfig.amount,
+          },
+          ...without,
+        ]
+      })
+    } else {
+      setSelectedServices(prev => prev.filter(s => s.id !== REGISTRATION_FEE_ID))
+    }
+  }, [regFeeChecked, showRegistrationFee, regFeeConfig.amount])
+
   const subtotal = selectedServices.reduce((s, item) => s + item.amount, 0)
   const total = subtotal - discount
   const balanceDue = total - amountPaid
@@ -181,7 +240,10 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
     if (total >= 0) setAmountPaid(total)
   }, [total])
 
-  // Load data when modal opens
+  // Load data when modal opens — ONE bundled server-action call replaces
+  // 6 separate ones (hospital profile + next id + service templates + 3 dropdowns).
+  // When `initialData` is supplied (parent pre-fetched before opening), skip
+  // the fetch and render immediately — no in-dialog loader flicker.
   useEffect(() => {
     if (!open) return
     setStep(1)
@@ -192,19 +254,24 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
     setPaymentNotes("")
     setSelectedCategory("All")
     setReceiptData(null)
-    getHospitalProfile().then(setHospitalProfile)
+    setRegFeeChecked(false)
+    regFeeInitialized.current = false
 
     async function load() {
-      setLoading(true)
+      let data: BundledFormData
+      if (initialData) {
+        data = initialData
+      } else {
+        setLoading(true)
+        data = await getPatientRegistrationFormData()
+      }
+
+      setHospitalProfile(data.hospitalProfile)
+      setDoctorOptions(data.doctorOptions)
+      setDepartmentOptions(data.departmentOptions)
+      setReferredByOptions(data.referralOptions)
 
       if (isEditMode) {
-        // Edit mode: load dropdown options only (no next ID needed)
-        const [doctors, departments, referrals] = await Promise.all([
-          getDropdownOptions("doctorName"),
-          getDropdownOptions("department"),
-          getDropdownOptions("referredBy"),
-        ])
-
         const fullName = [editPatient.firstName, editPatient.lastName].filter(Boolean).join(" ")
         // Use local date methods to avoid UTC timezone shift (toISOString converts to UTC, which can shift the date back by a day)
         function toLocalDateString(d: Date | string): string {
@@ -232,38 +299,23 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
           appointmentDate: apptDate,
           notes: editPatient.notes ?? "",
         })
-
-        setDoctorOptions(doctors)
-        setDepartmentOptions(departments)
-        setReferredByOptions(referrals)
-        setLoading(false)
       } else {
-        // Register mode
-        const [nextId, templates, doctors, departments, referrals] = await Promise.all([
-          getNextPatientId(patientType),
-          getServiceTemplates(),
-          getDropdownOptions("doctorName"),
-          getDropdownOptions("department"),
-          getDropdownOptions("referredBy"),
-        ])
         const savedDoctorDefault = localStorage.getItem("docsile_default_doctorName") ?? ""
         const savedDeptDefault = localStorage.getItem("docsile_default_department") ?? ""
         const savedRefDefault = localStorage.getItem("docsile_default_referredBy") ?? ""
         setFieldDefaults({ doctorName: savedDoctorDefault, department: savedDeptDefault, referredBy: savedRefDefault })
         setPatientData(prev => ({
           ...prev,
-          patientId: nextId,
+          patientId: data.nextId,
           appointmentDate: todayISO(),
           doctorName: savedDoctorDefault,
           department: savedDeptDefault,
           referredBy: savedRefDefault,
         }))
-        setServiceTemplates(templates)
-        setDoctorOptions(doctors)
-        setDepartmentOptions(departments)
-        setReferredByOptions(referrals)
-        setLoading(false)
+        setServiceTemplates(data.serviceTemplates)
       }
+
+      setLoading(false)
     }
     load()
   }, [open, patientType, isEditMode])
@@ -369,6 +421,10 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
   }
 
   function removeService(id: string) {
+    if (id === REGISTRATION_FEE_ID) {
+      setRegFeeChecked(false)
+      return
+    }
     const template = serviceTemplates.find(t => t.id === id)
     if (template && template.discount > 0) setDiscount(prev => Math.max(0, prev - template.discount))
     setSelectedServices(prev => prev.filter(s => s.id !== id))
@@ -701,6 +757,39 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
               {/* Step 2: Services & Payment */}
               {step === 2 && (
                 <div className="space-y-5">
+                  {/* ── Registration fee (hospital-wide config) ── */}
+                  {showRegistrationFee && (
+                    <label
+                      htmlFor="__reg_fee_toggle"
+                      className={cn(
+                        "flex items-center justify-between gap-4 rounded-xl border p-4 cursor-pointer transition-colors",
+                        regFeeChecked
+                          ? "bg-primary/5 border-primary/30"
+                          : "bg-white border-border hover:bg-muted/30"
+                      )}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Checkbox
+                          id="__reg_fee_toggle"
+                          checked={regFeeChecked}
+                          onCheckedChange={v => setRegFeeChecked(v === true)}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">Registration Fee</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            One-time fee for new patient registration
+                          </p>
+                        </div>
+                      </div>
+                      <span className={cn(
+                        "text-sm font-semibold tabular-nums shrink-0",
+                        regFeeChecked ? "text-primary" : "text-muted-foreground"
+                      )}>
+                        {formatCurrency(regFeeConfig.amount)}
+                      </span>
+                    </label>
+                  )}
+
                   {/* ── Selected services (shown at top as clean list) ── */}
                   {selectedServices.length > 0 && (
                     <div className="rounded-xl border border-border bg-white p-4">

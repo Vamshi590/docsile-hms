@@ -1,16 +1,20 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Stethoscope, Loader2, Printer, Settings2, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
+import { Loader2, Printer, Settings2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { updateUserPreferences } from "@/lib/user-preferences"
 import { BreadcrumbHeader, FilterBar, DateNavigator, SearchInput, StatBadge } from "@/components/layout/header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
-import { PrescriptionForm, type PrescriptionFormHandle } from "./PrescriptionForm"
+import { PrescriptionForm, type PrescriptionFormHandle, type PrescriptionReferenceData } from "./PrescriptionForm"
 import { PrintReceiptsModal } from "./PrintReceiptsModal"
+import { AskSithaAI } from "./AskSithaAI"
 import { EyeReadingForm, type EyeReadingFormHandle } from "../../workup/components/EyeReadingForm"
 import { getDoctorQueue, getPatientForConsultation } from "../actions"
 import { cn, formatDate, formatCurrency, calculateAge, todayISO, toLocalDateISO } from "@/lib/utils"
@@ -24,59 +28,113 @@ const TAB_CLASS =
   "data-[state=active]:border-primary data-[state=active]:text-primary " +
   "data-[state=active]:bg-transparent data-[state=active]:shadow-none"
 
+// All columns the queue table can render. Grouped for the column-customizer
+// popover so the doctor can pick from a comprehensive list of patient + visit
+// + receipt fields. Every field here is already in the queue row payload
+// (no extra queries needed).
 const QUEUE_COLUMNS = [
-  { key: "sno", label: "#", alwaysOn: true },
-  { key: "patientId", label: "Patient ID", alwaysOn: true },
-  { key: "patient", label: "Name", alwaysOn: true },
-  { key: "age", label: "Age / Gender" },
-  { key: "phone", label: "Phone" },
-  { key: "referredBy", label: "Referred By" },
-  { key: "service", label: "Service" },
-  { key: "srReading", label: "SR Reading" },
-  { key: "labAmount", label: "Lab Amount" },
-  { key: "status", label: "Status" },
-  { key: "print", label: "Print", alwaysOn: true },
+  // Patient
+  { key: "sno",              label: "Token #",         group: "Patient", alwaysOn: true },
+  { key: "patientId",        label: "Patient ID",      group: "Patient", alwaysOn: true },
+  { key: "patient",          label: "Name",            group: "Patient", alwaysOn: true },
+  { key: "age",              label: "Age / Gender",    group: "Patient" },
+  { key: "dateOfBirth",      label: "DOB",             group: "Patient" },
+  { key: "phone",            label: "Phone",           group: "Patient" },
+  { key: "email",            label: "Email",           group: "Patient" },
+  { key: "address",          label: "Address",         group: "Patient" },
+  { key: "guardian",         label: "Guardian",        group: "Patient" },
+  { key: "emergencyContact", label: "Emergency",       group: "Patient" },
+  { key: "referredBy",       label: "Referred By",     group: "Patient" },
+  { key: "patientType",      label: "Type",            group: "Patient" },
+  { key: "registeredOn",     label: "Registered On",   group: "Patient" },
+  { key: "appointmentDate",  label: "Appointment",     group: "Patient" },
+
+  // Today's visit / clinical
+  { key: "doctor",           label: "Doctor",          group: "Visit" },
+  { key: "department",       label: "Department",      group: "Visit" },
+  { key: "vitals",           label: "Vitals",          group: "Visit" },
+  { key: "complaint",        label: "Complaint",       group: "Visit" },
+  { key: "diagnosis",        label: "Diagnosis",       group: "Visit" },
+  { key: "followUp",         label: "Follow-up",       group: "Visit" },
+  { key: "prescriptionNo",   label: "Rx Number",       group: "Visit" },
+  { key: "status",           label: "Status",          group: "Visit" },
+
+  // Today's receipt / billing
+  { key: "service",          label: "Services",        group: "Receipt" },
+  { key: "subtotal",         label: "Subtotal",        group: "Receipt" },
+  { key: "discount",         label: "Discount",        group: "Receipt" },
+  { key: "total",            label: "Total",           group: "Receipt" },
+  { key: "paid",             label: "Paid",            group: "Receipt" },
+  { key: "balance",          label: "Balance",         group: "Receipt" },
+  { key: "paymentMode",      label: "Payment Mode",    group: "Receipt" },
+  { key: "paymentDate",      label: "Payment Date",    group: "Receipt" },
+  { key: "labs",             label: "Labs",            group: "Receipt" },
+  { key: "labAmount",        label: "Lab Amount",      group: "Receipt" },
+
+  // Actions
+  { key: "print",            label: "Print",           group: "Actions", alwaysOn: true },
 ] as const
 
 type ColumnKey = (typeof QUEUE_COLUMNS)[number]["key"]
+type ColumnGroup = (typeof QUEUE_COLUMNS)[number]["group"]
 
-const DEFAULT_COLUMNS: ColumnKey[] = ["sno", "patientId", "patient", "age", "phone", "srReading", "status", "print"]
+const COLUMN_BY_KEY = Object.fromEntries(QUEUE_COLUMNS.map(c => [c.key, c])) as Record<ColumnKey, typeof QUEUE_COLUMNS[number]>
 
-export function DoctorPage() {
-  const [date, setDate] = useState(todayISO())
+const DEFAULT_COLUMNS: ColumnKey[] = [
+  "sno", "patientId", "patient", "age", "phone", "doctor", "service", "total", "status", "print",
+]
+
+// Right-aligned numeric columns
+const NUMERIC_COLS = new Set<ColumnKey>(["subtotal", "discount", "total", "paid", "balance", "labAmount"])
+
+export function DoctorPage({
+  initialQueue,
+  initialDate,
+  initialReferenceData,
+  initialColumns,
+}: {
+  initialQueue: QueueItem[]
+  initialDate: string
+  initialReferenceData: PrescriptionReferenceData
+  /** User's saved column preference from DB. null when the user has never customized. */
+  initialColumns: string[] | null
+}) {
+  const [date, setDate] = useState(initialDate)
   const [search, setSearch] = useState("")
-  const [queue, setQueue] = useState<QueueItem[]>([])
+  const [queue, setQueue] = useState<QueueItem[]>(initialQueue)
   const [loading, setLoading] = useState(false)
   const [selectedRow, setSelectedRow] = useState<QueueItem | null>(null)
   const [selectedPatient, setSelectedPatient] = useState<PatientDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [savingAll, setSavingAll] = useState(false)
+  const [referenceData, setReferenceData] = useState<PrescriptionReferenceData>(initialReferenceData)
 
   const [printPatient, setPrintPatient] = useState<{ patientId: string; name: string } | null>(null)
 
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("doctor-queue-columns")
-        if (saved) {
-          const parsed = JSON.parse(saved) as ColumnKey[]
-          // Ensure newly added always-on columns are present
-          const alwaysOn = QUEUE_COLUMNS.filter(c => "alwaysOn" in c && c.alwaysOn).map(c => c.key)
-          const merged = [...parsed]
-          for (const key of alwaysOn) {
-            if (!merged.includes(key)) merged.splice(merged.indexOf("patient") ?? 1, 0, key)
-          }
-          return merged
-        }
-      } catch { /* ignore */ }
+    const validKeys = new Set(QUEUE_COLUMNS.map(c => c.key))
+    // Start from saved prefs (filtered to known keys) or fall back to defaults.
+    const base: ColumnKey[] = initialColumns
+      ? (initialColumns.filter(k => validKeys.has(k as ColumnKey)) as ColumnKey[])
+      : [...DEFAULT_COLUMNS]
+    // Always-on columns must be present even if missing from saved prefs (e.g. user
+    // saved before we added a locked column).
+    const alwaysOn = QUEUE_COLUMNS.filter(c => "alwaysOn" in c && c.alwaysOn).map(c => c.key)
+    const merged = [...base]
+    for (const key of alwaysOn) {
+      if (!merged.includes(key)) merged.push(key)
     }
-    return DEFAULT_COLUMNS
+    return merged
   })
 
   function toggleColumn(key: ColumnKey) {
     setVisibleColumns(prev => {
       const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-      try { localStorage.setItem("doctor-queue-columns", JSON.stringify(next)) } catch { /* ignore */ }
+      // Fire-and-forget save to DB; optimistic UI is fine here. If the network
+      // call fails the next page load just re-reads the previous value.
+      updateUserPreferences({ doctorColumns: next }).catch(() => {
+        toast.error("Could not save column preference")
+      })
       return next
     })
   }
@@ -84,6 +142,13 @@ export function DoctorPage() {
   function isColumnVisible(key: ColumnKey) {
     return visibleColumns.includes(key)
   }
+
+  // Order columns for display: render in QUEUE_COLUMNS-defined order, not the
+  // (mutable) order in `visibleColumns`. This keeps the table layout stable as
+  // users toggle things on/off.
+  const orderedVisibleColumns: ColumnKey[] = QUEUE_COLUMNS
+    .map(c => c.key)
+    .filter(k => visibleColumns.includes(k))
 
   const eyeReadingRef = useRef<EyeReadingFormHandle>(null)
   const prescriptionRef = useRef<PrescriptionFormHandle>(null)
@@ -95,7 +160,14 @@ export function DoctorPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadQueue() }, [date])
+  const skipFirstLoad = useRef(true)
+  useEffect(() => {
+    if (skipFirstLoad.current) {
+      skipFirstLoad.current = false
+      return
+    }
+    loadQueue()
+  }, [date])
 
   async function openPatient(row: QueueItem) {
     setSelectedRow(row)
@@ -144,18 +216,6 @@ export function DoctorPage() {
         p.phone.includes(search)
       )
     : queue
-
-  function getSRSummary(reading: QueueItem["eyeReadings"][0] | undefined) {
-    if (!reading) return null
-    try {
-      const sr = reading.presentPrescription ? JSON.parse(reading.presentPrescription) : null
-      if (!sr) return null
-      return {
-        re: `${sr.re?.sph || "PL"} / ${sr.re?.cyl || "DS"} × ${sr.re?.axis || "0"}`,
-        le: `${sr.le?.sph || "PL"} / ${sr.le?.cyl || "DS"} × ${sr.le?.axis || "0"}`,
-      }
-    } catch { return null }
-  }
 
   return (
     <>
@@ -212,24 +272,44 @@ export function DoctorPage() {
                 <Settings2 className="h-3.5 w-3.5" /> Columns
               </button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-48 p-2">
-              <p className="text-xs font-medium text-muted-foreground px-2 pb-1.5">Toggle columns</p>
-              {QUEUE_COLUMNS.map(col => {
-                const locked = "alwaysOn" in col && col.alwaysOn
-                return (
-                  <label
-                    key={col.key}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer text-sm"
-                  >
-                    <Checkbox
-                      checked={isColumnVisible(col.key)}
-                      onCheckedChange={() => toggleColumn(col.key)}
-                      disabled={!!locked}
-                    />
-                    <span className={locked ? "text-muted-foreground" : ""}>{col.label}</span>
-                  </label>
-                )
-              })}
+            <PopoverContent align="end" className="w-64 p-2 max-h-[70vh] overflow-y-auto">
+              <div className="flex items-center justify-between px-2 pb-1.5">
+                <p className="text-xs font-semibold text-foreground">Configure columns</p>
+                <button
+                  onClick={() => {
+                    setVisibleColumns(DEFAULT_COLUMNS)
+                    updateUserPreferences({ doctorColumns: DEFAULT_COLUMNS }).catch(() => {
+                      toast.error("Could not save column preference")
+                    })
+                  }}
+                  className="text-[10px] font-medium text-primary hover:underline"
+                >
+                  Reset
+                </button>
+              </div>
+              {(["Patient", "Visit", "Receipt", "Actions"] as ColumnGroup[]).map(group => (
+                <div key={group} className="pt-2 first:pt-0">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 pb-1">
+                    {group}
+                  </p>
+                  {QUEUE_COLUMNS.filter(c => c.group === group).map(col => {
+                    const locked = "alwaysOn" in col && col.alwaysOn
+                    return (
+                      <label
+                        key={col.key}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer text-sm"
+                      >
+                        <Checkbox
+                          checked={isColumnVisible(col.key)}
+                          onCheckedChange={() => toggleColumn(col.key)}
+                          disabled={!!locked}
+                        />
+                        <span className={locked ? "text-muted-foreground" : ""}>{col.label}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              ))}
             </PopoverContent>
           </Popover>
         </FilterBar>
@@ -258,11 +338,21 @@ export function DoctorPage() {
               // eyeReadings are already filtered to today by getPatientForConsultation
               const todayEyeReading = selectedPatient.eyeReadings?.[0] ?? null
 
+              // Smart default: if the optometrist has already filled any of the
+              // workup readings, drop the doctor straight into the prescription.
+              // Otherwise start them on the workup tab so they can fill what's missing.
+              const workupStarted = !!(
+                todayEyeReading?.autoRefractometer ||
+                todayEyeReading?.glassesReading ||
+                todayEyeReading?.previousPrescription
+              )
+              const defaultTab: "workup" | "prescription" = workupStarted ? "prescription" : "workup"
+
               return (
             <div className="flex gap-4">
               {/* ── Left: Prescription Form Card ── */}
               <div className="flex-1 min-w-0 bg-white rounded-2xl border border-border overflow-hidden">
-                <Tabs defaultValue="workup">
+                <Tabs defaultValue={defaultTab}>
                   {/* Tab header */}
                   <div className="px-6 pt-4 pb-0 border-b border-border flex justify-between items-center">
                     <TabsList className="bg-transparent h-auto p-0 rounded-none gap-1 -mb-px">
@@ -316,37 +406,44 @@ export function DoctorPage() {
                       patientId={selectedPatient.patientId}
                       patientName={`${selectedPatient.firstName} ${selectedPatient.lastName ?? ""}`.trim()}
                       existingPrescription={existingForForm}
+                      referenceData={referenceData}
+                      onReferenceDataChange={setReferenceData}
                       onSaved={() => { closeDetail(); loadQueue() }}
                     />
                   </TabsContent>
                 </Tabs>
               </div>
 
-              {/* ── Right: History Card (fixed) ── */}
-              <div className="w-80 shrink-0 sticky top-4 self-start bg-white rounded-2xl border border-border overflow-hidden max-h-[calc(100vh-12rem)]">
-                <div className="px-4 pt-4 pb-2 border-b border-border">
-                  <h3 className="text-sm font-semibold text-foreground">History</h3>
-                </div>
-                <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(100vh-16rem)]">
-                  {/* AR Reading from today's workup */}
-                  {todayEyeReading?.autoRefractometer && (
-                    <ARReadingSummary arJson={todayEyeReading.autoRefractometer} />
-                  )}
+              {/* ── Right: History + Ask Sitha AI ── */}
+              <div className="w-80 shrink-0 sticky top-4 self-start space-y-3 max-h-[calc(100vh-6rem)] overflow-y-auto pr-0.5">
+                {/* History card */}
+                <div className="bg-white rounded-2xl border border-border overflow-hidden">
+                  <div className="px-4 pt-4 pb-2 border-b border-border">
+                    <h3 className="text-sm font-semibold text-foreground">History</h3>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    {todayEyeReading?.autoRefractometer && (
+                      <ARReadingSummary arJson={todayEyeReading.autoRefractometer} />
+                    )}
 
-                  {pastPrescriptions.length > 0 ? (
-                    <div className="space-y-3">
-                      {pastPrescriptions.map((rx: any) => (
-                        <PrescriptionHistoryCard key={rx.id} prescription={rx} />
-                      ))}
-                    </div>
-                  ) : (
-                    !todayEyeReading?.autoRefractometer && (
-                      <div className="text-center py-16 text-muted-foreground text-sm">
-                        <p>No previous prescription history</p>
+                    {pastPrescriptions.length > 0 ? (
+                      <div className="space-y-3">
+                        {pastPrescriptions.map((rx: any) => (
+                          <PrescriptionHistoryCard key={rx.id} prescription={rx} />
+                        ))}
                       </div>
-                    )
-                  )}
+                    ) : (
+                      !todayEyeReading?.autoRefractometer && (
+                        <div className="text-center py-12 text-muted-foreground text-sm">
+                          <p>No previous prescription history</p>
+                        </div>
+                      )
+                    )}
+                  </div>
                 </div>
+
+                {/* Ask Sitha AI */}
+                <AskSithaAI patientId={selectedPatient.patientId} />
               </div>
             </div>
               )
@@ -357,72 +454,95 @@ export function DoctorPage() {
         /* ── Queue table ── */
         loading ? (
           <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
-                  {isColumnVisible("sno") && <TableHead className="w-12 text-center">Token</TableHead>}
-                  {isColumnVisible("patientId") && <TableHead>Patient ID</TableHead>}
-                  {isColumnVisible("patient") && <TableHead>Name</TableHead>}
-                  {isColumnVisible("age") && <TableHead>Age / Gender</TableHead>}
-                  {isColumnVisible("phone") && <TableHead>Phone</TableHead>}
-                  {isColumnVisible("status") && <TableHead>Status</TableHead>}
-                  {isColumnVisible("print") && <TableHead className="w-10"></TableHead>}
+                  {orderedVisibleColumns.map(k => (
+                    <TableHead
+                      key={k}
+                      className={cn(
+                        k === "sno" && "w-12 text-center",
+                        k === "print" && "w-10",
+                        NUMERIC_COLS.has(k) && "text-right",
+                      )}
+                    >
+                      {k === "print" ? "" : COLUMN_BY_KEY[k].label}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i} className="hover:bg-transparent">
-                    {isColumnVisible("sno") && <TableCell className="text-center"><Skeleton className="h-6 w-7 rounded mx-auto" /></TableCell>}
-                    {isColumnVisible("patientId") && <TableCell><Skeleton className="h-5 w-16 rounded" /></TableCell>}
-                    {isColumnVisible("patient") && <TableCell><Skeleton className="h-4 w-28" /></TableCell>}
-                    {isColumnVisible("age") && <TableCell><Skeleton className="h-4 w-16" /></TableCell>}
-                    {isColumnVisible("phone") && <TableCell><Skeleton className="h-4 w-24" /></TableCell>}
-                    {isColumnVisible("status") && <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>}
-                    {isColumnVisible("print") && <TableCell><Skeleton className="h-6 w-6 rounded" /></TableCell>}
+                    {orderedVisibleColumns.map(k => (
+                      <TableCell key={k} className={cn(k === "sno" && "text-center", NUMERIC_COLS.has(k) && "text-right")}>
+                        <Skeleton className={cn(
+                          "rounded",
+                          k === "sno" && "h-6 w-7 mx-auto",
+                          k === "print" && "h-6 w-6",
+                          k !== "sno" && k !== "print" && "h-4 w-24",
+                        )} />
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-xl border border-border/60 bg-white py-20 text-center shadow-sm">
-            <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-muted/60 mb-4">
-              <Stethoscope className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <p className="font-semibold text-foreground">No patients in queue</p>
-            <p className="text-sm text-muted-foreground mt-1.5">
-              Patients with Workup Done status appear here
+          <div className="rounded-xl border border-border/60 bg-white py-14 px-6 text-center shadow-sm">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/illustrations/no-doctor-queue.svg"
+              alt=""
+              className="mx-auto mb-6 h-44 w-auto select-none"
+              draggable={false}
+            />
+            <p className="text-base font-semibold text-foreground">All caught up</p>
+            <p className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
+              No patients are waiting for the doctor right now. They show up here automatically once refraction is complete.
             </p>
           </div>
         ) : (
+          <TooltipProvider delayDuration={150}>
           <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
-                  {isColumnVisible("sno") && <TableHead className="w-12 text-center">Token</TableHead>}
-                  {isColumnVisible("patientId") && <TableHead>Patient ID</TableHead>}
-                  {isColumnVisible("patient") && <TableHead>Name</TableHead>}
-                  {isColumnVisible("age") && <TableHead>Age / Gender</TableHead>}
-                  {isColumnVisible("phone") && <TableHead>Phone</TableHead>}
-                  {isColumnVisible("referredBy") && <TableHead>Referred By</TableHead>}
-                  {isColumnVisible("service") && <TableHead className="w-40">Service</TableHead>}
-                  {isColumnVisible("srReading") && <TableHead>SR Reading</TableHead>}
-                  {isColumnVisible("labAmount") && <TableHead className="text-right">Lab Amount</TableHead>}
-                  {isColumnVisible("status") && <TableHead>Status</TableHead>}
-                  {isColumnVisible("print") && <TableHead className="w-10"></TableHead>}
+                  {orderedVisibleColumns.map(k => (
+                    <TableHead
+                      key={k}
+                      className={cn(
+                        "whitespace-nowrap",
+                        k === "sno" && "w-12 text-center",
+                        k === "print" && "w-10",
+                        k === "service" && "w-44",
+                        NUMERIC_COLS.has(k) && "text-right",
+                      )}
+                    >
+                      {k === "print" ? "" : COLUMN_BY_KEY[k].label}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((patient, i) => {
                   const age = patient.age ?? calculateAge(patient.dateOfBirth)
                   const fullName = `${patient.firstName} ${patient.lastName ?? ""}`.trim()
-                  const hasReading = patient.eyeReadings?.[0]
-                  const hasPrescription = patient.prescriptions?.[0]
-                  const srSummary = getSRSummary(hasReading)
+                  const rx = patient.prescriptions?.[0]
                   const genderShort = patient.gender === "MALE" ? "M" : patient.gender === "FEMALE" ? "F" : "O"
-                  const serviceNames = hasPrescription?.items?.map((it: { description: string }) => it.description) ?? []
+                  const serviceNames = rx?.items?.map((it: { description: string }) => it.description) ?? []
                   const labBills = patient.labBills ?? []
                   const labTotal = labBills.reduce((sum: number, lb: { total: number }) => sum + lb.total, 0)
+                  const guardian = [patient.guardianName, patient.guardianRelation && `(${patient.guardianRelation})`].filter(Boolean).join(" ")
+                  const vitals = rx ? [
+                    rx.temperature && `${rx.temperature}°F`,
+                    rx.pulseRate && `${rx.pulseRate}bpm`,
+                    rx.spo2 && `${rx.spo2}%`,
+                  ].filter(Boolean).join(" · ") : ""
 
                   const statusConfig: Record<string, { label: string; bg: string; text: string; dot: string }> = {
                     REGISTERED:   { label: "Optometrist",  bg: "bg-red-50",    text: "text-red-700",    dot: "bg-red-500" },
@@ -435,110 +555,162 @@ export function DoctorPage() {
                   }
                   const sc = statusConfig[patient.status] ?? { label: patient.status, bg: "bg-slate-50", text: "text-slate-600", dot: "bg-slate-400" }
 
-                  return (
-                    <TableRow
-                      key={patient.id}
-                      onClick={() => openPatient(patient)}
-                      className="cursor-pointer group hover:bg-primary/[0.02] transition-colors"
-                    >
-                      {isColumnVisible("sno") && (
-                        <TableCell className="text-center">
+                  const dash = <span className="text-muted-foreground/50">—</span>
+                  const text = (v: string | null | undefined, mono = false) =>
+                    v ? <span className={cn("text-sm text-foreground", mono && "tabular-nums")}>{v}</span> : dash
+                  const num = (v: number | null | undefined) =>
+                    typeof v === "number" && v !== 0
+                      ? <span className="text-sm font-medium tabular-nums text-foreground">{formatCurrency(v)}</span>
+                      : dash
+
+                  function renderCell(k: ColumnKey) {
+                    switch (k) {
+                      case "sno":
+                        return (
                           <span className="inline-flex items-center justify-center h-6 min-w-7 rounded bg-primary/10 border border-primary/20 border-dashed text-xs font-bold text-primary tabular-nums px-1.5">
                             {i + 1}
                           </span>
-                        </TableCell>
-                      )}
-                      {isColumnVisible("patientId") && (
-                        <TableCell>
+                        )
+                      case "patientId":
+                        return (
                           <span className="font-mono text-xs font-semibold text-foreground bg-muted/60 px-2 py-0.5 rounded">
                             {patient.patientId}
                           </span>
-                        </TableCell>
-                      )}
-                      {isColumnVisible("patient") && (
-                        <TableCell>
-                          <span className="font-semibold text-sm text-foreground">{fullName}</span>
-                        </TableCell>
-                      )}
-                      {isColumnVisible("age") && (
-                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                          {age ? `${age}y` : "—"} / {genderShort}
-                        </TableCell>
-                      )}
-                      {isColumnVisible("phone") && (
-                        <TableCell className="text-sm text-muted-foreground tabular-nums">
-                          {patient.phone || <span className="text-muted-foreground/50">—</span>}
-                        </TableCell>
-                      )}
-                      {isColumnVisible("referredBy") && (
-                        <TableCell className="text-sm text-muted-foreground">
-                          {patient.referredBy || <span className="text-muted-foreground/50">—</span>}
-                        </TableCell>
-                      )}
-                      {isColumnVisible("service") && (
-                        <TableCell>
-                          {serviceNames.length > 0 ? (
-                            <div className="flex items-center gap-1 max-w-40 overflow-hidden">
-                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200/60 truncate shrink-0">
-                                {serviceNames[0]}
-                              </span>
-                              {serviceNames.length > 1 && (
-                                <span className="text-[10px] font-semibold text-muted-foreground shrink-0" title={serviceNames.slice(1).join(", ")}>
-                                  +{serviceNames.length - 1}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground/50">—</span>
-                          )}
-                        </TableCell>
-                      )}
-                      {isColumnVisible("srReading") && (
-                        <TableCell>
-                          {srSummary ? (
-                            <div className="text-xs font-mono space-y-0.5">
-                              <p><span className="font-semibold text-violet-600 w-5 inline-block">RE</span> <span className="text-foreground tabular-nums">{srSummary.re}</span></p>
-                              <p><span className="font-semibold text-violet-600 w-5 inline-block">LE</span> <span className="text-foreground tabular-nums">{srSummary.le}</span></p>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground/50 italic">No reading</span>
-                          )}
-                        </TableCell>
-                      )}
-                      {isColumnVisible("labAmount") && (
-                        <TableCell className="text-right">
-                          {labBills.length > 0 ? (
-                            <div className="space-y-0.5">
-                              {labBills.map((lb: { id: string; lab: { name: string }; total: number }) => (
-                                <p key={lb.id} className="text-xs">
-                                  <span className="text-muted-foreground">{lb.lab.name}: </span>
-                                  <span className="font-medium tabular-nums">{formatCurrency(lb.total)}</span>
-                                </p>
-                              ))}
-                              {labBills.length > 1 && (
-                                <p className="text-xs font-semibold border-t border-border/40 pt-0.5 tabular-nums">
-                                  {formatCurrency(labTotal)}
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground/50">—</span>
-                          )}
-                        </TableCell>
-                      )}
-                      {isColumnVisible("status") && (
-                        <TableCell>
+                        )
+                      case "patient":
+                        return <span className="font-semibold text-sm text-foreground whitespace-nowrap">{fullName}</span>
+                      case "age":
+                        return age ? (
+                          <span className="inline-flex items-baseline gap-1 text-sm text-foreground whitespace-nowrap">
+                            <span className="font-medium tabular-nums">{age}</span>
+                            <span className="font-normal">y</span>
+                            <span className="text-foreground/30 mx-0.5">·</span>
+                            <span className="font-medium">{genderShort}</span>
+                          </span>
+                        ) : dash
+                      case "dateOfBirth":
+                        return patient.dateOfBirth ? text(formatDate(patient.dateOfBirth), true) : dash
+                      case "phone":
+                        return text(patient.phone, true)
+                      case "email":
+                        return text(patient.email)
+                      case "address":
+                        return patient.address ? <span className="text-xs text-foreground max-w-[220px] truncate inline-block align-middle" title={patient.address}>{patient.address}</span> : dash
+                      case "guardian":
+                        return text(guardian)
+                      case "emergencyContact":
+                        return text(patient.emergencyContact, true)
+                      case "referredBy":
+                        return text(patient.referredBy)
+                      case "patientType":
+                        return (
                           <span className={cn(
-                            "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full",
+                            "text-[11px] font-semibold px-2 py-0.5 rounded-full",
+                            patient.patientType === "IP" ? "bg-purple-50 text-purple-700" : "bg-sky-50 text-sky-700",
+                          )}>
+                            {patient.patientType}
+                          </span>
+                        )
+                      case "registeredOn":
+                        return text(formatDate(patient.createdAt), true)
+                      case "appointmentDate":
+                        return patient.appointmentDate ? text(formatDate(patient.appointmentDate), true) : dash
+                      case "doctor":
+                        return text(rx?.doctorName ?? null)
+                      case "department":
+                        return text(rx?.department ?? null)
+                      case "vitals":
+                        return text(vitals || null, true)
+                      case "complaint":
+                        return rx?.presentComplaint
+                          ? <span className="text-xs text-foreground max-w-[200px] truncate inline-block align-middle" title={rx.presentComplaint}>{rx.presentComplaint}</span>
+                          : dash
+                      case "diagnosis":
+                        return rx?.diagnosis
+                          ? <span className="text-xs font-medium text-foreground max-w-[200px] truncate inline-block align-middle" title={rx.diagnosis}>{rx.diagnosis}</span>
+                          : dash
+                      case "followUp":
+                        return rx?.followUpDate ? text(formatDate(rx.followUpDate), true) : dash
+                      case "prescriptionNo":
+                        return rx?.prescriptionNumber
+                          ? <span className="font-mono text-xs text-foreground">{rx.prescriptionNumber}</span>
+                          : dash
+                      case "service":
+                        return serviceNames.length === 0 ? dash : (
+                          <Tooltip delayDuration={150}>
+                            <TooltipTrigger asChild>
+                              <div className="inline-flex items-center gap-1 max-w-[200px] cursor-default">
+                                <span className="inline-flex items-center h-6 px-2 rounded-md bg-muted/70 border border-border/40 text-[12px] font-medium text-foreground truncate">
+                                  {serviceNames[0]}
+                                </span>
+                                {serviceNames.length > 1 && (
+                                  <span className="inline-flex items-center justify-center h-6 px-1.5 rounded-md bg-muted/70 border border-border/40 text-[11px] font-semibold text-muted-foreground tabular-nums shrink-0">
+                                    +{serviceNames.length - 1}
+                                  </span>
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" align="start" className="max-w-xs px-3 py-2">
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                                Services ({serviceNames.length})
+                              </p>
+                              <ul className="space-y-1 text-xs">
+                                {serviceNames.map((name: string, idx: number) => (
+                                  <li key={idx} className="flex items-start gap-1.5">
+                                    <span className="text-muted-foreground/60 mt-0.5">•</span>
+                                    <span className="text-foreground">{name}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
+                        )
+                      case "subtotal":  return num(rx?.subtotal)
+                      case "discount":  return num(rx?.discount)
+                      case "total":     return num(rx?.total)
+                      case "paid":      return num(rx?.amountPaid)
+                      case "balance":
+                        return typeof rx?.balanceDue === "number" && rx.balanceDue > 0
+                          ? <span className="text-sm font-semibold tabular-nums text-red-700">{formatCurrency(rx.balanceDue)}</span>
+                          : (typeof rx?.balanceDue === "number" ? <span className="text-sm tabular-nums text-muted-foreground">{formatCurrency(0)}</span> : dash)
+                      case "paymentMode":
+                        return text(rx?.paymentMode ?? null)
+                      case "paymentDate":
+                        return rx?.paymentDate ? text(formatDate(rx.paymentDate), true) : dash
+                      case "labs":
+                        return labBills.length === 0 ? dash : (
+                          <span className="text-xs text-foreground">
+                            {labBills.map((lb: { lab: { name: string } }) => lb.lab.name).join(", ")}
+                          </span>
+                        )
+                      case "labAmount":
+                        return labBills.length > 0 ? (
+                          <div className="space-y-0.5">
+                            {labBills.map((lb: { id: string; lab: { name: string }; total: number }) => (
+                              <p key={lb.id} className="text-xs">
+                                <span className="text-muted-foreground">{lb.lab.name}: </span>
+                                <span className="font-medium tabular-nums">{formatCurrency(lb.total)}</span>
+                              </p>
+                            ))}
+                            {labBills.length > 1 && (
+                              <p className="text-xs font-semibold border-t border-border/40 pt-0.5 tabular-nums">
+                                {formatCurrency(labTotal)}
+                              </p>
+                            )}
+                          </div>
+                        ) : <span className="text-xs text-muted-foreground/50">—</span>
+                      case "status":
+                        return (
+                          <span className={cn(
+                            "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap",
                             sc.bg, sc.text,
                           )}>
                             <span className={cn("h-1.5 w-1.5 rounded-full", sc.dot)} />
                             {sc.label}
                           </span>
-                        </TableCell>
-                      )}
-                      {isColumnVisible("print") && (
-                        <TableCell>
+                        )
+                      case "print":
+                        return (
                           <Button
                             size="icon-sm"
                             variant="ghost"
@@ -550,19 +722,41 @@ export function DoctorPage() {
                           >
                             <Printer className="h-4 w-4" />
                           </Button>
+                        )
+                    }
+                  }
+
+                  return (
+                    <TableRow
+                      key={patient.id}
+                      onClick={() => openPatient(patient)}
+                      className="cursor-pointer group hover:bg-primary/[0.02] transition-colors"
+                    >
+                      {orderedVisibleColumns.map(k => (
+                        <TableCell
+                          key={k}
+                          className={cn(
+                            k === "sno" && "text-center",
+                            NUMERIC_COLS.has(k) && "text-right",
+                            (k === "phone" || k === "emergencyContact" || k === "dateOfBirth" || k === "registeredOn" || k === "appointmentDate" || k === "paymentDate" || k === "followUp") && "whitespace-nowrap",
+                          )}
+                        >
+                          {renderCell(k)}
                         </TableCell>
-                      )}
+                      ))}
                     </TableRow>
                   )
                 })}
               </TableBody>
             </Table>
+            </div>
             <div className="px-4 py-2.5 border-t border-border/40 bg-muted/20">
               <span className="text-xs text-muted-foreground">
                 {filtered.length} patient{filtered.length !== 1 ? "s" : ""} in queue
               </span>
             </div>
           </div>
+          </TooltipProvider>
         )
       )}
 

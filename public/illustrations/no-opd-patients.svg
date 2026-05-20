@@ -1,0 +1,38 @@
+<svg viewBox="0 0 400 280" xmlns="http://www.w3.org/2000/svg" fill="none" role="img" aria-label="No out-patients">
+  <!-- Soft floor shadow -->
+  <ellipse cx="200" cy="252" rx="140" ry="10" fill="#dbeafe"/>
+
+  <!-- Decorative sparkles -->
+  <circle cx="70" cy="70" r="3" fill="#bfdbfe"/>
+  <circle cx="335" cy="90" r="4" fill="#bfdbfe"/>
+  <circle cx="60" cy="190" r="2" fill="#bfdbfe"/>
+  <circle cx="345" cy="200" r="3" fill="#bfdbfe"/>
+  <circle cx="100" cy="40" r="2" fill="#93c5fd"/>
+  <circle cx="310" cy="55" r="2" fill="#93c5fd"/>
+
+  <!-- Clipboard (slightly tilted) -->
+  <g transform="rotate(-4 200 145)">
+    <!-- Back board -->
+    <rect x="130" y="55" width="140" height="180" rx="10" fill="#3b82f6"/>
+    <!-- Paper -->
+    <rect x="142" y="73" width="116" height="155" rx="4" fill="#ffffff"/>
+    <!-- Top clip -->
+    <rect x="178" y="45" width="44" height="22" rx="4" fill="#1d4ed8"/>
+    <rect x="186" y="40" width="28" height="7" rx="2" fill="#1e3a8a"/>
+
+    <!-- Header line on paper -->
+    <rect x="155" y="92" width="58" height="6" rx="2" fill="#1e293b"/>
+    <rect x="155" y="105" width="38" height="4" rx="2" fill="#94a3b8"/>
+
+    <!-- Faded "empty" entries -->
+    <rect x="155" y="128" width="90" height="3" rx="1.5" fill="#e2e8f0"/>
+    <rect x="155" y="140" width="68" height="3" rx="1.5" fill="#e2e8f0"/>
+    <rect x="155" y="152" width="85" height="3" rx="1.5" fill="#e2e8f0"/>
+    <rect x="155" y="164" width="56" height="3" rx="1.5" fill="#e2e8f0"/>
+    <rect x="155" y="176" width="74" height="3" rx="1.5" fill="#e2e8f0"/>
+
+    <!-- Plus button suggesting "add" -->
+    <circle cx="200" cy="206" r="14" fill="#dbeafe"/>
+    <path d="M200 199v14M193 206h14" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+</svg>

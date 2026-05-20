@@ -1,0 +1,38 @@
+<svg viewBox="0 0 400 280" xmlns="http://www.w3.org/2000/svg" fill="none" role="img" aria-label="No patients in doctor queue">
+  <!-- Soft floor shadow -->
+  <ellipse cx="200" cy="254" rx="135" ry="9" fill="#dbeafe"/>
+
+  <!-- Decorative sparkles -->
+  <circle cx="55" cy="55" r="3" fill="#bfdbfe"/>
+  <circle cx="350" cy="75" r="4" fill="#bfdbfe"/>
+  <circle cx="60" cy="200" r="2" fill="#bfdbfe"/>
+  <circle cx="350" cy="215" r="2.5" fill="#bfdbfe"/>
+  <circle cx="95" cy="30" r="2" fill="#93c5fd"/>
+  <circle cx="310" cy="42" r="2.5" fill="#93c5fd"/>
+  <g stroke="#93c5fd" stroke-width="2" stroke-linecap="round">
+    <path d="M40 135 L40 143 M36 139 L44 139"/>
+    <path d="M370 155 L370 163 M366 159 L374 159"/>
+  </g>
+
+  <!-- Stethoscope: Y-fork -->
+  <circle cx="150" cy="60" r="8" fill="#1e3a8a"/>
+  <circle cx="250" cy="60" r="8" fill="#1e3a8a"/>
+  <path d="M150 68 Q158 100 200 124" stroke="#1d4ed8" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <path d="M250 68 Q242 100 200 124" stroke="#1d4ed8" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <circle cx="200" cy="127" r="7" fill="#1e3a8a"/>
+
+  <!-- Tubing curving to chest piece -->
+  <path d="M200 134 Q210 195 282 205" stroke="#1d4ed8" stroke-width="6" stroke-linecap="round" fill="none"/>
+
+  <!-- Chest piece (bell) -->
+  <circle cx="290" cy="200" r="26" fill="#3b82f6"/>
+  <circle cx="290" cy="200" r="17" fill="#dbeafe"/>
+  <circle cx="290" cy="200" r="7" fill="#1e3a8a"/>
+  <!-- Bell highlight -->
+  <path d="M278 188 Q282 184 290 184" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.85"/>
+
+  <!-- Green check badge -->
+  <circle cx="118" cy="195" r="26" fill="#34c759"/>
+  <circle cx="118" cy="195" r="26" fill="none" stroke="#16a34a" stroke-width="1" opacity="0.4"/>
+  <path d="M105 196 L115 206 L132 184" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

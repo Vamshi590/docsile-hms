@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -33,12 +33,22 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Discharged", value: "DISCHARGED" },
 ]
 
-export default function InPatientsPage() {
-  const [patients, setPatients] = useState<InPatient[]>([])
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState("")
+export default function InPatientsPage({
+  initialPatients,
+  initialStats,
+  initialSearch,
+  initialStatusFilter,
+}: {
+  initialPatients: InPatient[]
+  initialStats: Stats | null
+  initialSearch: string
+  initialStatusFilter: string
+}) {
+  const [patients, setPatients] = useState<InPatient[]>(initialPatients)
+  const [stats, setStats] = useState<Stats | null>(initialStats)
+  const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState(initialSearch)
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [admitOpen, setAdmitOpen] = useState(false)
 
@@ -54,7 +64,12 @@ export default function InPatientsPage() {
     setLoading(false)
   }, [search, statusFilter])
 
+  const skipFirstLoad = useRef(true)
   useEffect(() => {
+    if (skipFirstLoad.current) {
+      skipFirstLoad.current = false
+      return
+    }
     fetchData()
   }, [fetchData])
 

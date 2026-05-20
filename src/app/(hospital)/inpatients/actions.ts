@@ -22,7 +22,7 @@ const InPatientSchema = z.object({
   referredBy: z.string().optional(),
   department: z.string().optional(),
   doctorNames: z.array(z.string()),
-  onDutyDoctor: z.string().optional(),
+  onDutyDoctors: z.array(z.string()).default([]),
   operationName: z.string().optional(),
   operationDate: z.string().optional(),
   dischargeDate: z.string().optional(),
@@ -53,7 +53,7 @@ const InPatientSchema = z.object({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async function getNextIPNumber(): Promise<string> {
+async function getNextIpNumber(): Promise<string> {
   const supabase = await createClient()
   const { data: last } = await supabase
     .from("InPatient")
@@ -69,7 +69,7 @@ async function getNextIPNumber(): Promise<string> {
 }
 
 export async function getNextInPatientId(): Promise<string> {
-  return getNextIPNumber()
+  return getNextIpNumber()
 }
 
 // ─── Server Actions ───────────────────────────────────────────────────────────
@@ -145,6 +145,54 @@ export async function getInPatients(filters: {
   return { data: inpatients ?? [], stats }
 }
 
+/**
+ * Bundled fetch for the IPD admission wizard. Replaces 5+ separate calls
+ * (hospital profile + next IP number + dropdown options + predefined surgeries +
+ * predefined packages) with a single server-action round-trip.
+ *
+ * Mirrors `getPatientRegistrationFormData` (OPD).
+ */
+export async function getInPatientAdmissionFormData() {
+  await requireAuth()
+  const supabase = await createClient()
+
+  // Dynamic imports to avoid hard cross-module deps at the top of the file.
+  const { getHospitalProfile: getCachedHospitalProfile } = await import("@/lib/db")
+  const { getPredefinedSurgeries } = await import("../settings/actions")
+  const { getPredefinedPackages }  = await import("../settings/actions")
+
+  const [hospitalCached, nextIpNumber, dropdownRes, surgeries, packages] = await Promise.all([
+    getCachedHospitalProfile(),
+    getNextIpNumber(),
+    supabase
+      .from("DropdownOption")
+      .select("fieldName, value")
+      .in("fieldName", ["doctorName", "department", "referredBy"])
+      .order("value", { ascending: true }),
+    getPredefinedSurgeries(false),
+    getPredefinedPackages(false),
+  ])
+
+  const grouped: { doctorName: string[]; department: string[]; referredBy: string[] } = {
+    doctorName: [], department: [], referredBy: [],
+  }
+  for (const row of dropdownRes.data ?? []) {
+    if (row.fieldName === "doctorName") grouped.doctorName.push(row.value)
+    else if (row.fieldName === "department") grouped.department.push(row.value)
+    else if (row.fieldName === "referredBy") grouped.referredBy.push(row.value)
+  }
+
+  return {
+    hospitalProfile: hospitalCached.hospital,
+    nextIpNumber,
+    doctorOptions: grouped.doctorName,
+    departmentOptions: grouped.department,
+    referralOptions: grouped.referredBy,
+    predefinedSurgeries: surgeries,
+    predefinedPackages: packages,
+  }
+}
+
 export async function getInPatientById(id: string) {
   const supabase = await createClient()
   const { data } = await supabase
@@ -165,7 +213,7 @@ export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
   const pd = validated.data
   try {
     const supabase = await createClient()
-    const ipNumber = await getNextIPNumber()
+    const ipNumber = await getNextIpNumber()
     const netAmount = pd.packageAmount - pd.discount
     const totalReceived = pd.paymentRecords?.reduce((s, r) => s + r.amount, 0) ?? 0
     const balanceAmount = netAmount - totalReceived
@@ -201,7 +249,7 @@ export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
         referredBy: pd.referredBy ?? null,
         department: pd.department ?? null,
         doctorNames: JSON.stringify(pd.doctorNames),
-        onDutyDoctor: pd.onDutyDoctor ?? null,
+        onDutyDoctors: JSON.stringify(pd.onDutyDoctors ?? []),
         operationName: pd.operationName ?? null,
         operationDate: pd.operationDate ? parseDate(pd.operationDate) : null,
         operationProcedure: pd.operationProcedure ?? null,
@@ -459,7 +507,7 @@ export async function updateInPatientDetails(id: string, data: {
   medicalValues?: MedicalValues
   prescriptions?: Array<{ medicine: string; days: string; timing: string; note?: string }>
   followUpDate?: string
-  onDutyDoctor?: string
+  onDutyDoctors?: string[]
   doctorNames?: string[]
 }) {
   const user = await requireAuth()
@@ -478,7 +526,7 @@ export async function updateInPatientDetails(id: string, data: {
     if (data.medicalValues !== undefined) updateData.medicalValues = JSON.stringify(data.medicalValues)
     if (data.prescriptions !== undefined) updateData.prescriptions = JSON.stringify(data.prescriptions)
     if (data.followUpDate !== undefined) updateData.followUpDate = new Date(data.followUpDate + "T00:00:00").toISOString()
-    if (data.onDutyDoctor !== undefined) updateData.onDutyDoctor = data.onDutyDoctor
+    if (data.onDutyDoctors !== undefined) updateData.onDutyDoctors = JSON.stringify(data.onDutyDoctors)
     if (data.doctorNames !== undefined) updateData.doctorNames = JSON.stringify(data.doctorNames)
 
     const { error } = await supabase
@@ -584,7 +632,7 @@ export async function updateInPatient(id: string, data: z.infer<typeof InPatient
         referredBy: pd.referredBy ?? null,
         department: pd.department ?? null,
         doctorNames: JSON.stringify(pd.doctorNames),
-        onDutyDoctor: pd.onDutyDoctor ?? null,
+        onDutyDoctors: JSON.stringify(pd.onDutyDoctors ?? []),
         operationName: pd.operationName ?? null,
         operationDate: pd.operationDate ? parseDate(pd.operationDate) : null,
         operationProcedure: pd.operationProcedure ?? null,

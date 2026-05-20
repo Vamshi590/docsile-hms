@@ -172,9 +172,14 @@ export async function getCallLogs(filters: {
   await requireAuth()
   const supabase = await createClient()
 
+  // Narrow select: drop `rawResponse` (the full Exotel webhook payload, can be
+  // multi-KB per row). Nothing in the UI reads it; only the webhook + sync
+  // actions ever write it. Detail sheet reads only the fields below.
   let query = supabase
     .from("CallLog")
-    .select("*")
+    .select(
+      "id, exotelCallSid, callFrom, callTo, direction, status, startTime, endTime, duration, recordingUrl, callerName, patientId, notes, createdAt, updatedAt"
+    )
     .gte("startTime", new Date(filters.startDate).toISOString())
     .lte("startTime", new Date(filters.endDate + "T23:59:59").toISOString())
     .order("startTime", { ascending: false })
@@ -195,7 +200,10 @@ export async function getCallLogs(filters: {
 
   const { data, error } = await query
   if (error) throw error
-  return data
+  // We deliberately omitted `rawResponse` from the SELECT (large JSON, unused
+  // by the UI). Stamp a null on each row so the shape still matches the full
+  // CallLog row type that consumers rely on.
+  return (data ?? []).map(c => ({ ...c, rawResponse: null as null }))
 }
 
 // ─── Get Call Stats ──────────────────────────────────────────────────────────

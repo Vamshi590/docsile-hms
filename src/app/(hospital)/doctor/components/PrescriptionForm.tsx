@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, forwardRef, useImperativeHandle } from "react"
+import { useState, forwardRef, useImperativeHandle } from "react"
 import { toast } from "sonner"
 import { Plus, X, Loader2, Search, ClipboardList } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -10,11 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EditableCombobox, EditableComboboxWithAdd } from "@/components/ui/combobox"
 import {
   savePrescription,
-  getMedicineMaster,
-  getInvestigationMaster,
-  getDropdownOptions,
   addDropdownOption,
-  getPredefinedTemplates,
   updatePatientToWithDoctor,
 } from "../actions"
 import { formatDate } from "@/lib/utils"
@@ -61,6 +57,15 @@ interface Template {
   additionalNotes: string | null
 }
 
+export type PrescriptionReferenceData = {
+  medicines: { name: string; defaultTiming: string | null; defaultDays: string | null; note: string | null }[]
+  investigations: string[]
+  complaintOptions: string[]
+  previousHistoryOptions: string[]
+  diagnosisOptions: string[]
+  templates: Template[]
+}
+
 interface Props {
   patientId: string
   patientName: string
@@ -77,6 +82,8 @@ interface Props {
     pulseRate: number | null
     spo2: number | null
   } | null
+  referenceData: PrescriptionReferenceData
+  onReferenceDataChange: (next: PrescriptionReferenceData) => void
   onSaved?: () => void
 }
 
@@ -85,7 +92,7 @@ export interface PrescriptionFormHandle {
 }
 
 export const PrescriptionForm = forwardRef<PrescriptionFormHandle, Props>(
-function PrescriptionForm({ patientId, patientName, existingPrescription, onSaved }, ref) {
+function PrescriptionForm({ patientId, patientName, existingPrescription, referenceData, onReferenceDataChange, onSaved }, ref) {
   const [doctorName, setDoctorName] = useState(existingPrescription?.doctorName ?? "")
   const [temperature, setTemperature] = useState(existingPrescription?.temperature?.toString() ?? "")
   const [pulseRate, setPulseRate] = useState(existingPrescription?.pulseRate?.toString() ?? "")
@@ -128,38 +135,11 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
   const [notes, setNotes] = useState(existingPrescription?.notes ?? "")
   const [submitting, setSubmitting] = useState(false)
 
-  type MedicineMasterEntry = { name: string; defaultTiming: string | null; defaultDays: string | null; note: string | null }
-
-  const [medicineMasterFull, setMedicineMasterFull] = useState<MedicineMasterEntry[]>([])
-  const [medicineOptions, setMedicineOptions] = useState<string[]>([])
-  const [investigationOptions, setInvestigationOptions] = useState<string[]>([])
-  const [complaintOptions, setComplaintOptions] = useState<string[]>([])
-  const [previousHistoryOptions, setPreviousHistoryOptions] = useState<string[]>([])
-  const [diagnosisOptions, setDiagnosisOptions] = useState<string[]>([])
-  const [templates, setTemplates] = useState<Template[]>([])
+  // Reference data is provided by the parent (loaded once at page level).
+  const { medicines: medicineMasterFull, investigations: investigationOptions, complaintOptions, previousHistoryOptions, diagnosisOptions, templates } = referenceData
+  const medicineOptions = medicineMasterFull.map(x => x.name)
   const [templateSearch, setTemplateSearch] = useState("")
   const [showTemplateList, setShowTemplateList] = useState(false)
-
-  useEffect(() => {
-    async function loadOptions() {
-      const [meds, invs, complaints, histories, diags, tmplts] = await Promise.all([
-        getMedicineMaster(),
-        getInvestigationMaster().then(i => i.map(x => x.name)),
-        getDropdownOptions("presentComplaint"),
-        getDropdownOptions("previousHistory"),
-        getDropdownOptions("diagnosis"),
-        getPredefinedTemplates(),
-      ])
-      setMedicineMasterFull(meds)
-      setMedicineOptions(meds.map(x => x.name))
-      setInvestigationOptions(invs)
-      setComplaintOptions(complaints)
-      setPreviousHistoryOptions(histories)
-      setDiagnosisOptions(diags)
-      setTemplates(tmplts as unknown as Template[])
-    }
-    loadOptions()
-  }, [])
 
   function addMedicine() {
     setMedicines(prev => [...prev, { id: Math.random().toString(), name: "", days: "", timing: "", note: "" }])
@@ -272,34 +252,31 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
     : templates
 
   return (
-    <div className="space-y-5 [&_input:not(:placeholder-shown)]:text-gray-900 [&_input:not(:placeholder-shown)]:font-semibold [&_input:not(:placeholder-shown)]:text-[0.9rem] [&_textarea:not(:placeholder-shown)]:text-gray-900 [&_textarea:not(:placeholder-shown)]:font-semibold [&_textarea:not(:placeholder-shown)]:text-[0.9rem]">
+    <div className="space-y-4 [&_input:not(:placeholder-shown)]:text-foreground [&_input:not(:placeholder-shown)]:font-medium [&_textarea:not(:placeholder-shown)]:text-foreground [&_textarea:not(:placeholder-shown)]:font-medium">
 
-      {/* Quick Fill from Template */}
-      <div className="rounded-lg border border-blue-200 bg-blue-50">
-        <div className="px-4 py-3">
-          <div className="flex items-center gap-2 mb-0.5">
-            <ClipboardList className="h-4 w-4 text-blue-600" />
-            <p className="text-sm font-semibold text-blue-700">Quick Fill from Template</p>
+      {/* Quick Fill from Template — compact single row */}
+      <div className="rounded-xl border border-primary/15 bg-primary/[0.04] px-3 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <div className="inline-flex items-center gap-1.5 shrink-0 text-primary">
+            <ClipboardList className="h-3.5 w-3.5" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Quick Fill</span>
           </div>
-          <p className="text-xs text-blue-600 mb-3">Search and select a predefined template to auto-fill the form fields below.</p>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input
               value={templateSearch}
               onChange={e => { setTemplateSearch(e.target.value); setShowTemplateList(true) }}
               onFocus={() => setShowTemplateList(true)}
               onBlur={() => setTimeout(() => setShowTemplateList(false), 150)}
-              placeholder="Search templates by code or name..."
-              className="pl-9 bg-white"
+              placeholder="Search templates by code or name…"
+              className="pl-8 h-8 bg-white border-primary/15 focus-visible:ring-primary/30"
             />
             {showTemplateList && filteredTemplates.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto">
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
-                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">Templates</p>
-                  <p className="text-[11px] text-gray-400">{filteredTemplates.length} found</p>
+              <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-border rounded-xl shadow-lg overflow-hidden max-h-72 overflow-y-auto">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-muted/40 border-b border-border/40">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Templates</p>
+                  <p className="text-[10px] text-muted-foreground tabular-nums">{filteredTemplates.length} found</p>
                 </div>
-
                 {filteredTemplates.map((t) => {
                   let medCount = 0
                   try { medCount = JSON.parse(t.medicines).length } catch { /* ignore */ }
@@ -307,25 +284,22 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
                     <button
                       key={t.id}
                       onMouseDown={() => applyTemplate(t)}
-                      className="group w-full flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50/60 text-left transition-colors duration-100 border-b border-gray-100 last:border-0"
+                      className="group w-full flex items-center gap-3 px-3 py-2 hover:bg-primary/[0.06] text-left transition-colors border-b border-border/40 last:border-0"
                     >
-                      {/* Code badge */}
-                      <span className="h-8 w-8 flex items-center justify-center rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-600 text-[11px] font-bold shrink-0 leading-none">
-                        {t.code}
-                      </span>
-
-                      {/* Name + diagnosis */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-[0.82rem] font-semibold text-gray-800 leading-snug truncate group-hover:text-blue-700 transition-colors">
-                          {t.name}
-                        </p>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[10px] font-mono font-semibold text-primary/70 tracking-wider shrink-0">
+                            {t.code}
+                          </span>
+                          <p className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                            {t.name}
+                          </p>
+                        </div>
                         {t.provisionalDiagnosis && (
-                          <p className="text-[11px] text-gray-400 leading-snug truncate mt-0.5">{t.provisionalDiagnosis}</p>
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">{t.provisionalDiagnosis}</p>
                         )}
                       </div>
-
-                      {/* Medicine count pill */}
-                      <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-500 group-hover:border-blue-200 group-hover:text-blue-600 transition-colors">
+                      <span className="shrink-0 text-[10px] font-medium text-muted-foreground tabular-nums">
                         {medCount} med{medCount !== 1 ? "s" : ""}
                       </span>
                     </button>
@@ -337,107 +311,121 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
         </div>
       </div>
 
-    {/* Vitals & Clinical Notes — single section */}
-      <div className="bg-gray-50 border border-border rounded-lg p-4 space-y-4 [&_input]:bg-white [&_textarea]:bg-white">
-
-        {/* Vitals */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="space-y-1.5">
-            <Label>Temperature (°F)</Label>
+      {/* Vitals — inline row with unit-suffixes, no heavy card */}
+      <div>
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Vitals</p>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="relative">
             <Input
               type="number"
               value={temperature}
               onChange={e => setTemperature(e.target.value)}
               placeholder="98.6"
+              className="pr-14 h-9"
             />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground pointer-events-none">°F · Temp</span>
           </div>
-          <div className="space-y-1.5">
-            <Label>Pulse Rate</Label>
+          <div className="relative">
             <Input
               type="number"
               value={pulseRate}
               onChange={e => setPulseRate(e.target.value)}
               placeholder="72"
+              className="pr-16 h-9"
             />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground pointer-events-none">bpm · Pulse</span>
           </div>
-          <div className="space-y-1.5">
-            <Label>SpO2 (%)</Label>
+          <div className="relative">
             <Input
               type="number"
               value={spo2}
               onChange={e => setSpo2(e.target.value)}
               placeholder="98"
+              className="pr-16 h-9"
             />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground pointer-events-none">% · SpO₂</span>
           </div>
         </div>
+      </div>
 
-        <div className="border-t border-border" />
-
-        {/* Clinical Notes */}
-        <div className="space-y-3">
+      {/* Clinical Notes — single white card */}
+      <div className="rounded-xl border border-border/60 bg-white overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-border/40">
+          <h3 className="text-sm font-semibold text-foreground">Clinical Notes</h3>
+        </div>
+        <div className="p-4 space-y-3">
           <div className="space-y-1.5">
-            <Label>Present Complaint</Label>
+            <Label className="text-[11px] font-medium text-muted-foreground">Present Complaint</Label>
             <EditableComboboxWithAdd
               options={complaintOptions}
               value={presentComplaint}
               onValueChange={setPresentComplaint}
               onAddOption={async (v) => {
                 await addDropdownOption("presentComplaint", v)
-                setComplaintOptions(prev => [...prev, v])
+                onReferenceDataChange({ ...referenceData, complaintOptions: [...complaintOptions, v] })
                 toast.success("Option added")
               }}
-              placeholder="Chief complaint..."
+              placeholder="Chief complaint…"
               autoUpperCase
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Previous History</Label>
+            <Label className="text-[11px] font-medium text-muted-foreground">Previous History</Label>
             <EditableComboboxWithAdd
               options={previousHistoryOptions}
               value={previousHistory}
               onValueChange={setPreviousHistory}
               onAddOption={async (v) => {
                 await addDropdownOption("previousHistory", v)
-                setPreviousHistoryOptions(prev => [...prev, v])
+                onReferenceDataChange({ ...referenceData, previousHistoryOptions: [...previousHistoryOptions, v] })
                 toast.success("Option added")
               }}
-              placeholder="Previous eye conditions, surgeries, medications..."
+              placeholder="Previous eye conditions, surgeries, medications…"
               autoUpperCase
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Diagnosis</Label>
+            <Label className="text-[11px] font-medium text-muted-foreground">Diagnosis</Label>
             <EditableComboboxWithAdd
               options={diagnosisOptions}
               value={diagnosis}
               onValueChange={setDiagnosis}
               onAddOption={async (v) => {
                 await addDropdownOption("diagnosis", v)
-                setDiagnosisOptions(prev => [...prev, v])
+                onReferenceDataChange({ ...referenceData, diagnosisOptions: [...diagnosisOptions, v] })
                 toast.success("Option added")
               }}
-              placeholder="Provisional/Final diagnosis..."
+              placeholder="Provisional/Final diagnosis…"
               autoUpperCase
             />
           </div>
         </div>
-
       </div>
 
       {/* Medicines */}
-      <div className="rounded-lg border border-border bg-gray-50 [&_input]:bg-white">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-          <Label className="text-sm font-medium">Medications</Label>
-          <Button size="sm" variant="secondary" onClick={addMedicine}>
-            <Plus className="h-3.5 w-3.5" /> Add Medicine
+      <div className="rounded-xl border border-border/60 bg-white overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40">
+          <h3 className="text-sm font-semibold text-foreground">Medications</h3>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={addMedicine}
+            className="h-7 text-xs gap-1.5 text-primary hover:text-primary hover:bg-primary/5"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add medicine
           </Button>
         </div>
-
-        <div className="p-4 space-y-3">
-          {medicines.map((med, index) => (
-            <div key={med.id} className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">Medicine {index + 1}</p>
-              <div className="grid gap-2 items-center" style={{ gridTemplateColumns: "2fr 1fr 1fr 2fr 32px" }}>
+        {medicines.length === 0 ? (
+          <p className="px-4 py-4 text-xs text-muted-foreground italic">No medicines added.</p>
+        ) : (
+          <div className="px-4 py-3 space-y-2">
+            {medicines.map((med, index) => (
+              <div
+                key={med.id}
+                className="grid gap-2 items-center"
+                style={{ gridTemplateColumns: "20px 2fr 1fr 1fr 2fr 28px" }}
+              >
+                <span className="text-[11px] font-mono text-muted-foreground/70 tabular-nums text-right">{index + 1}</span>
                 <EditableCombobox
                   options={medicineOptions}
                   value={med.name}
@@ -465,30 +453,36 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
                   variant="ghost"
                   size="icon-sm"
                   onClick={() => removeMedicine(med.id)}
-                  className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3.5 w-3.5" />
                 </Button>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Investigations */}
-      <div className="rounded-lg border border-border bg-gray-50 [&_input]:bg-white">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-          <Label className="text-sm font-medium">Investigations / Advice</Label>
-          <Button size="sm" variant="secondary" onClick={addInvestigation}>
+      <div className="rounded-xl border border-border/60 bg-white overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40">
+          <h3 className="text-sm font-semibold text-foreground">Investigations / Advice</h3>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={addInvestigation}
+            className="h-7 text-xs gap-1.5 text-primary hover:text-primary hover:bg-primary/5"
+          >
             <Plus className="h-3.5 w-3.5" /> Add
           </Button>
         </div>
-
-        <div className="p-4 grid grid-cols-2 gap-3">
-          {investigations.map((inv, index) => (
-            <div key={inv.id} className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">Investigation {index + 1}</p>
-              <div className="flex items-center gap-1">
+        {investigations.length === 0 ? (
+          <p className="px-4 py-4 text-xs text-muted-foreground italic">No investigations added.</p>
+        ) : (
+          <div className="px-4 py-3 grid grid-cols-2 gap-2">
+            {investigations.map((inv, index) => (
+              <div key={inv.id} className="flex items-center gap-1.5">
+                <span className="text-[11px] font-mono text-muted-foreground/70 tabular-nums w-4 text-right">{index + 1}</span>
                 <EditableCombobox
                   options={investigationOptions}
                   value={inv.name}
@@ -500,25 +494,22 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
                   variant="ghost"
                   size="icon-sm"
                   onClick={() => removeInvestigation(inv.id)}
-                  className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3.5 w-3.5" />
                 </Button>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Follow-up & Notes */}
-      <div className="rounded-lg border border-border bg-gray-50 [&_input]:bg-white">
-        <div className="px-4 py-2.5 border-b border-border">
-          <Label className="text-sm font-medium">Follow-up &amp; Notes</Label>
-        </div>
-        <div className="p-4 grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label>Follow-up Date</Label>
-            <div className="flex items-center gap-2">
+      {/* Follow-up & Notes — compact card */}
+      <div className="rounded-xl border border-border/60 bg-white p-4 grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-medium text-muted-foreground">Follow-up</Label>
+          <div className="flex items-center gap-2">
+            <div className="relative shrink-0">
               <Input
                 type="number"
                 min="1"
@@ -533,28 +524,28 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, onSave
                   }
                 }}
                 placeholder="Days"
-                className="w-20 shrink-0"
+                className="w-20 pr-7"
               />
-              <span className="text-xs text-muted-foreground shrink-0">days</span>
-              <Input
-                type="date"
-                value={followUpDate}
-                onChange={e => {
-                  setFollowUpDate(e.target.value)
-                  setFollowUpDays("")
-                }}
-                className="flex-1"
-              />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none">d</span>
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Additional Notes</Label>
             <Input
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Any additional instructions..."
+              type="date"
+              value={followUpDate}
+              onChange={e => {
+                setFollowUpDate(e.target.value)
+                setFollowUpDays("")
+              }}
+              className="flex-1"
             />
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-medium text-muted-foreground">Additional Notes</Label>
+          <Input
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Any additional instructions…"
+          />
         </div>
       </div>
     </div>

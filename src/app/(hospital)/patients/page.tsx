@@ -1,11 +1,27 @@
-import dynamic from "next/dynamic"
-import { PageSkeleton } from "@/components/layout/PageSkeleton"
+import { PatientsPage } from "./components/PatientsPage"
+import { getPatients, getCurrentUserRole } from "./actions"
+import { todayISO } from "@/lib/utils"
 
-const PatientsPage = dynamic(
-  () => import("./components/PatientsPage").then((mod) => ({ default: mod.PatientsPage })),
-  { loading: () => <PageSkeleton /> }
-)
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string; search?: string }>
+}) {
+  const params = await searchParams
+  const date = params.date ?? todayISO()
+  const search = params.search ?? ""
 
-export default async function Page() {
-  return <PatientsPage />
+  const [patients, userRoleResult] = await Promise.all([
+    getPatients({ date, search: search || undefined, type: "OPD" }),
+    getCurrentUserRole(),
+  ])
+
+  return (
+    <PatientsPage
+      initialPatients={patients}
+      initialUserRole={userRoleResult.role}
+      initialDate={date}
+      initialSearch={search}
+    />
+  )
 }

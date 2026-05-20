@@ -12,33 +12,71 @@ export async function getDoctorQueue(date?: string) {
   const { start, end } = getISTDayBounds(targetDate)
   const startMs = start.getTime()
   const endMs = end.getTime()
+  const startISO = start.toISOString()
+  const endISO = end.toISOString()
 
-  // Fetch all OPD patients with nested relations
-  const { data: patients, error } = await supabase
-    .from("Patient")
-    .select("*, eyeReadings:EyeReading(*), prescriptions:Prescription(*, items:InvoiceItem(*)), labBills:LabBill(*, lab:Lab(name), items:LabBillItem(*))")
-    .eq("patientType", "OPD")
-    .order("createdAt", { ascending: true })
+  const SELECT_FULL =
+    "*, eyeReadings:EyeReading(*), prescriptions:Prescription(*, items:InvoiceItem(*)), labBills:LabBill(*, lab:Lab(name), items:LabBillItem(*))"
+  const SELECT_FULL_RX_INNER =
+    "*, eyeReadings:EyeReading(*), prescriptions:Prescription!inner(*, items:InvoiceItem(*)), labBills:LabBill(*, lab:Lab(name), items:LabBillItem(*))"
+  const SELECT_FULL_ER_INNER =
+    "*, eyeReadings:EyeReading!inner(*), prescriptions:Prescription(*, items:InvoiceItem(*)), labBills:LabBill(*, lab:Lab(name), items:LabBillItem(*))"
 
-  if (error) {
-    console.error("getDoctorQueue error:", error)
+  // Three parallel queries: a patient belongs in today's queue if they have an
+  // appointment, a prescription, or an eye reading saved in this date range.
+  // Query C (eye reading) catches "appointment was yesterday, workup entered today".
+  const [apptRes, rxRes, erRes] = await Promise.all([
+    supabase
+      .from("Patient")
+      .select(SELECT_FULL)
+      .eq("patientType", "OPD")
+      .gte("appointmentDate", startISO)
+      .lte("appointmentDate", endISO)
+      .order("createdAt", { ascending: true }),
+    supabase
+      .from("Patient")
+      .select(SELECT_FULL_RX_INNER)
+      .eq("patientType", "OPD")
+      .gte("prescriptions.prescriptionDate", startISO)
+      .lte("prescriptions.prescriptionDate", endISO)
+      .order("createdAt", { ascending: true }),
+    supabase
+      .from("Patient")
+      .select(SELECT_FULL_ER_INNER)
+      .eq("patientType", "OPD")
+      .gte("eyeReadings.readingDate", startISO)
+      .lte("eyeReadings.readingDate", endISO)
+      .order("createdAt", { ascending: true }),
+  ])
+
+  if (apptRes.error) {
+    console.error("getDoctorQueue error (appointment):", apptRes.error)
     return []
   }
+  if (rxRes.error) {
+    console.error("getDoctorQueue error (prescription):", rxRes.error)
+    return []
+  }
+  if (erRes.error) {
+    console.error("getDoctorQueue error (eye reading):", erRes.error)
+    return []
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const merged = new Map<string, any>()
+  for (const p of (apptRes.data ?? [])) merged.set(p.patientId, p)
+  for (const p of (rxRes.data ?? [])) {
+    if (!merged.has(p.patientId)) merged.set(p.patientId, p)
+  }
+  for (const p of (erRes.data ?? [])) {
+    if (!merged.has(p.patientId)) merged.set(p.patientId, p)
+  }
+  const filtered = Array.from(merged.values())
 
   function isInDay(dateStr: string) {
     const t = new Date(dateStr).getTime()
     return t >= startMs && t <= endMs
   }
-
-  // Filter to patients that have a prescription or appointment in the target date range
-  const filtered = (patients ?? []).filter(p => {
-    const hasPrescriptionToday = p.prescriptions?.some(
-      (rx: any) => isInDay(rx.prescriptionDate)
-    )
-    const hasAppointmentToday =
-      p.appointmentDate && isInDay(p.appointmentDate)
-    return hasPrescriptionToday || hasAppointmentToday
-  })
 
   // Filter nested relations to today's date and compute status
   return filtered.map((p: any) => {
@@ -242,6 +280,53 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
 }
 
 // ─── Configurations (Medicine Master, Templates, etc.) ────────────────────────
+
+// Single round-trip that bundles every piece of reference data the
+// PrescriptionForm needs at mount time. Loaded once per page (server-side) so
+// the form no longer fires 6 separate calls on every patient click.
+export async function getPrescriptionReferenceData() {
+  const supabase = await createClient()
+
+  const [medsRes, invsRes, dropdownsRes, templatesRes] = await Promise.all([
+    supabase
+      .from("MedicineMaster")
+      .select("*")
+      .eq("isActive", true)
+      .order("sortOrder", { ascending: true })
+      .order("name", { ascending: true }),
+    supabase
+      .from("InvestigationMaster")
+      .select("*")
+      .eq("isActive", true)
+      .order("sortOrder", { ascending: true })
+      .order("name", { ascending: true }),
+    // Collapse 3 separate getDropdownOptions calls into one with .in()
+    supabase
+      .from("DropdownOption")
+      .select("fieldName, value")
+      .in("fieldName", ["presentComplaint", "previousHistory", "diagnosis"])
+      .order("value", { ascending: true }),
+    supabase
+      .from("PredefinedTemplate")
+      .select("*")
+      .eq("isActive", true)
+      .order("name", { ascending: true }),
+  ])
+
+  const bucket: Record<string, string[]> = { presentComplaint: [], previousHistory: [], diagnosis: [] }
+  for (const row of (dropdownsRes.data ?? []) as { fieldName: string; value: string }[]) {
+    if (bucket[row.fieldName]) bucket[row.fieldName].push(row.value)
+  }
+
+  return {
+    medicines: medsRes.data ?? [],
+    investigations: (invsRes.data ?? []).map((x: { name: string }) => x.name),
+    complaintOptions: bucket.presentComplaint,
+    previousHistoryOptions: bucket.previousHistory,
+    diagnosisOptions: bucket.diagnosis,
+    templates: templatesRes.data ?? [],
+  }
+}
 
 export async function getMedicineMaster() {
   const supabase = await createClient()

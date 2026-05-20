@@ -283,7 +283,7 @@ export type InPatient = {
   referredBy: string | null
   department: string | null
   doctorNames: string
-  onDutyDoctor: string | null
+  onDutyDoctors: string   // JSON-encoded string[]
   operationName: string | null
   operationDate: Date | null
   operationProcedure: string | null

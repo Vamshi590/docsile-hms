@@ -1,10 +1,7 @@
-import dynamic from "next/dynamic"
-import { PageSkeleton } from "@/components/layout/PageSkeleton"
-
-const OpticalPage = dynamic(() => import("./components/OpticalPage"), {
-  loading: () => <PageSkeleton />,
-})
+import OpticalPage from "./components/OpticalPage"
+import { getStockSummary } from "./actions"
 
 export default async function OpticalRoute() {
-  return <OpticalPage />
+  const summary = await getStockSummary()
+  return <OpticalPage initialSummary={summary} />
 }

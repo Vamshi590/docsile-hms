@@ -1,10 +1,13 @@
-import dynamic from "next/dynamic"
-import { PageSkeleton } from "@/components/layout/PageSkeleton"
-
-const ExpensesPage = dynamic(() => import("./components/ExpensesPage"), {
-  loading: () => <PageSkeleton />,
-})
+import ExpensesPage from "./components/ExpensesPage"
+import { getCategories, seedDefaultCategories, getExpensesByDateRange } from "./actions"
+import { todayISO } from "@/lib/utils"
 
 export default async function ExpensesRoute() {
-  return <ExpensesPage />
+  await seedDefaultCategories()
+  const today = todayISO()
+  const [categories, expenses] = await Promise.all([
+    getCategories(),
+    getExpensesByDateRange(today, today),
+  ])
+  return <ExpensesPage initialCategories={categories} initialExpenses={expenses} />
 }

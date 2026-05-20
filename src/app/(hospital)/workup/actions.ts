@@ -10,30 +10,68 @@ export async function getWorkupQueue(date?: string) {
   const { start, end } = getISTDayBounds(targetDate)
   const startMs = start.getTime()
   const endMs = end.getTime()
+  const startISO = start.toISOString()
+  const endISO = end.toISOString()
   const supabase = await createClient()
 
-  // Get OPD patients with appointments or prescriptions today
-  const { data: patients, error } = await supabase
-    .from("Patient")
-    .select("*, eyeReadings:EyeReading(*), prescriptions:Prescription(id, status, prescriptionDate, doctorName)")
-    .eq("patientType", "OPD")
-    .order("createdAt", { ascending: true })
+  const SELECT_FULL =
+    "*, eyeReadings:EyeReading(*), prescriptions:Prescription(id, status, prescriptionDate, doctorName, createdAt)"
+  const SELECT_FULL_RX_INNER =
+    "*, eyeReadings:EyeReading(*), prescriptions:Prescription!inner(id, status, prescriptionDate, doctorName, createdAt)"
+  const SELECT_FULL_ER_INNER =
+    "*, eyeReadings:EyeReading!inner(*), prescriptions:Prescription(id, status, prescriptionDate, doctorName, createdAt)"
 
-  if (error) throw error
+  // Three parallel queries — a patient belongs in today's queue if ANY of:
+  //   (A) their appointment is today, OR
+  //   (B) they have a prescription written today, OR
+  //   (C) they have an eye reading saved today.
+  // (C) catches the "patient came yesterday but workup is being entered today"
+  // case where the appointment date doesn't match the day of the actual visit.
+  const [apptRes, rxRes, erRes] = await Promise.all([
+    supabase
+      .from("Patient")
+      .select(SELECT_FULL)
+      .eq("patientType", "OPD")
+      .gte("appointmentDate", startISO)
+      .lte("appointmentDate", endISO)
+      .order("createdAt", { ascending: true }),
+    supabase
+      .from("Patient")
+      .select(SELECT_FULL_RX_INNER)
+      .eq("patientType", "OPD")
+      .gte("prescriptions.prescriptionDate", startISO)
+      .lte("prescriptions.prescriptionDate", endISO)
+      .order("createdAt", { ascending: true }),
+    supabase
+      .from("Patient")
+      .select(SELECT_FULL_ER_INNER)
+      .eq("patientType", "OPD")
+      .gte("eyeReadings.readingDate", startISO)
+      .lte("eyeReadings.readingDate", endISO)
+      .order("createdAt", { ascending: true }),
+  ])
+
+  if (apptRes.error) throw apptRes.error
+  if (rxRes.error) throw rxRes.error
+  if (erRes.error) throw erRes.error
+
+  // Merge by patientId. Query A wins on collision (it has the full unfiltered
+  // prescription list); the !inner queries only join in-range rows.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const merged = new Map<string, any>()
+  for (const p of (apptRes.data ?? [])) merged.set(p.patientId, p)
+  for (const p of (rxRes.data ?? [])) {
+    if (!merged.has(p.patientId)) merged.set(p.patientId, p)
+  }
+  for (const p of (erRes.data ?? [])) {
+    if (!merged.has(p.patientId)) merged.set(p.patientId, p)
+  }
+  const filtered = Array.from(merged.values())
 
   function isInDay(dateStr: string) {
     const t = new Date(dateStr).getTime()
     return t >= startMs && t <= endMs
   }
-
-  // Filter to patients with appointments or prescriptions today
-  const filtered = (patients ?? []).filter(p => {
-    const hasAppointmentToday = p.appointmentDate && isInDay(p.appointmentDate)
-    const hasPrescriptionToday = p.prescriptions?.some(
-      (rx: { prescriptionDate: string }) => isInDay(rx.prescriptionDate)
-    )
-    return hasAppointmentToday || hasPrescriptionToday
-  })
 
   // Filter nested relations to today only and compute status
   return filtered.map(p => {
@@ -176,6 +214,7 @@ export async function saveEyeReading(data: {
 
     revalidatePath("/workup")
     revalidatePath("/patients")
+    revalidatePath("/doctor")
     return { success: true }
   } catch (error) {
     console.error("Error saving eye reading:", error)

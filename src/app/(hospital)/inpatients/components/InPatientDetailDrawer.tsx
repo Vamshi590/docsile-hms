@@ -36,7 +36,7 @@ type InPatient = {
   referredBy: string | null
   department: string | null
   doctorNames: string
-  onDutyDoctor: string | null
+  onDutyDoctors: string
   operationName: string | null
   operationDate: Date | null
   operationProcedure: string | null
@@ -320,7 +320,10 @@ export function InPatientDetailDrawer({ inpatient, open, onClose, onUpdate }: Pr
                   ["Days Admitted", `${daysAdmitted} day${daysAdmitted !== 1 ? "s" : ""}`],
                   ["Referred By", inpatient.referredBy ?? "—"],
                   ["Department", inpatient.department ?? "—"],
-                  ["On Duty Doctor", inpatient.onDutyDoctor ?? "—"],
+                  ["On Duty Doctors", (() => {
+                    try { return (JSON.parse(inpatient.onDutyDoctors) as string[]).join(", ") || "—" }
+                    catch { return "—" }
+                  })()],
                   ["Doctors", doctors.join(", ") || "—"],
                   ["Bed / Ward", inpatient.bedNumber ? `${inpatient.bedNumber} / ${inpatient.wardName ?? ""}` : "—"],
                 ].map(([label, value]) => (

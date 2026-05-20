@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { format } from "date-fns"
 import {
   Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff,
@@ -57,20 +57,33 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   ringing: { label: "Ringing", color: "text-blue-600", bg: "bg-blue-50 border-blue-200", icon: Phone },
 }
 
-export default function CallLogsPage() {
-  const [calls, setCalls] = useState<CallLog[]>([])
-  const [loading, setLoading] = useState(true)
+export default function CallLogsPage({
+  initialCalls,
+  initialStartDate,
+  initialEndDate,
+  initialStatusFilter,
+  initialDirectionFilter,
+  initialSearchQuery,
+}: {
+  initialCalls: CallLog[]
+  initialStartDate: string
+  initialEndDate: string
+  initialStatusFilter: string
+  initialDirectionFilter: string
+  initialSearchQuery: string
+}) {
+  const [calls, setCalls] = useState<CallLog[]>(initialCalls)
+  const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [activeTab, setActiveTab] = useState<ActiveTab>("calls")
 
-  // Date picker state — default to today
-  const today = format(new Date(), "yyyy-MM-dd")
-  const [startDate, setStartDate] = useState(today)
-  const [endDate, setEndDate] = useState(today)
+  // Date picker state — seeded from URL on first load
+  const [startDate, setStartDate] = useState(initialStartDate)
+  const [endDate, setEndDate] = useState(initialEndDate)
 
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [directionFilter, setDirectionFilter] = useState("all")
-  const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
+  const [directionFilter, setDirectionFilter] = useState(initialDirectionFilter)
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery)
 
   const [selectedCall, setSelectedCall] = useState<CallLog | null>(null)
 
@@ -87,7 +100,14 @@ export default function CallLogsPage() {
     }
   }, [startDate, endDate, statusFilter, directionFilter, searchQuery, activeTab])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  const skipFirstLoad = useRef(true)
+  useEffect(() => {
+    if (skipFirstLoad.current) {
+      skipFirstLoad.current = false
+      return
+    }
+    fetchData()
+  }, [fetchData])
 
   const handleSync = async () => {
     setSyncing(true)

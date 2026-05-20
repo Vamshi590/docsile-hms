@@ -65,9 +65,8 @@ function parseCF(raw: unknown): CFSection {
 
 const SECTIONS = [
   { id: "ar",  label: "AR",  title: "Auto Refractometer (AR)" },
-  { id: "gr",  label: "GR",  title: "Glasses Reading (GR)" },
-  { id: "pgp", label: "PGP", title: "Previous Glass Prescription (PGP)" },
   { id: "sr",  label: "SR",  title: "Present Glass Prescription (SR)" },
+  { id: "pgp", label: "PGP", title: "Previous Glass Prescription (PGP)" },
   { id: "cf",  label: "CF",  title: "Clinical Findings (CF)" },
 ] as const
 
@@ -117,6 +116,13 @@ interface Props {
   onSaved?: () => void
   existingReading?: string | null
   compact?: boolean
+  // Controlled-mode props. When both are provided, sight type state is
+  // owned by the parent (e.g. WorkupPage renders SightTypePicker beside
+  // the form). When `hideSightType` is true, the inline block at the bottom
+  // of Present Prescription is omitted so it isn't shown twice.
+  sightTypeValue?: string
+  onSightTypeChange?: (next: string) => void
+  hideSightType?: boolean
 }
 
 export interface EyeReadingFormHandle {
@@ -124,16 +130,21 @@ export interface EyeReadingFormHandle {
 }
 
 export const EyeReadingForm = forwardRef<EyeReadingFormHandle, Props>(
-function EyeReadingForm({ patientId, onSaved, existingReading, compact = false }, ref) {
+function EyeReadingForm({
+  patientId, onSaved, existingReading, compact = false,
+  sightTypeValue, onSightTypeChange, hideSightType = false,
+}, ref) {
   const raw = existingReading
     ? (() => { try { return JSON.parse(existingReading) } catch { return null } })()
     : null
 
   const [ar,  setAr]  = useState<ARSection>(() => parseAR(raw?.autoRefractometer))
-  const [gr,  setGr]  = useState<DNSection>(() => parseDN(raw?.glassesReading))
   const [pgp, setPgp] = useState<DNSection>(() => parseDN(raw?.previousPrescription))
   const [sr,  setSr]  = useState<DNSection>(() => parseDN(raw?.presentPrescription))
-  const [sightType, setSightType] = useState<string>(() => (raw?.presentPrescription?.sightType as string) ?? "")
+  const [localSightType, setLocalSightType] = useState<string>(() => (raw?.presentPrescription?.sightType as string) ?? "")
+  const sightTypeControlled = sightTypeValue !== undefined && onSightTypeChange !== undefined
+  const sightType = sightTypeControlled ? sightTypeValue! : localSightType
+  const setSightType = sightTypeControlled ? onSightTypeChange! : setLocalSightType
   const [cf,  setCf]  = useState<CFSection>(() => parseCF(raw?.clinicalFindings))
   const [submitting,  setSubmitting]  = useState(false)
   const [activeSection, setActiveSection] = useState<SectionId>("ar")
@@ -142,11 +153,10 @@ function EyeReadingForm({ patientId, onSaved, existingReading, compact = false }
   // Scroll container ref + section refs
   const scrollRef = useRef<HTMLDivElement>(null)
   const arRef  = useRef<HTMLDivElement>(null)
-  const grRef  = useRef<HTMLDivElement>(null)
   const pgpRef = useRef<HTMLDivElement>(null)
   const srRef  = useRef<HTMLDivElement>(null)
   const cfRef  = useRef<HTMLDivElement>(null)
-  const sectionRefs = { ar: arRef, gr: grRef, pgp: pgpRef, sr: srRef, cf: cfRef }
+  const sectionRefs = { ar: arRef, pgp: pgpRef, sr: srRef, cf: cfRef }
 
   // Highlight active nav pill as user scrolls
   useEffect(() => {
@@ -163,7 +173,7 @@ function EyeReadingForm({ patientId, onSaved, existingReading, compact = false }
       },
       { root, rootMargin: "-10% 0px -70% 0px" }
     )
-    ;[arRef, grRef, pgpRef, srRef, cfRef].forEach(ref => {
+    ;[arRef, pgpRef, srRef, cfRef].forEach(ref => {
       if (ref.current) observer.observe(ref.current)
     })
     return () => observer.disconnect()
@@ -205,7 +215,6 @@ function EyeReadingForm({ patientId, onSaved, existingReading, compact = false }
     const result = await saveEyeReading({
       patientId,
       autoRefractometer:    ar  as unknown as Record<string, unknown>,
-      glassesReading:       gr  as unknown as Record<string, unknown>,
       previousPrescription: pgp as unknown as Record<string, unknown>,
       presentPrescription:  { ...sr, sightType } as unknown as Record<string, unknown>,
       clinicalFindings:     cf  as unknown as Record<string, unknown>,
@@ -366,35 +375,37 @@ function EyeReadingForm({ patientId, onSaved, existingReading, compact = false }
           <NearEyeRow row={sr.le.n} onChange={s("le", "n")} distanceSph={sr.le.d.sph} />
         </div>
 
-        {/* Sight Type */}
-        <div className="pt-3 border-t border-border">
-          <h4 className="text-sm font-medium text-foreground mb-2">Sight Type:</h4>
-          <div className="flex flex-wrap gap-4">
-            {SIGHT_TYPE_OPTIONS.map((option) => {
-              const currentValues = sightType ? sightType.split("/").filter(Boolean) : []
-              const checked = currentValues.includes(option.label)
-              return (
-                <label key={option.id} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => {
-                      let newValues: string[]
-                      if (e.target.checked) {
-                        newValues = checked ? currentValues : [...currentValues, option.label]
-                      } else {
-                        newValues = currentValues.filter(v => v !== option.label)
-                      }
-                      setSightType(newValues.join("/"))
-                    }}
-                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <span className="text-sm text-muted-foreground">{option.label}</span>
-                </label>
-              )
-            })}
+        {/* Sight Type (omitted when the parent lifts it into its own panel) */}
+        {!hideSightType && (
+          <div className="pt-3 border-t border-border">
+            <h4 className="text-sm font-medium text-foreground mb-2">Sight Type:</h4>
+            <div className="flex flex-wrap gap-4">
+              {SIGHT_TYPE_OPTIONS.map((option) => {
+                const currentValues = sightType ? sightType.split("/").filter(Boolean) : []
+                const checked = currentValues.includes(option.label)
+                return (
+                  <label key={option.id} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        let newValues: string[]
+                        if (e.target.checked) {
+                          newValues = checked ? currentValues : [...currentValues, option.label]
+                        } else {
+                          newValues = currentValues.filter(v => v !== option.label)
+                        }
+                        setSightType(newValues.join("/"))
+                      }}
+                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span className="text-sm text-muted-foreground">{option.label}</span>
+                  </label>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </SectionCard>
     )
   }
@@ -501,16 +512,12 @@ function EyeReadingForm({ patientId, onSaved, existingReading, compact = false }
             {renderAR()}
           </div>
 
-          <div ref={grRef} data-section="gr">
-            {renderDN(gr, setGr, "Glasses Reading (GR)")}
+          <div ref={srRef} data-section="sr">
+            {renderSR()}
           </div>
 
           <div ref={pgpRef} data-section="pgp">
             {renderDN(pgp, setPgp, "Previous Glass Prescription (PGP)")}
-          </div>
-
-          <div ref={srRef} data-section="sr">
-            {renderSR()}
           </div>
 
           <div ref={cfRef} data-section="cf">

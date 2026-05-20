@@ -1,10 +1,7 @@
-import dynamic from "next/dynamic"
-import { PageSkeleton } from "@/components/layout/PageSkeleton"
-
-const PharmacyPage = dynamic(() => import("./components/PharmacyPage"), {
-  loading: () => <PageSkeleton />,
-})
+import PharmacyPage from "./components/PharmacyPage"
+import { getStockSummary } from "./actions"
 
 export default async function PharmacyRoute() {
-  return <PharmacyPage />
+  const summary = await getStockSummary()
+  return <PharmacyPage initialSummary={summary} />
 }

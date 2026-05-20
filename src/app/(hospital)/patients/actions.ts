@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
+import { getHospitalProfile as getCachedHospitalProfile } from "@/lib/db"
 import { requireAuth } from "@/lib/auth"
 import { getISTDayBounds, computePatientStatus } from "@/lib/utils"
 import { z } from "zod"
@@ -94,79 +95,139 @@ export async function getPatients(filters: {
   const supabase = await createClient()
   const { date, search, status, type = "OPD" } = filters
 
-  let dateBounds: { start: Date; end: Date } | null = null
-  if (date) {
-    dateBounds = getISTDayBounds(date)
+  // Narrow select: only the fields the list view (PatientTable) and the
+  // post-fetch status/stats computation actually read. Dropping items/payments
+  // (unused by the list) and the heavy EyeReading text columns cuts row size
+  // dramatically.
+  const PAYMENT_FIELDS = "amount, paymentMode"
+  const ITEM_FIELDS = "description, sortOrder"
+  const PRESCRIPTION_FIELDS =
+    `id, status, doctorName, createdAt, prescriptionDate, total, balanceDue, amountPaid, payments:Payment(${PAYMENT_FIELDS}), items:InvoiceItem(${ITEM_FIELDS})`
+  const EYE_READING_FIELDS = "id, readingDate, createdAt"
+  const SELECT_FULL =
+    `*, prescriptions:Prescription(${PRESCRIPTION_FIELDS}), eyeReadings:EyeReading(${EYE_READING_FIELDS})`
+  // Query B (prescription-date branch) and Query C (eye-reading-date branch).
+  // The `!inner` filters out patients with no matching child row in the range.
+  const SELECT_FULL_RX_INNER =
+    `*, prescriptions:Prescription!inner(${PRESCRIPTION_FIELDS}), eyeReadings:EyeReading(${EYE_READING_FIELDS})`
+  const SELECT_FULL_ER_INNER =
+    `*, prescriptions:Prescription(${PRESCRIPTION_FIELDS}), eyeReadings:EyeReading!inner(${EYE_READING_FIELDS})`
+
+  // No date filter — just fetch all patients of this type (unchanged behavior).
+  if (!date) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase
+      .from("Patient")
+      .select(SELECT_FULL)
+      .eq("patientType", type)
+      .order("createdAt", { ascending: true })
+    if (status) q = q.eq("status", status)
+    if (search) {
+      q = q.or(
+        `patientId.ilike.%${search}%,firstName.ilike.%${search}%,lastName.ilike.%${search}%,phone.ilike.%${search}%`
+      )
+    }
+    const { data, error } = await q
+    if (error) {
+      console.error("Error fetching patients:", error)
+      return []
+    }
+    return mapPatients(data ?? [], null)
   }
 
-  // Build select with nested relations
-  let query = supabase
+  // Date filter — push the work into Postgres via two parallel queries.
+  const dateBounds = getISTDayBounds(date)
+  const startISO = dateBounds.start.toISOString()
+  const endISO = dateBounds.end.toISOString()
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let qAppt: any = supabase
     .from("Patient")
-    .select("*, prescriptions:Prescription(*, items:InvoiceItem(*), payments:Payment(*)), eyeReadings:EyeReading(*)")
+    .select(SELECT_FULL)
     .eq("patientType", type)
+    .gte("appointmentDate", startISO)
+    .lte("appointmentDate", endISO)
+    .order("createdAt", { ascending: true })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let qRx: any = supabase
+    .from("Patient")
+    .select(SELECT_FULL_RX_INNER)
+    .eq("patientType", type)
+    .gte("prescriptions.prescriptionDate", startISO)
+    .lte("prescriptions.prescriptionDate", endISO)
+    .order("createdAt", { ascending: true })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let qEr: any = supabase
+    .from("Patient")
+    .select(SELECT_FULL_ER_INNER)
+    .eq("patientType", type)
+    .gte("eyeReadings.readingDate", startISO)
+    .lte("eyeReadings.readingDate", endISO)
     .order("createdAt", { ascending: true })
 
   if (status) {
-    query = query.eq("status", status)
+    qAppt = qAppt.eq("status", status)
+    qRx = qRx.eq("status", status)
+    qEr = qEr.eq("status", status)
   }
-
   if (search) {
-    query = query.or(
-      `patientId.ilike.%${search}%,firstName.ilike.%${search}%,lastName.ilike.%${search}%,phone.ilike.%${search}%`
-    )
+    const orFilter = `patientId.ilike.%${search}%,firstName.ilike.%${search}%,lastName.ilike.%${search}%,phone.ilike.%${search}%`
+    qAppt = qAppt.or(orFilter)
+    qRx = qRx.or(orFilter)
+    qEr = qEr.or(orFilter)
   }
 
-  const { data: patients, error } = await query
+  const [apptRes, rxRes, erRes] = await Promise.all([qAppt, qRx, qEr])
 
-  if (error) {
-    console.error("Error fetching patients:", error)
-    return []
+  if (apptRes.error) console.error("Error fetching patients (by appointment):", apptRes.error)
+  if (rxRes.error) console.error("Error fetching patients (by prescription):", rxRes.error)
+  if (erRes.error) console.error("Error fetching patients (by eye reading):", erRes.error)
+
+  // Merge by patientId. Query A wins on collision because it has the full
+  // (unfiltered) prescription + eye-reading lists; the !inner queries only
+  // join in-range rows.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const merged = new Map<string, any>()
+  for (const p of (apptRes.data ?? [])) merged.set(p.patientId, p)
+  for (const p of (rxRes.data ?? [])) {
+    if (!merged.has(p.patientId)) merged.set(p.patientId, p)
+  }
+  for (const p of (erRes.data ?? [])) {
+    if (!merged.has(p.patientId)) merged.set(p.patientId, p)
   }
 
-  // Filter by date bounds client-side (for appointment date OR prescription date match)
-  let filtered = patients ?? []
+  return mapPatients(Array.from(merged.values()), dateBounds)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapPatients(patients: any[], dateBounds: { start: Date; end: Date } | null) {
+  const startMs = dateBounds?.start.getTime() ?? 0
+  const endMs = dateBounds?.end.getTime() ?? 0
   const isInBounds = dateBounds
-    ? (dateStr: string) => {
-        const t = new Date(dateStr).getTime()
-        return t >= dateBounds.start.getTime() && t <= dateBounds.end.getTime()
+    ? (s: string) => {
+        const t = new Date(s).getTime()
+        return t >= startMs && t <= endMs
       }
     : null
 
-  if (isInBounds) {
-    filtered = filtered.filter((p: Record<string, unknown>) => {
-      const prescriptions = (p.prescriptions ?? []) as { prescriptionDate: string }[]
-      const appointmentDate = p.appointmentDate as string
-      const hasPrescriptionInRange = prescriptions.some(
-        (rx) => isInBounds(rx.prescriptionDate)
-      )
-      const hasAppointmentInRange = appointmentDate && isInBounds(appointmentDate)
-      return hasPrescriptionInRange || hasAppointmentInRange
-    })
-  }
-
-  // Filter prescriptions and eyeReadings to date bounds, limit counts
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return filtered.map((p: any) => {
+  return patients.map((p: any) => {
     let prescriptions = (p.prescriptions ?? []) as {
       id: string; status: string; doctorName: string | null; createdAt: string;
-      prescriptionDate: string; items: unknown[]; payments: unknown[]
+      prescriptionDate: string; total: number; balanceDue: number; amountPaid: number;
+      payments?: { amount: number; paymentMode: string | null }[]
     }[]
     let eyeReadings = (p.eyeReadings ?? []) as { id: string; readingDate: string; createdAt: string }[]
 
     if (isInBounds) {
-      prescriptions = prescriptions.filter(
-        (rx) => isInBounds(rx.prescriptionDate)
-      )
-      eyeReadings = eyeReadings.filter(
-        (er) => isInBounds(er.readingDate)
-      )
+      prescriptions = prescriptions.filter((rx) => isInBounds(rx.prescriptionDate))
+      eyeReadings = eyeReadings.filter((er) => isInBounds(er.readingDate))
     }
 
-    // Sort prescriptions desc by createdAt, take 1
     prescriptions.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     prescriptions = prescriptions.slice(0, 1)
-
-    // Take 1 eye reading
     eyeReadings = eyeReadings.slice(0, 1)
 
     const hasWorkup = eyeReadings.length > 0
@@ -720,7 +781,7 @@ export async function searchExistingPatients(query: string) {
 
   const { data: patients, error } = await supabase
     .from("Patient")
-    .select("id, patientId, firstName, lastName, phone, age, gender, patientType, appointmentDate, prescriptions:Prescription(prescriptionDate)")
+    .select("id, patientId, firstName, lastName, phone, age, gender, patientType, appointmentDate, address, guardianName, guardianRelation, dateOfBirth, prescriptions:Prescription(prescriptionDate)")
     .or(
       `patientId.ilike.%${query}%,phone.ilike.%${query}%,firstName.ilike.%${query}%,lastName.ilike.%${query}%`
     )
@@ -1008,6 +1069,49 @@ export async function getDropdownOptions(fieldName: string): Promise<string[]> {
 
   if (error || !options) return []
   return options.map((o) => o.value)
+}
+
+/**
+ * Bundled fetch for the Add/Edit patient stepper. Replaces 6 separate calls
+ * (hospital profile + next id + service templates + 3 dropdowns) with a single
+ * server-action round-trip. The three dropdown lookups are also combined into
+ * one DB query via `IN (...)`.
+ *
+ * Edit mode may not need `nextId`/`serviceTemplates` but the bundle is still
+ * cheaper than the multi-call alternative.
+ */
+export async function getPatientRegistrationFormData() {
+  await requireAuth()
+  const supabase = await createClient()
+
+  const [hospitalCached, nextId, serviceTemplates, dropdownRes] = await Promise.all([
+    getCachedHospitalProfile(),
+    getNextPatientNumber(),
+    getServiceTemplates(),
+    supabase
+      .from("DropdownOption")
+      .select("fieldName, value")
+      .in("fieldName", ["doctorName", "department", "referredBy"])
+      .order("value", { ascending: true }),
+  ])
+
+  const grouped: { doctorName: string[]; department: string[]; referredBy: string[] } = {
+    doctorName: [], department: [], referredBy: [],
+  }
+  for (const row of dropdownRes.data ?? []) {
+    if (row.fieldName === "doctorName") grouped.doctorName.push(row.value)
+    else if (row.fieldName === "department") grouped.department.push(row.value)
+    else if (row.fieldName === "referredBy") grouped.referredBy.push(row.value)
+  }
+
+  return {
+    hospitalProfile: hospitalCached.hospital,
+    nextId,
+    serviceTemplates,
+    doctorOptions: grouped.doctorName,
+    departmentOptions: grouped.department,
+    referralOptions: grouped.referredBy,
+  }
 }
 
 export async function addDropdownOption(fieldName: string, value: string) {

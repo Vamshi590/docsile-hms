@@ -36,6 +36,7 @@ type NavItem = {
   label: string
   exact?: boolean
   adminOnly?: boolean
+  moduleCode?: string // gated by plan if set
 }
 
 const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
@@ -48,36 +49,36 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: "Clinical",
     items: [
-      { href: "/patients", icon: Users, label: "Patients" },
-      { href: "/workup", icon: Eye, label: "Refraction" },
-      { href: "/doctor", icon: Stethoscope, label: "Doctor" },
-      { href: "/inpatients", icon: BedDouble, label: "In-Patients" },
+      { href: "/patients", icon: Users, label: "Patients", moduleCode: "patients" },
+      { href: "/workup", icon: Eye, label: "Refraction", moduleCode: "workup" },
+      { href: "/doctor", icon: Stethoscope, label: "Doctor", moduleCode: "doctor" },
+      { href: "/inpatients", icon: BedDouble, label: "In-Patients", moduleCode: "inpatients" },
     ],
   },
   {
     label: "Services",
     items: [
-      { href: "/pharmacy", icon: Pill, label: "Pharmacy" },
-      { href: "/optical", icon: Glasses, label: "Optical" },
-      { href: "/labs", icon: FlaskConical, label: "Labs" },
-      { href: "/call-logs", icon: Phone, label: "Call Logs" },
+      { href: "/pharmacy", icon: Pill, label: "Pharmacy", moduleCode: "pharmacy" },
+      { href: "/optical", icon: Glasses, label: "Optical", moduleCode: "optical" },
+      { href: "/labs", icon: FlaskConical, label: "Labs", moduleCode: "labs" },
+      { href: "/call-logs", icon: Phone, label: "Call Logs", moduleCode: "call-logs" },
     ],
   },
   {
     label: "Finance",
     items: [
-      { href: "/insurance", icon: Shield, label: "Insurance" },
+      { href: "/insurance", icon: Shield, label: "Insurance", moduleCode: "insurance" },
       { href: "/dues-followups", icon: ClipboardList, label: "Dues & Follow-Ups" },
-      { href: "/expenses", icon: Wallet, label: "Expenses" },
+      { href: "/expenses", icon: Wallet, label: "Expenses", moduleCode: "expenses" },
     ],
   },
   {
     label: "Insights",
     items: [
-      { href: "/analytics", icon: BarChart3, label: "Analytics" },
-      { href: "/reports", icon: FileBarChart, label: "Reports" },
+      { href: "/analytics", icon: BarChart3, label: "Analytics", moduleCode: "analytics" },
+      { href: "/reports", icon: FileBarChart, label: "Reports", moduleCode: "reports" },
       { href: "/data", icon: DatabaseZap, label: "Data Export" },
-      { href: "/license-tracker", icon: ScrollText, label: "Licenses" },
+      { href: "/license-tracker", icon: ScrollText, label: "Licenses", moduleCode: "license-tracker" },
       { href: "/staff", icon: UserCog, label: "Staff", adminOnly: true },
     ],
   },
@@ -86,9 +87,10 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
 interface SidebarProps {
   user: { fullName: string; role: string }
   hospitalName?: string
+  enabledModules?: string[]
 }
 
-export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
+export function Sidebar({ user, hospitalName = "Docsile HMS", enabledModules = [] }: SidebarProps) {
   const pathname = usePathname()
   const [visible, setVisible] = useState(false)
   const sidebarRef = useRef<HTMLDivElement>(null)
@@ -165,9 +167,12 @@ export function Sidebar({ user, hospitalName = "Docsile HMS" }: SidebarProps) {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
           {NAV_SECTIONS.map((section) => {
-            const visibleItems = section.items.filter(
-              (item) => !item.adminOnly || user.role === "ADMIN"
-            )
+            const visibleItems = section.items.filter((item) => {
+              if (item.adminOnly && user.role !== "ADMIN") return false
+              if (item.moduleCode && !enabledModules.includes(item.moduleCode))
+                return false
+              return true
+            })
             if (visibleItems.length === 0) return null
 
             return (

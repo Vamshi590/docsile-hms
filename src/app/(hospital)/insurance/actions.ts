@@ -127,8 +127,14 @@ export async function getInsuranceClaims(filters: {
   const { search, statuses, insuranceCompany, dateFrom, dateTo, showClosed } = filters
   const supabase = await createClient()
 
-  // Build filtered query
-  let query = supabase.from("InsuranceClaim").select("*")
+  // Narrow select to the columns the list view actually displays. The detail
+  // view (InsuranceClaimDetail) re-fetches by id via getInsuranceClaimById,
+  // so it always gets the full row including the heavy JSON/text columns
+  // (statusHistory, notes, packageInclusions, rejection/query notes, etc.).
+  // Note: single string literal — Supabase's TS infers row type from it.
+  let query = supabase
+    .from("InsuranceClaim")
+    .select("id, claimNumber, patientName, ipNumber, insuranceCompanyName, tpaName, totalBillAmount, preauthAmount, enhancementApproved, totalApprovedAmount, finalSettledAmount, patientBalance, status, createdAt")
 
   if (!showClosed) {
     query = query.neq("status", "CLOSED")
