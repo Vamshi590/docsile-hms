@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useRef } from "react"
 import { Settings, LogOut, Hospital, ChevronDown } from "lucide-react"
 import { cn, getInitials } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -24,6 +25,7 @@ interface TopNavBarProps {
 
 export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps) {
   const pathname = usePathname()
+  const logoutFormRef = useRef<HTMLFormElement>(null)
 
   function isActive(href: string, exact = false) {
     if (exact) return pathname === href
@@ -37,6 +39,8 @@ export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps
   })
 
   return (
+    <>
+    <form ref={logoutFormRef} action="/api/logout" method="POST" className="hidden" />
     <header className="z-40 shrink-0 bg-zinc-900 flex items-end">
       {/* Hospital name */}
       <div className="flex items-center gap-2.5 px-4 shrink-0 w-52 h-10 border-r border-white/10">
@@ -99,20 +103,17 @@ export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <form action="/api/logout" method="POST" className="w-full">
-                <button
-                  type="submit"
-                  className="flex items-center gap-2 w-full text-destructive focus:outline-none"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Logout
-                </button>
-              </form>
+            <DropdownMenuItem
+              onSelect={() => logoutFormRef.current?.submit()}
+              className="text-destructive focus:text-destructive cursor-pointer gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>
+    </>
   )
 }
