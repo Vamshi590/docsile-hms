@@ -1,6 +1,7 @@
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/layout/Sidebar"
+import { TopNavBar } from "@/components/layout/TopNavBar"
 import { BillingBanner } from "@/components/layout/BillingBanner"
 import { getSession } from "@/lib/auth"
 import { getHospitalProfile } from "@/lib/db"
@@ -13,7 +14,7 @@ export default async function HospitalLayout({
 }: {
   children: React.ReactNode
 }) {
-  const [user, { hospitalName }] = await Promise.all([
+  const [user, { hospitalName, hospital }] = await Promise.all([
     getSession(),
     getHospitalProfile(),
   ])
@@ -28,7 +29,6 @@ export default async function HospitalLayout({
   try {
     config = await getAdminConfig()
   } catch {
-    // If admin is unreachable on cold boot, show an error page.
     return (
       <div className="min-h-screen flex items-center justify-center p-8 text-center">
         <div>
@@ -46,14 +46,30 @@ export default async function HospitalLayout({
     redirect(`/_module-disabled?module=${mod}`)
   }
 
+  let navStyle: "side" | "top" = "side"
+  if (hospital?.settings) {
+    try {
+      const parsed = JSON.parse(hospital.settings) as { navStyle?: unknown }
+      if (parsed?.navStyle === "top") navStyle = "top"
+    } catch {
+      // ignore malformed JSON — default to sidebar
+    }
+  }
+
+  const navProps = {
+    user,
+    hospitalName,
+    enabledModules: config.enabledModules,
+  }
+
   return (
     <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
       <BillingBanner message={config.billing.bannerMessage} />
-      <Sidebar
-        user={user}
-        hospitalName={hospitalName}
-        enabledModules={config.enabledModules}
-      />
+      {navStyle === "top" ? (
+        <TopNavBar {...navProps} />
+      ) : (
+        <Sidebar {...navProps} />
+      )}
       <main className="h-full overflow-y-auto flex-1">
         <div className="min-h-full px-4 pt-6 pb-8">{children}</div>
       </main>
