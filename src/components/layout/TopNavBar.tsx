@@ -39,7 +39,7 @@ export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps
   return (
     <header className="z-40 shrink-0 bg-zinc-900 flex items-end">
       {/* Hospital name */}
-      <div className="flex items-center gap-2.5 px-4 shrink-0 w-52 h-14 border-r border-white/10">
+      <div className="flex items-center gap-2.5 px-4 shrink-0 w-52 h-10 border-r border-white/10">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary shadow-sm">
           <Hospital className="h-4 w-4 text-white" />
         </div>
@@ -49,7 +49,7 @@ export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps
       </div>
 
       {/* Scrollable tab strip — items aligned to bottom so active tab's rounded-t corners show */}
-      <nav className="flex-1 overflow-x-auto scrollbar-hide flex items-end px-1 h-14">
+      <nav className="flex-1 overflow-x-auto scrollbar-hide flex items-end px-1 h-10">
         {allItems.map((item) => {
           const active = isActive(item.href, item.exact)
           return (
@@ -57,7 +57,7 @@ export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium whitespace-nowrap rounded-t-lg mx-0.5 transition-colors duration-150",
+                "flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium whitespace-nowrap rounded-t-lg mx-0.5 transition-colors duration-150",
                 active
                   ? "bg-white text-zinc-900 shadow-sm"
                   : "text-white/60 hover:text-white hover:bg-white/10"
@@ -71,11 +71,11 @@ export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps
       </nav>
 
       {/* User dropdown */}
-      <div className="shrink-0 px-3 h-14 border-l border-white/10 flex items-center">
+      <div className="shrink-0 px-3 h-10 border-l border-white/10 flex items-center">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-2 h-9 px-2 text-white hover:bg-white/10 hover:text-white">
-              <Avatar className="h-7 w-7">
+            <Button variant="ghost" size="sm" className="gap-2 h-7 px-2 text-white hover:bg-white/10 hover:text-white">
+              <Avatar className="h-6 w-6">
                 <AvatarFallback className="text-[10px] bg-white/15 text-white font-bold">
                   {getInitials(user.fullName)}
                 </AvatarFallback>
