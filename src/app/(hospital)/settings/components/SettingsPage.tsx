@@ -46,6 +46,7 @@ import {
   deleteServiceTemplate,
   getHospitalProfile,
   updateHospitalProfile,
+  updateNavStyle,
   getUsers,
   createUser,
   toggleUserActive,
@@ -69,9 +70,14 @@ import {
   createPredefinedSurgery,
   updatePredefinedSurgery,
   deletePredefinedSurgery,
+  getPredefinedDischarges,
+  createPredefinedDischarge,
+  updatePredefinedDischarge,
+  deletePredefinedDischarge,
 } from "../actions"
 import type { ServiceTemplate, PackageInclusion } from "@/lib/types"
-import { EditableCombobox } from "@/components/ui/combobox"
+import { EditableCombobox, EditableComboboxWithAdd } from "@/components/ui/combobox"
+import { getDropdownOptions, addDropdownOption } from "@/app/(hospital)/patients/actions"
 
 const SERVICE_CATEGORIES = ["Consultation", "Diagnostic", "Procedure", "Optical", "Other"]
 const USER_ROLES = ["ADMIN", "DOCTOR", "RECEPTIONIST", "OPTOMETRIST", "NURSE"]
@@ -199,6 +205,7 @@ type HospitalProfile = {
   registrationFeeEnabled?: boolean
   registrationFeeAmount?: number
   registrationFeeDefaultChecked?: boolean
+  settings?: string | null
 }
 
 type User = {
@@ -264,6 +271,7 @@ export default function SettingsPage({
                   { value: "medicines",      label: "Medicine Templates" },
                   { value: "packages",       label: "IPD Packages" },
                   { value: "surgeries",      label: "Predefined Surgeries" },
+                  { value: "discharges",     label: "Discharge Templates" },
                   { value: "hospital",       label: "Hospital Profile" },
                   { value: "print-defaults", label: "Print Defaults" },
                   { value: "users",          label: "Users" },
@@ -285,6 +293,7 @@ export default function SettingsPage({
           <TabsContent value="medicines"><MedicinesTab /></TabsContent>
           <TabsContent value="packages"><PackagesTab /></TabsContent>
           <TabsContent value="surgeries"><SurgeriesTab /></TabsContent>
+          <TabsContent value="discharges"><DischargesTab /></TabsContent>
           <TabsContent value="hospital"><HospitalTab /></TabsContent>
           <TabsContent value="print-defaults"><PrintDefaultsTab /></TabsContent>
           <TabsContent value="users"><UsersTab /></TabsContent>
@@ -688,6 +697,8 @@ function HospitalTab() {
   const [regFeeEnabled, setRegFeeEnabled] = useState(false)
   const [regFeeAmount, setRegFeeAmount] = useState("")
   const [regFeeDefaultChecked, setRegFeeDefaultChecked] = useState(true)
+  const [navStyle, setNavStyle] = useState<"side" | "top">("side")
+  const [navStyleSaving, setNavStyleSaving] = useState(false)
 
   useEffect(() => {
     getHospitalProfile().then(p => {
@@ -703,6 +714,12 @@ function HospitalTab() {
         setRegFeeEnabled(hp.registrationFeeEnabled ?? false)
         setRegFeeAmount(hp.registrationFeeAmount != null ? String(hp.registrationFeeAmount) : "")
         setRegFeeDefaultChecked(hp.registrationFeeDefaultChecked ?? true)
+        if (hp.settings) {
+          try {
+            const s = JSON.parse(hp.settings) as { navStyle?: unknown }
+            if (s?.navStyle === "top") setNavStyle("top")
+          } catch { /* ignore */ }
+        }
       }
       setLoading(false)
     })
@@ -726,6 +743,15 @@ function HospitalTab() {
     setSaving(false)
     if (result.success) toast.success("Hospital profile updated")
     else toast.error(result.error ?? "Failed to update")
+  }
+
+  async function handleNavStyleChange(style: "side" | "top") {
+    setNavStyle(style)
+    setNavStyleSaving(true)
+    const result = await updateNavStyle(style)
+    setNavStyleSaving(false)
+    if (result.success) toast.success("Navigation style updated — takes effect on next page load")
+    else toast.error(result.error ?? "Failed to update navigation style")
   }
 
   if (loading) return <div className="space-y-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
@@ -809,6 +835,42 @@ function HospitalTab() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="border-t border-border pt-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Navigation Style</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Choose how the navigation is displayed across the app.</p>
+          </div>
+          <div className="flex items-center gap-0">
+            <button
+              type="button"
+              disabled={navStyleSaving}
+              onClick={() => handleNavStyleChange("side")}
+              className={cn(
+                "flex items-center gap-2 px-4 h-9 text-sm font-medium border transition-colors rounded-l-lg rounded-r-none focus:outline-none",
+                navStyle === "side"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-muted-foreground border-border hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              Sidebar
+            </button>
+            <button
+              type="button"
+              disabled={navStyleSaving}
+              onClick={() => handleNavStyleChange("top")}
+              className={cn(
+                "flex items-center gap-2 px-4 h-9 text-sm font-medium border-t border-b border-r transition-colors rounded-r-lg rounded-l-none focus:outline-none",
+                navStyle === "top"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-muted-foreground border-border hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              Top Bar
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">Takes effect on next page load.</p>
         </div>
 
         <div className="border-t border-border pt-4 flex justify-end">
@@ -2984,6 +3046,7 @@ function SurgeryFormDialog({
   const [operationProcedure, setOperationProcedure] = useState("")
   const [operationDetails, setOperationDetails] = useState("")
   const [saving, setSaving] = useState(false)
+  const [doctorOptions, setDoctorOptions] = useState<string[]>([])
 
   useEffect(() => {
     if (!open) return
@@ -3000,7 +3063,22 @@ function SurgeryFormDialog({
       setDoctorNames([""]); setOnDutyDoctors([""])
       setProvisionDiagnosis(""); setOperationProcedure(""); setOperationDetails("")
     }
+    // Doctor options come from the shared DropdownOption table (fieldName="doctorName"),
+    // same source the Patient Registration and other flows use.
+    getDropdownOptions("doctorName").then(setDoctorOptions).catch(() => setDoctorOptions([]))
   }, [open, editItem])
+
+  async function handleAddDoctorOption(v: string) {
+    const trimmed = v.trim()
+    if (!trimmed) return
+    const res = await addDropdownOption("doctorName", trimmed)
+    if (res.success) {
+      setDoctorOptions(prev => prev.includes(trimmed) ? prev : [...prev, trimmed].sort((a, b) => a.localeCompare(b)))
+      toast.success("Doctor added to options")
+    } else {
+      toast.error("Could not add doctor option")
+    }
+  }
 
   function updateRow(rows: string[], setter: (v: string[]) => void, i: number, v: string) {
     setter(rows.map((x, j) => (j === i ? v : x)))
@@ -3055,7 +3133,15 @@ function SurgeryFormDialog({
             <div className="space-y-2 mt-1">
               {doctorNames.map((d, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <Input value={d} onChange={e => updateRow(doctorNames, setDoctorNames, i, e.target.value)} placeholder={`Doctor ${i + 1}`} />
+                  <div className="flex-1">
+                    <EditableComboboxWithAdd
+                      options={doctorOptions}
+                      value={d}
+                      onValueChange={v => updateRow(doctorNames, setDoctorNames, i, v)}
+                      onAddOption={handleAddDoctorOption}
+                      placeholder={`Doctor ${i + 1}`}
+                    />
+                  </div>
                   <Button type="button" size="sm" variant="ghost" onClick={() => removeRow(doctorNames, setDoctorNames, i)} disabled={doctorNames.length === 1}>−</Button>
                 </div>
               ))}
@@ -3068,7 +3154,15 @@ function SurgeryFormDialog({
             <div className="space-y-2 mt-1">
               {onDutyDoctors.map((d, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <Input value={d} onChange={e => updateRow(onDutyDoctors, setOnDutyDoctors, i, e.target.value)} placeholder={`On-duty doctor ${i + 1}`} />
+                  <div className="flex-1">
+                    <EditableComboboxWithAdd
+                      options={doctorOptions}
+                      value={d}
+                      onValueChange={v => updateRow(onDutyDoctors, setOnDutyDoctors, i, v)}
+                      onAddOption={handleAddDoctorOption}
+                      placeholder={`On-duty doctor ${i + 1}`}
+                    />
+                  </div>
                   <Button type="button" size="sm" variant="ghost" onClick={() => removeRow(onDutyDoctors, setOnDutyDoctors, i)} disabled={onDutyDoctors.length === 1}>−</Button>
                 </div>
               ))}
@@ -3087,6 +3181,350 @@ function SurgeryFormDialog({
           <div>
             <Label>Operation details</Label>
             <Textarea value={operationDetails} onChange={e => setOperationDetails(e.target.value)} rows={3} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Predefined Discharges Tab ───────────────────────────────────────────────
+
+type DischargeRow = {
+  id: string
+  name: string
+  dischargeDiagnosis: string | null
+  conditionAtDischarge: string | null
+  dischargeMedications: string | null
+  followUpInstructions: string | null
+  isActive: boolean
+  sortOrder: number
+}
+
+function DischargesTab() {
+  const [discharges, setDischarges] = useState<DischargeRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [showInactive, setShowInactive] = useState(false)
+  const [editItem, setEditItem] = useState<DischargeRow | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    const data = await getPredefinedDischarges(showInactive)
+    setDischarges(data as DischargeRow[])
+    setLoading(false)
+  }, [showInactive])
+
+  useEffect(() => { fetch() }, [fetch])
+
+  const filtered = discharges.filter(d => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return d.name.toLowerCase().includes(q)
+  })
+
+  async function handleDelete() {
+    if (!deleteId) return
+    const result = await deletePredefinedDischarge(deleteId)
+    if (result.success) {
+      toast.success("Discharge template deleted")
+      setDeleteId(null)
+      await fetch()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search discharge templates..."
+          className="max-w-sm"
+        />
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Checkbox checked={showInactive} onCheckedChange={v => setShowInactive(v === true)} />
+          Show inactive
+        </label>
+        <div className="ml-auto">
+          <Button size="sm" onClick={() => setAddOpen(true)}>+ Add Discharge Template</Button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-white overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="w-48">Name</TableHead>
+              <TableHead className="w-28">Condition</TableHead>
+              <TableHead>Discharge Diagnosis</TableHead>
+              <TableHead>Prescription</TableHead>
+              <TableHead className="w-28">Follow-up</TableHead>
+              <TableHead className="w-28 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <TableRow key={i}><TableCell colSpan={6}><Skeleton className="h-5 w-full" /></TableCell></TableRow>
+              ))
+            ) : filtered.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-10 text-sm text-muted-foreground">
+                  No discharge templates {search ? "match your search" : "yet"}.
+                </TableCell>
+              </TableRow>
+            ) : filtered.map(d => {
+              // Parse prescription JSON to get medicine count
+              let rxCount = 0
+              try {
+                const rxParsed = JSON.parse(d.dischargeMedications ?? "[]")
+                if (Array.isArray(rxParsed)) rxCount = rxParsed.filter((r: { medicine?: string }) => r.medicine?.trim()).length
+              } catch { /* plain text fallback */ }
+              return (
+                <TableRow key={d.id} className={d.isActive ? "" : "opacity-50"}>
+                  <TableCell className="font-medium">{d.name}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{d.conditionAtDischarge || "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground max-w-[260px] truncate" title={d.dischargeDiagnosis ?? ""}>
+                    {d.dischargeDiagnosis || "—"}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {rxCount > 0
+                      ? <span className="inline-flex items-center gap-1 text-xs font-medium text-primary bg-primary/8 px-2 py-0.5 rounded-full">{rxCount} med{rxCount !== 1 ? "s" : ""}</span>
+                      : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground truncate max-w-[180px]" title={d.followUpInstructions ?? ""}>
+                    {d.followUpInstructions ? d.followUpInstructions.split("\n")[0] : "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => setEditItem(d)}>Edit</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDeleteId(d.id)} className="text-destructive">Delete</Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      <DischargeFormDialog
+        open={addOpen || !!editItem}
+        onClose={() => { setAddOpen(false); setEditItem(null) }}
+        editItem={editItem}
+        onSaved={async () => { setAddOpen(false); setEditItem(null); await fetch() }}
+      />
+
+      <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete discharge template?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The template will be deactivated. Existing in-patient records that referenced
+              this template at discharge time are not affected (the saved discharge text is
+              independent — templates are picked at discharge time and the resulting text is
+              persisted directly).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+const DISCHARGE_RX_TIMINGS = [
+  "1-1-1", "1-1-1-1", "1-0-1", "1-0-0", "0-0-1", "0-1-0",
+  "1-1-0", "0-1-1", "SOS", "BD", "TDS", "QID", "OD",
+  "Tapering", "Weekly", "Monthly",
+]
+const DISCHARGE_RX_DAYS = [
+  "1", "3", "5", "7", "10", "14", "21", "28", "30", "45", "60", "90", "Continuous",
+]
+
+type DischargeRxRow = { medicine: string; days: string; timing: string; note: string }
+const EMPTY_RX_ROW: DischargeRxRow = { medicine: "", days: "", timing: "", note: "" }
+
+function DischargeFormDialog({
+  open, onClose, editItem, onSaved,
+}: {
+  open: boolean
+  onClose: () => void
+  editItem: DischargeRow | null
+  onSaved: () => void
+}) {
+  const [name, setName] = useState("")
+  const [dischargeDiagnosis, setDischargeDiagnosis] = useState("")
+  const [conditionAtDischarge, setConditionAtDischarge] = useState("")
+  const [rxRows, setRxRows] = useState<DischargeRxRow[]>([{ ...EMPTY_RX_ROW }])
+  const [followUpInstructions, setFollowUpInstructions] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [medicineNames, setMedicineNames] = useState<string[]>([])
+
+  useEffect(() => {
+    getMedicineMasterList(false).then(d => setMedicineNames(d.map(m => m.name)))
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    if (editItem) {
+      setName(editItem.name)
+      setDischargeDiagnosis(editItem.dischargeDiagnosis ?? "")
+      setConditionAtDischarge(editItem.conditionAtDischarge ?? "")
+      setFollowUpInstructions(editItem.followUpInstructions ?? "")
+      // dischargeMedications is stored as JSON array of rx rows
+      try {
+        const parsed = JSON.parse(editItem.dischargeMedications ?? "[]")
+        setRxRows(Array.isArray(parsed) && parsed.length > 0 ? parsed : [{ ...EMPTY_RX_ROW }])
+      } catch {
+        setRxRows([{ ...EMPTY_RX_ROW }])
+      }
+    } else {
+      setName("")
+      setDischargeDiagnosis("")
+      setConditionAtDischarge("")
+      setRxRows([{ ...EMPTY_RX_ROW }])
+      setFollowUpInstructions("")
+    }
+  }, [open, editItem])
+
+  function updateRx(i: number, field: keyof DischargeRxRow, value: string) {
+    setRxRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+  }
+  function addRx() { setRxRows(prev => [...prev, { ...EMPTY_RX_ROW }]) }
+  function removeRx(i: number) { setRxRows(prev => prev.filter((_, idx) => idx !== i)) }
+
+  async function handleSave() {
+    if (!name.trim()) { toast.error("Template name is required"); return }
+    setSaving(true)
+    const filledRx = rxRows.filter(r => r.medicine.trim())
+    const payload = {
+      name: name.trim(),
+      dischargeDiagnosis: dischargeDiagnosis.trim() || null,
+      conditionAtDischarge: conditionAtDischarge.trim() || null,
+      dischargeMedications: filledRx.length > 0 ? JSON.stringify(filledRx) : null,
+      followUpInstructions: followUpInstructions.trim() || null,
+    }
+    const result = editItem
+      ? await updatePredefinedDischarge(editItem.id, payload)
+      : await createPredefinedDischarge(payload)
+    setSaving(false)
+    if (result.success) {
+      toast.success(editItem ? "Discharge template updated" : "Discharge template created")
+      onSaved()
+    } else {
+      toast.error(result.error)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{editItem ? "Edit Discharge Template" : "Add Discharge Template"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <Label>Template name *</Label>
+            <Input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Phaco standard post-op"
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-medium">Condition at Discharge</Label>
+            <Select value={conditionAtDischarge} onValueChange={setConditionAtDischarge}>
+              <SelectTrigger className="bg-white">
+                <SelectValue placeholder="Select condition" />
+              </SelectTrigger>
+              <SelectContent>
+                {["Improved", "Stable", "Unchanged", "Worsened", "Recovered"].map(c => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs font-medium">Discharge Diagnosis</Label>
+            <Textarea
+              value={dischargeDiagnosis}
+              onChange={e => setDischargeDiagnosis(e.target.value)}
+              rows={3}
+              placeholder="Final diagnosis at discharge"
+            />
+          </div>
+          <div className="rounded-xl border border-border bg-gray-50/50">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Discharge Prescription</Label>
+              <Button size="sm" variant="secondary" type="button" onClick={addRx}>
+                + Add Medicine
+              </Button>
+            </div>
+            <div className="p-3 space-y-2">
+              {rxRows.map((row, i) => (
+                <div key={i} className="rounded-lg border border-border bg-white p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-muted-foreground font-medium">Medicine {i + 1}</span>
+                    {rxRows.length > 1 && (
+                      <Button variant="ghost" size="sm" type="button" onClick={() => removeRx(i)}
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive">
+                        ×
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 1fr 1fr 2fr" }}>
+                    <EditableCombobox
+                      options={medicineNames}
+                      value={row.medicine}
+                      onValueChange={v => updateRx(i, "medicine", v)}
+                      placeholder="Medicine name"
+                    />
+                    <EditableCombobox
+                      options={DISCHARGE_RX_DAYS}
+                      value={row.days}
+                      onValueChange={v => updateRx(i, "days", v)}
+                      placeholder="Days"
+                    />
+                    <EditableCombobox
+                      options={DISCHARGE_RX_TIMINGS}
+                      value={row.timing}
+                      onValueChange={v => updateRx(i, "timing", v)}
+                      placeholder="Timing"
+                    />
+                    <Input
+                      value={row.note}
+                      onChange={e => updateRx(i, "note", e.target.value)}
+                      placeholder="Note (optional)"
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs font-medium">Follow-up Instructions</Label>
+            <Textarea
+              value={followUpInstructions}
+              onChange={e => setFollowUpInstructions(e.target.value)}
+              rows={3}
+              placeholder="Return on X date, watch for Y, diet, precautions..."
+            />
           </div>
         </div>
         <DialogFooter>
