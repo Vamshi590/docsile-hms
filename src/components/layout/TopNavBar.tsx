@@ -37,7 +37,7 @@ export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps
   })
 
   return (
-    <header className="sticky top-0 z-40 h-14 border-b border-border/60 bg-background flex items-center shrink-0">
+    <header className="z-40 h-14 border-b border-border/60 bg-background flex items-center shrink-0">
       {/* Hospital name */}
       <div className="flex items-center gap-2.5 px-4 shrink-0 w-52 border-r border-border/60 h-full">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary shadow-sm">
@@ -49,7 +49,7 @@ export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps
       </div>
 
       {/* Scrollable tab strip */}
-      <nav className="flex-1 overflow-x-auto scrollbar-none flex items-stretch h-full">
+      <nav className="flex-1 overflow-x-auto scrollbar-hide flex items-stretch h-full">
         {allItems.map((item) => {
           const active = isActive(item.href, item.exact)
           return (
