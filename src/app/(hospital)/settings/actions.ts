@@ -672,6 +672,111 @@ export async function deletePredefinedSurgery(id: string) {
   return { success: true as const }
 }
 
+// ─── Predefined Discharges ───────────────────────────────────────────────────
+
+export async function getPredefinedDischarges(includeInactive: boolean = false) {
+  const supabase = await createClient()
+  let q = supabase
+    .from("PredefinedDischarge")
+    .select("*")
+    .order("sortOrder", { ascending: true })
+    .order("name", { ascending: true })
+  if (!includeInactive) q = q.eq("isActive", true)
+  const { data, error } = await q
+  if (error) {
+    console.error("getPredefinedDischarges error:", error)
+    return []
+  }
+  return data ?? []
+}
+
+export async function createPredefinedDischarge(data: {
+  name: string
+  dischargeDiagnosis?: string | null
+  conditionAtDischarge?: string | null
+  dischargeMedications?: string | null
+  followUpInstructions?: string | null
+  sortOrder?: number
+}) {
+  const user = await requireAuth()
+  if (!data.name?.trim()) {
+    return { success: false as const, error: "Template name is required" }
+  }
+  try {
+    const supabase = await createClient()
+    const now = new Date().toISOString()
+    const { data: row, error } = await supabase
+      .from("PredefinedDischarge")
+      .insert({
+        name: data.name.trim(),
+        dischargeDiagnosis: data.dischargeDiagnosis ?? null,
+        conditionAtDischarge: data.conditionAtDischarge ?? null,
+        dischargeMedications: data.dischargeMedications ?? null,
+        followUpInstructions: data.followUpInstructions ?? null,
+        isActive: true,
+        sortOrder: data.sortOrder ?? 0,
+        createdBy: user.id,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .select("*")
+      .single()
+    if (error) throw error
+    revalidatePath("/settings")
+    return { success: true as const, data: row }
+  } catch (e) {
+    console.error("createPredefinedDischarge error:", e)
+    const msg = (e as { message?: string })?.message
+    return { success: false as const, error: msg ? `Failed to create discharge template: ${msg}` : "Failed to create discharge template" }
+  }
+}
+
+export async function updatePredefinedDischarge(id: string, data: {
+  name?: string
+  dischargeDiagnosis?: string | null
+  conditionAtDischarge?: string | null
+  dischargeMedications?: string | null
+  followUpInstructions?: string | null
+  isActive?: boolean
+  sortOrder?: number
+}) {
+  await requireAuth()
+  try {
+    const supabase = await createClient()
+    const update: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+    if (data.name !== undefined)                 update.name = data.name.trim()
+    if (data.dischargeDiagnosis !== undefined)   update.dischargeDiagnosis = data.dischargeDiagnosis
+    if (data.conditionAtDischarge !== undefined) update.conditionAtDischarge = data.conditionAtDischarge
+    if (data.dischargeMedications !== undefined) update.dischargeMedications = data.dischargeMedications
+    if (data.followUpInstructions !== undefined) update.followUpInstructions = data.followUpInstructions
+    if (data.isActive !== undefined)             update.isActive = data.isActive
+    if (data.sortOrder !== undefined)            update.sortOrder = data.sortOrder
+    const { error } = await supabase.from("PredefinedDischarge").update(update).eq("id", id)
+    if (error) throw error
+    revalidatePath("/settings")
+    return { success: true as const }
+  } catch (e) {
+    console.error("updatePredefinedDischarge error:", e)
+    return { success: false as const, error: "Failed to update discharge template" }
+  }
+}
+
+export async function deletePredefinedDischarge(id: string) {
+  await requireAuth()
+  // Soft delete: sets isActive=false, mirrors deletePredefinedSurgery behavior.
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from("PredefinedDischarge")
+    .update({ isActive: false, updatedAt: new Date().toISOString() })
+    .eq("id", id)
+  if (error) {
+    console.error("deletePredefinedDischarge error:", error)
+    return { success: false as const, error: "Failed to delete discharge template" }
+  }
+  revalidatePath("/settings")
+  return { success: true as const }
+}
+
 // ─── Medicine Master ──────────────────────────────────────────────────────────
 
 export async function getMedicineMasterList(includeInactive = false) {
@@ -821,6 +926,48 @@ export async function saveDefaultPrintConfig(input: DefaultPrintConfig) {
     return { success: true as const }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to save default print config"
+    return { success: false as const, error: msg }
+  }
+}
+
+// ─── Nav Style ────────────────────────────────────────────────────────────────
+
+export async function updateNavStyle(style: "side" | "top") {
+  await requireAuth()
+  const supabase = await createClient()
+  try {
+    const { data: existing } = await supabase
+      .from("HospitalProfile")
+      .select("id, settings")
+      .limit(1)
+      .single()
+    let base: Record<string, unknown> = {}
+    if (existing?.settings) {
+      try { base = JSON.parse(existing.settings) } catch { /* ignore */ }
+    }
+    base.navStyle = style
+    const nextSettings = JSON.stringify(base)
+    const now = new Date().toISOString()
+    if (!existing) {
+      await supabase.from("HospitalProfile").insert({
+        name: "My Hospital",
+        settings: nextSettings,
+        createdAt: now,
+        updatedAt: now,
+      })
+    } else {
+      await supabase
+        .from("HospitalProfile")
+        .update({ settings: nextSettings, updatedAt: now })
+        .eq("id", existing.id)
+    }
+    const { invalidateHospitalCache } = await import("@/lib/db")
+    invalidateHospitalCache()
+    revalidatePath("/settings")
+    revalidatePath("/", "layout")
+    return { success: true as const }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to update navigation style"
     return { success: false as const, error: msg }
   }
 }
