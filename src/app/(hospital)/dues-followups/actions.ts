@@ -30,10 +30,12 @@ export interface FollowUpRecord {
   patientName: string
   uhid: string
   phone: string
+  email: string | null
   followUpDate: string
   doctorName: string
   department: string
   diagnosis: string
+  additionalNotes: string
   lastVisitDate: string
   isOverdue: boolean
 }
@@ -263,7 +265,7 @@ export async function getDues(filters: {
 // ─── Get Follow-Ups ──────────────────────────────────────────────────────────
 
 export async function getFollowUps(filters: {
-  search?: string
+  notesSearch?: string
   type?: "OPD" | "IPD" | "ALL"
   doctor?: string
   department?: string
@@ -274,7 +276,7 @@ export async function getFollowUps(filters: {
   await requireAuth()
   const supabase = await createClient()
 
-  const { search, type = "ALL", doctor, department, includeOverdue = false } = filters
+  const { notesSearch, type = "ALL", doctor, department, includeOverdue = false } = filters
 
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -295,15 +297,13 @@ export async function getFollowUps(filters: {
   if (type === "ALL" || type === "OPD") {
     let query = supabase
       .from("Prescription")
-      .select("*, patient:Patient!patientId(patientId, firstName, lastName, phone)")
+      .select("*, patient:Patient!patientId(patientId, firstName, lastName, phone, email)")
       .gte("followUpDate", dateFrom.toISOString())
       .lte("followUpDate", dateTo.toISOString())
       .order("followUpDate", { ascending: true })
 
-    if (search) {
-      query = query.or(
-        `patient.firstName.ilike.%${search}%,patient.lastName.ilike.%${search}%,patient.phone.ilike.%${search}%,patient.patientId.ilike.%${search}%`
-      )
+    if (notesSearch) {
+      query = query.ilike("additionalNotes", `%${notesSearch}%`)
     }
     if (doctor) query = query.ilike("doctorName", `%${doctor}%`)
     if (department) query = query.eq("department", department)
@@ -311,7 +311,7 @@ export async function getFollowUps(filters: {
     const { data: prescriptions } = await query
 
     for (const rx of prescriptions ?? []) {
-      const patient = rx.patient as { patientId: string; firstName: string; lastName: string; phone: string }
+      const patient = rx.patient as { patientId: string; firstName: string; lastName: string; phone: string; email: string | null }
       const fuDate = new Date(rx.followUpDate!)
       followUps.push({
         id: rx.id,
@@ -320,10 +320,12 @@ export async function getFollowUps(filters: {
         patientName: [patient.firstName, patient.lastName].filter(Boolean).join(" "),
         uhid: patient.patientId,
         phone: patient.phone,
+        email: patient.email ?? null,
         followUpDate: fuDate.toISOString(),
         doctorName: rx.doctorName ?? "—",
         department: rx.department ?? "—",
         diagnosis: rx.diagnosis ?? "—",
+        additionalNotes: rx.additionalNotes ?? "",
         lastVisitDate: new Date(rx.prescriptionDate).toISOString(),
         isOverdue: fuDate < today,
       })
@@ -334,15 +336,13 @@ export async function getFollowUps(filters: {
   if (type === "ALL" || type === "IPD") {
     let query = supabase
       .from("InPatient")
-      .select("*, patient:Patient!patientId(patientId)")
+      .select("*, patient:Patient!patientId(patientId, firstName, lastName, phone, email)")
       .gte("followUpDate", dateFrom.toISOString())
       .lte("followUpDate", dateTo.toISOString())
       .order("followUpDate", { ascending: true })
 
-    if (search) {
-      query = query.or(
-        `name.ilike.%${search}%,phone.ilike.%${search}%,ipNumber.ilike.%${search}%`
-      )
+    if (notesSearch) {
+      query = query.ilike("dischargeNotes", `%${notesSearch}%`)
     }
     if (doctor) query = query.ilike("doctorNames", `%${doctor}%`)
     if (department) query = query.eq("department", department)
@@ -350,7 +350,7 @@ export async function getFollowUps(filters: {
     const { data: inpatients } = await query
 
     for (const ip of inpatients ?? []) {
-      const patient = ip.patient as { patientId: string }
+      const patient = ip.patient as { patientId: string; firstName: string; lastName: string; phone: string; email: string | null }
       const fuDate = new Date(ip.followUpDate!)
       let doctorName = "—"
       try {
@@ -367,10 +367,12 @@ export async function getFollowUps(filters: {
         patientName: ip.name,
         uhid: patient.patientId,
         phone: ip.phone,
+        email: patient.email ?? null,
         followUpDate: fuDate.toISOString(),
         doctorName,
         department: ip.department ?? "—",
         diagnosis: ip.provisionDiagnosis ?? ip.operationName ?? "—",
+        additionalNotes: ip.dischargeNotes ?? "",
         lastVisitDate: new Date(ip.dischargeDate ?? ip.admissionDate).toISOString(),
         isOverdue: fuDate < today,
       })
@@ -540,4 +542,81 @@ export async function getDepartmentList() {
 
   const uniqueDepts = [...new Set((departments ?? []).map((d) => d.department!))]
   return uniqueDepts.filter(Boolean).sort()
+}
+
+// ─── Get Available Email Templates from Sitha AI ────────────────────────────
+
+export async function getAvailableTemplates(): Promise<Array<{code: string; name: string}>> {
+  await requireAuth()
+
+  const sithaUrl = process.env.SITHA_API_URL
+  const sithaKey = process.env.SITHA_API_KEY
+
+  if (!sithaUrl || !sithaKey) return []
+
+  try {
+    const res = await fetch(`${sithaUrl}/api/v1/templates`, {
+      headers: { Authorization: `Bearer ${sithaKey}` },
+      next: { revalidate: 60 },
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    return data.templates ?? []
+  } catch {
+    return []
+  }
+}
+
+// ─── Get Hospital Display Name ────────────────────────────────────────────────
+
+export async function getHospitalDisplayName(): Promise<string> {
+  await requireAuth()
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("HospitalProfile")
+    .select("displayName, name")
+    .limit(1)
+    .maybeSingle()
+  return (data as { displayName?: string; name?: string } | null)?.displayName
+    ?? (data as { displayName?: string; name?: string } | null)?.name
+    ?? "Hospital"
+}
+
+// ─── Send Patient Email via Sitha AI ─────────────────────────────────────────
+
+export async function sendPatientEmail(input: {
+  toEmail: string
+  toName: string
+  templateCode: string
+  variables: Record<string, string>
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAuth()
+
+  const sithaUrl = process.env.SITHA_API_URL
+  const sithaKey = process.env.SITHA_API_KEY
+
+  if (!sithaUrl || !sithaKey) {
+    return { ok: false, error: "Email service not configured" }
+  }
+
+  try {
+    const res = await fetch(`${sithaUrl}/api/v1/email/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sithaKey}`,
+      },
+      body: JSON.stringify({
+        templateCode: input.templateCode,
+        to: { email: input.toEmail, name: input.toName },
+        variables: input.variables,
+      }),
+    })
+
+    const data = await res.json()
+    if (!res.ok) return { ok: false, error: data.error ?? "Email failed" }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" }
+  }
 }

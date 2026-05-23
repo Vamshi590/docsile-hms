@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
-import { CalendarClock } from "lucide-react"
+import { CalendarClock, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FilterBar, SearchInput } from "@/components/layout/header"
@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { WhatsAppButton } from "./WhatsAppButton"
-import { getFollowUps, getDoctorList, getDepartmentList } from "../actions"
+import { SendEmailModal } from "./SendEmailModal"
+import { getFollowUps, getDoctorList, getDepartmentList, getHospitalDisplayName } from "../actions"
 import type { FollowUpRecord, FollowUpsSummary } from "../actions"
 import { formatDateLong } from "@/lib/utils"
 
@@ -25,7 +26,7 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
     todayCount: 0, tomorrowCount: 0, totalCount: 0, overdueCount: 0,
   })
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState("")
+  const [notesSearch, setNotesSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<"ALL" | "OPD" | "IPD">("ALL")
   const [doctorFilter, setDoctorFilter] = useState("")
   const [departmentFilter, setDepartmentFilter] = useState("")
@@ -35,18 +36,21 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
 
   const [doctors, setDoctors] = useState<string[]>([])
   const [departments, setDepartments] = useState<string[]>([])
+  const [emailTarget, setEmailTarget] = useState<FollowUpRecord | null>(null)
+  const [hospitalName, setHospitalName] = useState("Hospital")
 
   // Load filter options once
   useEffect(() => {
     getDoctorList().then(setDoctors)
     getDepartmentList().then(setDepartments)
+    getHospitalDisplayName().then(setHospitalName)
   }, [])
 
   const loadFollowUps = useCallback(async () => {
     setLoading(true)
     try {
       const result = await getFollowUps({
-        search: search.trim() || undefined,
+        notesSearch: notesSearch.trim() || undefined,
         type: typeFilter,
         doctor: doctorFilter || undefined,
         department: departmentFilter || undefined,
@@ -60,7 +64,7 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
       toast.error("Failed to load follow-ups")
     }
     setLoading(false)
-  }, [search, typeFilter, doctorFilter, departmentFilter, dateFrom, dateTo, includeOverdue])
+  }, [notesSearch, typeFilter, doctorFilter, departmentFilter, dateFrom, dateTo, includeOverdue])
 
   useEffect(() => { loadFollowUps() }, [loadFollowUps])
 
@@ -91,10 +95,10 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
       <FilterBar className="top-16">
         <div className="flex items-center gap-2.5 flex-wrap">
           <SearchInput
-            value={search}
-            onChange={setSearch}
+            value={notesSearch}
+            onChange={setNotesSearch}
             onSubmit={loadFollowUps}
-            placeholder="Search name, phone, ID..."
+            placeholder="Search by notes..."
             className="w-56"
           />
           <div className="filter-divider" />
@@ -186,6 +190,7 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
               <TableHead>Doctor</TableHead>
               <TableHead>Department</TableHead>
               <TableHead>Diagnosis / Reason</TableHead>
+              <TableHead>Additional Notes</TableHead>
               <TableHead>Last Visit</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -194,14 +199,14 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
+                  {Array.from({ length: 9 }).map((_, j) => (
                     <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : followUps.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-16 text-muted-foreground">
                   <CalendarClock className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
                   <div className="font-medium">No follow-ups found</div>
                   <div className="text-xs mt-1">No patients due for follow-up in this period</div>
@@ -243,10 +248,35 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
                     </span>
                   </TableCell>
                   <TableCell>
+                    <span className="text-xs text-muted-foreground line-clamp-1 max-w-48">
+                      {(() => {
+                        const raw = fu.additionalNotes
+                        if (!raw) return "—"
+                        try {
+                          const parsed = JSON.parse(raw)
+                          return (parsed?.notes ?? parsed?.value ?? String(parsed)) || "—"
+                        } catch {
+                          return raw
+                        }
+                      })()}
+                    </span>
+                  </TableCell>
+                  <TableCell>
                     <span className="text-xs text-muted-foreground">{formatDateLong(fu.lastVisitDate)}</span>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center justify-end">
+                    <div className="flex items-center justify-end gap-1">
+                      {fu.email && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          title="Send email"
+                          onClick={() => setEmailTarget(fu)}
+                        >
+                          <Mail className="h-4 w-4" />
+                        </Button>
+                      )}
                       <WhatsAppButton phone={fu.phone} message={getFollowUpWhatsAppMessage(fu)} />
                     </div>
                   </TableCell>
@@ -263,6 +293,14 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
           </div>
         )}
       </div>
+      {emailTarget && (
+        <SendEmailModal
+          record={emailTarget}
+          hospitalName={hospitalName}
+          open={!!emailTarget}
+          onClose={() => setEmailTarget(null)}
+        />
+      )}
     </div>
   )
 }
