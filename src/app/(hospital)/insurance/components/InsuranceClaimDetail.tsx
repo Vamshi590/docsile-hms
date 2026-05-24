@@ -269,7 +269,7 @@ export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: 
       {/* Claim header card */}
       <Card>
         <CardContent className="px-6 py-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-4">
               <Avatar className="h-11 w-11 border border-border">
                 <AvatarFallback className="text-sm font-semibold bg-primary/5">{getInitials(claim.patientName)}</AvatarFallback>
@@ -289,7 +289,7 @@ export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: 
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {transitions.length > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -309,25 +309,30 @@ export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: 
                 <Plus className="h-3.5 w-3.5" /> Patient Payment
               </Button>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline">
-                    <Printer className="h-3.5 w-3.5" /> Print Bill
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handlePrintReceipt("final")}>Final Bill</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handlePrintReceipt("enhancement")}>Enhancement Bill</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handlePrintReceipt("cash")}>Cash Receipt</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* Direct one-click bill buttons — this page exists primarily to
+                  produce these bills, so we surface all three options instead
+                  of hiding them behind a dropdown. */}
+              <div className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 p-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1.5">
+                  <Printer className="h-3 w-3 inline-block mr-1 -mt-0.5" />Print
+                </span>
+                <Button size="sm" variant="ghost" className="h-7 px-2.5 text-xs" onClick={() => handlePrintReceipt("final")}>
+                  Final Bill
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 px-2.5 text-xs" onClick={() => handlePrintReceipt("enhancement")}>
+                  Enhancement
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 px-2.5 text-xs" onClick={() => handlePrintReceipt("cash")}>
+                  Cash Receipt
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Financial summary cards */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
         {[
           { label: "Total Bill", value: formatCurrency(claim.totalBillAmount), color: "text-foreground" },
           { label: "Preauth", value: formatCurrency(claim.preauthAmount), color: "text-blue-600" },
@@ -345,9 +350,9 @@ export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: 
       </div>
 
       {/* Main content: Tabs (left) + Timeline (right) */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Tabs */}
-        <div className="col-span-2">
+        <div className="lg:col-span-2">
           <Tabs defaultValue="overview">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -360,7 +365,7 @@ export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: 
               <Card>
                 <CardContent className="p-5">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Patient Information</p>
-                  <div className="grid grid-cols-3 gap-y-3 gap-x-6 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-6 text-sm">
                     {[
                       ["Patient Name", claim.patientName],
                       ["IP Number", claim.ipNumber],
@@ -426,7 +431,7 @@ export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: 
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-y-3 gap-x-6 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-6 text-sm">
                       {[
                         ["Insurance Company", claim.insuranceCompanyName],
                         ["TPA", claim.tpaName ?? "—"],
@@ -622,7 +627,7 @@ export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: 
           <Card>
             <CardContent className="p-5">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Key Dates</p>
-              <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
                 {[
                   ["Preauth Submitted", formatDate(claim.preauthSubmittedDate)],
                   ["Preauth Approved", formatDate(claim.preauthApprovedDate)],

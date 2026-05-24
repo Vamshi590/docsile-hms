@@ -2,19 +2,20 @@
 
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
-import { Eye, Loader2, Plus, Search, Trash2, X, History } from "lucide-react"
+import { Eye, Loader2, Plus, Printer, Search, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { cn, formatCurrency } from "@/lib/utils"
+import { cn, formatCurrency, todayISO } from "@/lib/utils"
 import {
   getPatientWithARReading,
   searchOpticalStock,
   createOpticalBill,
   getOpticalBills,
 } from "../actions"
+import { OpticalBillPrintModal, type OpticalBillForPrint } from "./OpticalBillPrintModal"
 
 type EyeValue = { sph?: string; cyl?: string; axis?: string; va?: string; add?: string; vacph?: string }
 type ReadingData = { re?: EyeValue; le?: EyeValue; pd?: string } | null
@@ -68,11 +69,32 @@ type OpticalBill = {
   billNumber: string
   billDate: Date
   patientName: string
+  patientId?: string | null
   patientPhone: string | null
+  gender?: string | null
+  referredDoctor?: string | null
+  subtotal: number
+  discountPercent: number
+  discountAmount: number
   billAmount: number
   paidAmount: number
+  balanceDue: number
+  paymentMode: string
+  deliveryDate?: Date | null
+  orderNotes?: string | null
   status: string
-  items: { id: string; itemName: string; category: string; quantity: number; amount: number }[]
+  items: {
+    id: string
+    itemName: string
+    category: string
+    eye?: string | null
+    quantity: number
+    mrp: number
+    price: number
+    total: number
+    discountPercent: number
+    amount: number
+  }[]
 }
 
 const PAYMENT_MODES = ["CASH", "UPI", "Card", "NEFT", "Credit"]
@@ -134,13 +156,15 @@ export function BillingTab() {
   const [orderNotes, setOrderNotes] = useState("")
 
   // History
-  const [showHistory, setShowHistory] = useState(false)
   const [bills, setBills] = useState<OpticalBill[]>([])
-  const [historyDateFrom, setHistoryDateFrom] = useState("")
-  const [historyDateTo, setHistoryDateTo] = useState("")
+  const [historyDateFrom, setHistoryDateFrom] = useState(todayISO)
+  const [historyDateTo, setHistoryDateTo] = useState(todayISO)
 
   // Saving
   const [saving, setSaving] = useState(false)
+
+  // Print
+  const [printBill, setPrintBill] = useState<OpticalBillForPrint | null>(null)
 
   // Totals
   const subtotal = billItems.reduce((s, i) => s + i.total, 0)
@@ -152,6 +176,8 @@ export function BillingTab() {
   useEffect(() => {
     setPaidAmount(billAmount > 0 ? billAmount : 0)
   }, [billAmount])
+
+  useEffect(() => { loadHistory() }, [])
 
   // Patient lookup
   async function lookupPatient() {
@@ -312,19 +338,24 @@ export function BillingTab() {
   }
 
   async function loadHistory() {
-    const data = await getOpticalBills({
-      dateFrom: historyDateFrom || undefined,
-      dateTo: historyDateTo || undefined,
-    })
-    setBills(data as OpticalBill[])
+    try {
+      const data = await getOpticalBills({
+        dateFrom: historyDateFrom || undefined,
+        dateTo: historyDateTo || undefined,
+      })
+      setBills((data ?? []) as OpticalBill[])
+    } catch {
+      toast.error("Failed to load bill history")
+    }
   }
 
   const hasReadings = patientInfo && (patientInfo.autoRefractometer || patientInfo.presentPrescription || patientInfo.glassesReading)
 
   return (
-    <div className="grid grid-cols-12 gap-5">
+    <>
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
       {/* ── Left: Bill Form ── */}
-      <div className="col-span-8 space-y-5">
+      <div className="md:col-span-8 space-y-5">
         {/* Patient Lookup */}
         <div className="rounded-xl border border-border bg-card p-4 space-y-3">
           <div className="flex gap-2">
@@ -472,123 +503,183 @@ export function BillingTab() {
 
         {/* Bill Items Table */}
         {billItems.length > 0 && (
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground uppercase">
-                  <th className="text-left px-3 py-2 font-medium">Item</th>
-                  <th className="text-center px-2 py-2 font-medium w-16">Qty</th>
-                  <th className="text-right px-2 py-2 font-medium w-24">Price</th>
-                  <th className="text-right px-2 py-2 font-medium w-16">Disc %</th>
-                  <th className="text-right px-3 py-2 font-medium w-24">Amount</th>
-                  <th className="w-8"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {billItems.map((item, idx) => (
-                  <tr key={idx} className="border-b border-border last:border-0 hover:bg-muted/20">
-                    <td className="px-3 py-2">
-                      <p className="font-medium truncate max-w-[280px]">{item.itemName}</p>
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block rounded-xl border border-border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground uppercase">
+                    <th className="text-left px-3 py-2 font-medium">Item</th>
+                    <th className="text-center px-2 py-2 font-medium w-16">Qty</th>
+                    <th className="text-right px-2 py-2 font-medium w-24">Price</th>
+                    <th className="text-right px-2 py-2 font-medium w-16">Disc %</th>
+                    <th className="text-right px-3 py-2 font-medium w-24">Amount</th>
+                    <th className="w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {billItems.map((item, idx) => (
+                    <tr key={idx} className="border-b border-border last:border-0 hover:bg-muted/20">
+                      <td className="px-3 py-2">
+                        <p className="font-medium truncate max-w-[280px]">{item.itemName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.category}
+                          {item.eye && ` · ${item.eye}`}
+                        </p>
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <Input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
+                          className="h-7 w-14 text-center mx-auto px-1 border-0 shadow-none focus-visible:ring-0 bg-transparent"
+                          min={1}
+                          max={item.availableQty}
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <Input
+                          type="number"
+                          value={item.price}
+                          onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
+                          className="h-7 w-24 text-right ml-auto px-2 border-0 shadow-none focus-visible:ring-0 bg-transparent tabular-nums"
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <Input
+                          type="number"
+                          value={item.discountPercent}
+                          onChange={(e) => updateItem(idx, "discountPercent", parseFloat(e.target.value) || 0)}
+                          className="h-7 w-14 text-right ml-auto px-1 border-0 shadow-none focus-visible:ring-0 bg-transparent tabular-nums"
+                          min={0}
+                          max={100}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold tabular-nums">
+                        {formatCurrency(item.amount)}
+                      </td>
+                      <td className="px-1 py-2">
+                        <button onClick={() => removeItem(idx)} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile card stack */}
+            <div className="md:hidden space-y-2">
+              {billItems.map((item, idx) => (
+                <div key={idx} className="rounded-xl border border-border bg-card p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{item.itemName}</p>
                       <p className="text-xs text-muted-foreground">
                         {item.category}
                         {item.eye && ` · ${item.eye}`}
                       </p>
-                    </td>
-                    <td className="px-2 py-2 text-center">
+                    </div>
+                    <button onClick={() => removeItem(idx)} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive shrink-0">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground">Qty</p>
                       <Input
                         type="number"
                         value={item.quantity}
                         onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
-                        className="h-7 w-14 text-center mx-auto px-1 border-0 shadow-none focus-visible:ring-0 bg-transparent"
+                        className="h-7 w-full text-center px-1 border-gray-200 focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 text-xs"
                         min={1}
                         max={item.availableQty}
                       />
-                    </td>
-                    <td className="px-2 py-2 text-right">
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground">Price (₹)</p>
                       <Input
                         type="number"
                         value={item.price}
                         onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
-                        className="h-7 w-24 text-right ml-auto px-2 border-0 shadow-none focus-visible:ring-0 bg-transparent tabular-nums"
+                        className="h-7 w-full text-right px-2 border-gray-200 focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 tabular-nums text-xs"
                       />
-                    </td>
-                    <td className="px-2 py-2 text-right">
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground">Disc %</p>
                       <Input
                         type="number"
                         value={item.discountPercent}
                         onChange={(e) => updateItem(idx, "discountPercent", parseFloat(e.target.value) || 0)}
-                        className="h-7 w-14 text-right ml-auto px-1 border-0 shadow-none focus-visible:ring-0 bg-transparent tabular-nums"
+                        className="h-7 w-full text-right px-1 border-gray-200 focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 tabular-nums text-xs"
                         min={0}
                         max={100}
                       />
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums">
-                      {formatCurrency(item.amount)}
-                    </td>
-                    <td className="px-1 py-2">
-                      <button onClick={() => removeItem(idx)} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center border-t border-border pt-2">
+                    <span className="text-xs text-muted-foreground">Amount</span>
+                    <span className="font-semibold tabular-nums text-sm">{formatCurrency(item.amount)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
-        {/* History toggle */}
-        <div>
-          <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={() => setShowHistory(!showHistory)}>
-            <History className="h-3.5 w-3.5" />
-            Bill History
-          </Button>
-          {showHistory && (
-            <div className="mt-3 rounded-xl border border-border bg-card p-4 space-y-3">
-              <div className="flex gap-2 items-end">
-                <div className="space-y-1">
-                  <Label className="text-xs">From</Label>
-                  <Input type="date" value={historyDateFrom} onChange={(e) => setHistoryDateFrom(e.target.value)} className="h-8 text-sm w-40" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">To</Label>
-                  <Input type="date" value={historyDateTo} onChange={(e) => setHistoryDateTo(e.target.value)} className="h-8 text-sm w-40" />
-                </div>
-                <Button size="sm" className="h-8" onClick={loadHistory}>Search</Button>
-              </div>
-              {bills.length > 0 ? (
-                <div className="space-y-1 max-h-60 overflow-y-auto">
-                  {bills.map((b) => (
-                    <div key={b.id} className="flex items-center justify-between py-2 px-2 text-sm rounded hover:bg-muted/30">
-                      <div>
-                        <span className="font-mono text-xs text-muted-foreground">{b.billNumber}</span>
-                        <span className="ml-2 font-medium">{b.patientName}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          {new Date(b.billDate).toLocaleDateString("en-IN")}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                          b.status === "COMPLETED" ? "bg-green-100 text-green-700" :
-                          b.status === "ORDERED" ? "bg-blue-100 text-blue-700" :
-                          b.status === "READY" ? "bg-amber-100 text-amber-700" :
-                          "bg-gray-100 text-gray-700"
-                        )}>{b.status}</span>
-                        <span className="font-semibold tabular-nums">{formatCurrency(b.billAmount)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No bills found. Select date range and search.</p>
-              )}
+        {/* Bill History */}
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bill History</p>
+          <div className="flex gap-2 items-end">
+            <div className="space-y-1">
+              <Label className="text-xs">From</Label>
+              <Input type="date" value={historyDateFrom} onChange={(e) => setHistoryDateFrom(e.target.value)} className="h-8 text-sm w-40" />
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs">To</Label>
+              <Input type="date" value={historyDateTo} onChange={(e) => setHistoryDateTo(e.target.value)} className="h-8 text-sm w-40" />
+            </div>
+            <Button size="sm" className="h-8" onClick={loadHistory}>Search</Button>
+          </div>
+          {bills.length > 0 ? (
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {bills.map((b) => (
+                <div key={b.id} className="flex items-center justify-between py-2 px-2 text-sm rounded hover:bg-muted/30">
+                  <div>
+                    <span className="font-mono text-xs text-muted-foreground">{b.billNumber}</span>
+                    <span className="ml-2 font-medium">{b.patientName}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {new Date(b.billDate).toLocaleDateString("en-IN")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                      b.status === "COMPLETED" ? "bg-green-100 text-green-700" :
+                      b.status === "ORDERED" ? "bg-blue-100 text-blue-700" :
+                      b.status === "READY" ? "bg-amber-100 text-amber-700" :
+                      "bg-gray-100 text-gray-700"
+                    )}>{b.status}</span>
+                    <span className="font-semibold tabular-nums">{formatCurrency(b.billAmount)}</span>
+                    <button
+                      onClick={() => setPrintBill(b as OpticalBillForPrint)}
+                      className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                      title="Print bill"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No bills found for today.</p>
           )}
         </div>
       </div>
 
       {/* ── Right: Bill Summary (sticky) ── */}
-      <div className="col-span-4">
+      <div className="md:col-span-4">
         <div className="sticky top-24 rounded-xl border border-border bg-card p-4 space-y-4">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bill Summary</p>
 
@@ -709,5 +800,12 @@ export function BillingTab() {
         </div>
       </div>
     </div>
+
+    <OpticalBillPrintModal
+      open={!!printBill}
+      onClose={() => setPrintBill(null)}
+      bill={printBill}
+    />
+    </>
   )
 }
