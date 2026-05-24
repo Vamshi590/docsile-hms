@@ -106,7 +106,7 @@ export function DashboardClient({ greeting, enabledModules }: DashboardClientPro
           mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
         )}
       >
-        <div className="flex items-start justify-between gap-8">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-8">
           <div>
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">
               {greeting}
@@ -145,7 +145,7 @@ export function DashboardClient({ greeting, enabledModules }: DashboardClientPro
       {/* Modules Grid */}
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Modules</p>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleModules.map((mod, i) => (
             <Link
               key={mod.href}
