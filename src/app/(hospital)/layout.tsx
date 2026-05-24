@@ -71,7 +71,7 @@ export default async function HospitalLayout({
         <Sidebar {...navProps} />
       )}
       <main className="h-full overflow-y-auto flex-1">
-        <div className="min-h-full px-4 pt-6 pb-8">{children}</div>
+        <div className="min-h-full px-3 py-4 md:px-4 md:py-6 lg:px-6 lg:pt-6 lg:pb-8">{children}</div>
       </main>
       <InstallPrompt />
     </div>
