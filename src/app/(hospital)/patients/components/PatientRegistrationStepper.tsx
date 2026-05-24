@@ -534,7 +534,7 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-2">
+      <DialogContent className="max-w-full h-[100dvh] rounded-none p-0 sm:max-w-4xl sm:h-auto sm:rounded-xl overflow-hidden flex flex-col">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
           <DialogTitle>
             {isEditMode ? "Edit" : "Register"} {patientType === "OPD" ? "Out-Patient" : "In-Patient"}
@@ -542,7 +542,17 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
 
           {/* Step indicator — hidden in edit mode */}
           {!isEditMode && (
-            <div className="flex items-center gap-0 mt-3">
+            <>
+            {/* Mobile step counter — sm:hidden */}
+            <div className="sm:hidden flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-xs font-medium text-muted-foreground">
+                Step {step} of {STEPS.length}
+              </span>
+              <span className="text-xs font-semibold text-foreground">
+                {STEPS.find(s => s.num === step)?.label}
+              </span>
+            </div>
+            <div className="hidden sm:flex items-center gap-0 mt-3">
               {STEPS.map((s, i) => (
                 <div key={s.num} className="flex items-center">
                   <div className={cn(
@@ -555,7 +565,7 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
                       ? <Check className="h-3 w-3" />
                       : <span>{s.num}</span>
                     }
-                    <span className="hidden sm:block">{s.label}</span>
+                    <span>{s.label}</span>
                   </div>
                   {i < STEPS.length - 1 && (
                     <ChevronRight className="h-3.5 w-3.5 mx-1 text-muted-foreground" />
@@ -563,6 +573,7 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
                 </div>
               ))}
             </div>
+            </>
           )}
         </DialogHeader>
 
