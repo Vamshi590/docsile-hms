@@ -7,12 +7,14 @@ import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/table"
-import { RefreshCw, Plus } from "lucide-react"
+import { RefreshCw, Plus, Sparkles } from "lucide-react"
 import { PageHeader, FilterBar, SearchInput, StatBadge, BreadcrumbHeader } from "@/components/layout/header"
 import { InPatientStatusBadge } from "./InPatientStatusBadge"
 import { InPatientDetailPage } from "./InPatientDetailPage"
 import InPatientAdmissionForm from "./InPatientAdmissionForm"
+import { AskSithaAI } from "@/app/(hospital)/doctor/components/AskSithaAI"
 import { getInPatients } from "../actions"
+import { cn } from "@/lib/utils"
 import type { InPatient } from "@/lib/types"
 
 type Stats = {
@@ -51,6 +53,7 @@ export default function InPatientsPage({
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [admitOpen, setAdmitOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -103,6 +106,19 @@ export default function InPatientsPage({
             <StatBadge value={stats.readyToDischarge} label="Discharge Ready" variant="success" />
           </>
         )}
+        <button
+          onClick={() => setChatOpen(o => !o)}
+          title={chatOpen ? "Hide Sitha" : "Ask Sitha AI"}
+          className={cn(
+            "h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
+            chatOpen
+              ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+              : "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+          )}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          {chatOpen ? "Hide Sitha" : "Ask Sitha"}
+        </button>
       </PageHeader>
 
       {/* Filters */}
@@ -147,8 +163,9 @@ export default function InPatientsPage({
         </div>
       </FilterBar>
 
-      {/* Table */}
-      <div className="rounded-xl border border-border bg-white overflow-hidden">
+      {/* Table (with optional Ask Sitha column) */}
+      <div className={cn(chatOpen && "flex gap-4 items-start")}>
+      <div className={cn("hidden md:block rounded-xl border border-border bg-white overflow-hidden", chatOpen && "flex-1 min-w-0")}>
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-100 hover:bg-gray-100">
@@ -173,12 +190,20 @@ export default function InPatientsPage({
                 </TableRow>
               ))
             ) : patients.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-16 text-muted-foreground">
-                  <div className="text-3xl mb-2">🏥</div>
-                  <div className="font-medium">No inpatients found</div>
-                  <div className="text-xs mt-1">
-                    {search ? "Try a different search term" : "Admit a new patient to get started"}
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={7} className="text-center py-12 px-6">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/illustrations/no-inpatients.svg"
+                    alt=""
+                    className="mx-auto mb-6 h-44 w-auto select-none"
+                    draggable={false}
+                  />
+                  <div className="font-semibold text-base text-foreground">No in-patients admitted</div>
+                  <div className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
+                    {search
+                      ? "Try a different search term, or clear the search to see all admissions."
+                      : <>Click <span className="font-medium text-foreground">Admit Patient</span> to admit a new in-patient.</>}
                   </div>
                 </TableCell>
               </TableRow>
@@ -206,19 +231,19 @@ export default function InPatientsPage({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-sm font-medium text-foreground">
                         {doctors || "—"}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-xs">
+                      <span className="text-sm font-medium text-foreground">
                         {patient.operationName || (
-                          <span className="text-muted-foreground italic">Not assigned</span>
+                          <span className="text-muted-foreground italic font-normal">Not assigned</span>
                         )}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-sm font-medium text-foreground tabular-nums">
                         {new Date(patient.admissionDate).toLocaleDateString("en-IN", {
                           day: "2-digit",
                           month: "short",
@@ -253,6 +278,53 @@ export default function InPatientsPage({
               {patients.length} patient{patients.length !== 1 ? "s" : ""}
             </span>
           </div>
+        )}
+      </div>
+      {chatOpen && (
+        <div className="w-80 shrink-0 sticky top-4 self-start max-h-[calc(100vh-6rem)] overflow-y-auto pr-0.5">
+          <AskSithaAI patientId={null} module="inpatients" />
+        </div>
+      )}
+      </div>
+
+      {/* Mobile card list */}
+      <div className="md:hidden space-y-2 mt-2">
+        {loading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="rounded-xl border border-border bg-white p-4 space-y-2">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="h-3 w-1/3" />
+              </div>
+            ))}
+          </div>
+        ) : patients.length === 0 ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">No patients found</div>
+        ) : (
+          patients.map((patient) => (
+            <div
+              key={patient.id}
+              onClick={() => setSelectedId(patient.id)}
+              className="rounded-xl border border-border bg-white p-4 active:bg-gray-50 cursor-pointer"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{patient.name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {patient.ipNumber} · Age {patient.age}
+                  </p>
+                </div>
+                <InPatientStatusBadge status={patient.status} />
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                {Array.isArray(patient.doctorNames) ? patient.doctorNames.join(", ") : patient.doctorNames}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Admitted: {new Date(patient.admissionDate).toLocaleDateString("en-IN")}
+              </div>
+            </div>
+          ))
         )}
       </div>
 
