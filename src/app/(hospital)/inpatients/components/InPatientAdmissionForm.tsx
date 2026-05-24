@@ -35,6 +35,7 @@ const EMPTY_STATE: WizardState = {
   opPatientId: "",
   ipNumber: "",
   admissionDate: NOW(),
+  dischargeDate: "",
   name: "", age: "", gender: "", dateOfBirth: "", phone: "",
   address: "", guardianName: "", referredBy: "Self", admissionNotes: "",
   operationDate: TOMORROW(),
@@ -125,6 +126,7 @@ export default function InPatientAdmissionForm({ open, onClose, onSuccess, editI
       patientId: state.opPatientId || undefined,
       ipNumber: state.ipNumber,
       admissionDate: state.admissionDate,
+      dischargeDate: state.dischargeDate || undefined,
       admissionNotes: state.admissionNotes.trim() || undefined,
       name: state.name.trim(),
       age: parseInt(state.age, 10),
@@ -171,15 +173,23 @@ export default function InPatientAdmissionForm({ open, onClose, onSuccess, editI
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-full h-[100dvh] rounded-none p-0 sm:max-w-3xl sm:h-auto sm:rounded-xl overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {isEditMode ? `Edit In-Patient: ${editInpatient?.name ?? ""}` : "Admit In-Patient"}
           </DialogTitle>
         </DialogHeader>
 
+        {/* Mobile step counter */}
+        <div className="sm:hidden flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+          <span className="text-xs font-medium text-muted-foreground">Step {step} of 3</span>
+          <span className="text-xs font-semibold text-foreground">
+            {step === 1 ? "Patient Info" : step === 2 ? "Hospital Details" : "Payment"}
+          </span>
+        </div>
+
         {/* Step indicator */}
-        <div className="flex items-center justify-center gap-2 py-3 border-b border-border/60">
+        <div className="hidden sm:flex items-center justify-center gap-2 py-3 border-b border-border/60">
           {stepLabels.map((s, idx) => {
             const active = step === s.n
             const complete = s.n < step || (isEditMode && s.valid())
@@ -287,6 +297,7 @@ function stateFromInpatient(ip: InPatient): WizardState {
     opPatientId: "",
     ipNumber: ip.ipNumber,
     admissionDate: toLocalDateTimeString(ip.admissionDate),
+    dischargeDate: ip.dischargeDate ? toLocalDateTimeString(ip.dischargeDate).slice(0, 10) : "",
     name: ip.name,
     age: String(ip.age ?? ""),
     gender: ip.gender ?? "",

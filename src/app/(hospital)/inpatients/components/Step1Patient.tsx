@@ -71,7 +71,7 @@ export function Step1Patient({ state, setState, data, isEditMode }: StepProps) {
   }
 
   return (
-    <div className="space-y-5 max-w-3xl mx-auto">
+    <div className="space-y-5">
       {/* ───────── Existing-patient search (admit only) ───────── */}
       {!isEditMode && (
         <section>
@@ -127,7 +127,7 @@ export function Step1Patient({ state, setState, data, isEditMode }: StepProps) {
       <section>
         <SectionHeader>Visit information</SectionHeader>
         <div className="rounded-xl border border-border bg-white shadow-sm p-4">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+          <div className="grid grid-cols-3 gap-x-4 gap-y-3">
             <div>
               <FieldLabel>IP Number</FieldLabel>
               <Input value={state.ipNumber} readOnly className="bg-muted/40 font-mono h-9 mt-1" />
@@ -141,6 +141,16 @@ export function Step1Patient({ state, setState, data, isEditMode }: StepProps) {
                 className="h-9 mt-1"
               />
             </div>
+            <div>
+              <FieldLabel>Discharge date</FieldLabel>
+              <Input
+                type="date"
+                value={state.dischargeDate}
+                onChange={e => setState(p => ({ ...p, dischargeDate: e.target.value }))}
+                className="h-9 mt-1"
+                min={state.admissionDate ? state.admissionDate.slice(0, 10) : undefined}
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -149,7 +159,7 @@ export function Step1Patient({ state, setState, data, isEditMode }: StepProps) {
       <section>
         <SectionHeader>Patient demographics</SectionHeader>
         <div className="rounded-xl border border-border bg-white shadow-sm p-4">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
             <div className="col-span-2">
               <FieldLabel>Full name *</FieldLabel>
               <Input
