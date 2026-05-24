@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { Search, User, FileText, AlertTriangle, CheckCircle2, Filter, Loader2, FlaskConical, ChevronDown, History } from "lucide-react"
+import React, { useState, useEffect, useCallback } from "react"
+import { Search, User, FileText, AlertTriangle, CheckCircle2, Filter, Loader2, FlaskConical, ChevronDown, History, Printer, RefreshCw, ClipboardList } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,9 +13,10 @@ import {
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/table"
-import { getPatientInvestigations, createLabBills, getLabBills } from "../actions"
+import { getPatientInvestigations, createLabBills, getLabBills, getPendingLabInvestigations } from "../actions"
 import type { LabWithCount } from "./LabsPage"
 import { LabBillCard } from "./LabBillCard"
+import { ReportPrintModal } from "../../reports/components/ReportPrintModal"
 import { toast } from "sonner"
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -70,8 +71,8 @@ type LabBillRow = {
   balanceDue: number
   status: string
   paymentMode: string | null
-  lab: { name: string }
-  patient: { patientId: string; firstName: string; lastName: string | null; phone: string }
+  lab: { name: string; printHeaderKey?: string | null }
+  patient: { id: string; patientId: string; firstName: string; lastName: string | null; phone: string; age?: number | null; gender?: string | null; address?: string | null }
   items: { name: string; amount: number }[]
 }
 
@@ -112,6 +113,17 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoaded, setHistoryLoaded] = useState(false)
 
+  // Print state
+  const [printBill, setPrintBill] = useState<LabBillRow | null>(null)
+
+  // ── Pending investigations state
+  type PendingPatient = Awaited<ReturnType<typeof getPendingLabInvestigations>>[number]
+  const [pendingDate, setPendingDate] = useState(() =>
+    new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+  )
+  const [pendingPatients, setPendingPatients] = useState<PendingPatient[]>([])
+  const [pendingLoading, setPendingLoading] = useState(false)
+
   // ── Load history (only when history panel is opened)
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
@@ -131,6 +143,44 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
   useEffect(() => {
     loadHistory()
   }, [loadHistory])
+
+  const loadPending = useCallback(async () => {
+    setPendingLoading(true)
+    const data = await getPendingLabInvestigations(pendingDate)
+    setPendingPatients(data)
+    setPendingLoading(false)
+  }, [pendingDate])
+
+  useEffect(() => { loadPending() }, [loadPending])
+
+  async function selectPendingPatient(patientId: string) {
+    setSearchId(patientId)
+    setCompletedBills([])
+    setSearchLoading(true)
+    const result = await getPatientInvestigations(patientId)
+    if (!result.success) {
+      toast.error(result.error)
+      resetBillingState()
+    } else {
+      setPatient(result.data.patient)
+      setPrescription(result.data.prescription as PrescriptionInfo | null)
+      setLabGroups(result.data.labGroups)
+      setUnassigned(result.data.unassigned)
+      setExistingBills((result.data as { existingBills?: ExistingBill[] }).existingBills ?? [])
+      const forms = new Map<string, BillFormData>()
+      for (const group of result.data.labGroups) {
+        forms.set(group.lab.id, {
+          labId: group.lab.id,
+          items: [...group.items],
+          discount: 0,
+          paymentMode: "Cash",
+          amountPaid: group.items.reduce((s, i) => s + i.amount, 0),
+        })
+      }
+      setBillForms(forms)
+    }
+    setSearchLoading(false)
+  }
 
   // ── Billing handlers
   async function handleSearch() {
@@ -215,6 +265,7 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
       setLabGroups([])
       setBillForms(new Map())
       loadHistory()
+      loadPending()
     } else {
       toast.error(result.error)
     }
@@ -238,6 +289,7 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
       setLabGroups((prev) => prev.filter((g) => g.lab.id !== labId))
       setBillForms((prev) => { const next = new Map(prev); next.delete(labId); return next })
       loadHistory()
+      loadPending()
     } else {
       toast.error(result.error)
     }
@@ -416,6 +468,95 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
         )}
       </div>
 
+      {/* ─── PENDING INVESTIGATIONS PANEL ───────────────────────────────────── */}
+      {(pendingLoading || pendingPatients.length > 0) && <div className="rounded-xl border border-border/60 bg-white overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold text-foreground">Pending Investigations</span>
+            {pendingPatients.length > 0 && (
+              <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-primary text-white text-[10px] font-bold tabular-nums">
+                {pendingPatients.length}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={pendingDate}
+              onChange={e => setPendingDate(e.target.value)}
+              className="h-8 rounded-md border border-input bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <button
+              onClick={loadPending}
+              disabled={pendingLoading}
+              className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", pendingLoading && "animate-spin")} />
+            </button>
+          </div>
+        </div>
+
+        {pendingLoading ? (
+          <div className="px-4 py-3 space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 py-1">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-16 ml-auto" />
+              </div>
+            ))}
+          </div>
+        ) : pendingPatients.length === 0 ? (
+          <div className="px-4 py-8 text-center text-muted-foreground text-sm">
+            No pending investigations for this date
+          </div>
+        ) : (
+          <div className="divide-y divide-border/40">
+            {pendingPatients.map((p) => (
+              <button
+                key={p.prescriptionId}
+                onClick={() => selectPendingPatient(p.patientId)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-primary/[0.03] transition-colors text-left group"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate">
+                      {p.patientName}
+                    </span>
+                    <span className="font-mono text-[11px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded shrink-0">
+                      {p.patientId}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {[
+                      p.age && `${p.age}y`,
+                      p.gender,
+                      p.doctorName && `Dr. ${p.doctorName}`,
+                    ].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={cn(
+                    "inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full",
+                    p.billCount > 0 ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"
+                  )}>
+                    <FlaskConical className="h-3 w-3" />
+                    {p.investigationCount} test{p.investigationCount !== 1 ? "s" : ""}
+                  </span>
+                  {p.billCount > 0 ? (
+                    <span className="text-[10px] text-amber-600 font-medium">Partial</span>
+                  ) : (
+                    <span className="text-[10px] text-blue-600 font-medium">Pending</span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>}
+
       {/* ─── HISTORY SECTION ─────────────────────────────────────────────── */}
       {/* Collapsible Filters */}
       <div className="rounded-xl border border-border bg-white overflow-hidden">
@@ -491,7 +632,7 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
       </div>
 
       {/* History Table (always visible) */}
-      <div className="rounded-xl border border-border bg-white overflow-hidden">
+      <div className="hidden md:block rounded-xl border border-border bg-white overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-100 hover:bg-gray-100">
@@ -503,20 +644,21 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
               <TableHead className="text-right">Paid</TableHead>
               <TableHead className="text-right">Balance</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="w-10"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {historyLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
+                  {Array.from({ length: 9 }).map((_, j) => (
                     <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : bills.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-16 text-muted-foreground">
                   <FlaskConical className="h-9 w-9 mx-auto mb-3 opacity-40" />
                   <div className="font-medium">No lab bills found</div>
                   <div className="text-xs mt-1">Lab bills will appear here once created</div>
@@ -524,9 +666,8 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
               </TableRow>
             ) : (
               bills.map((bill) => (
-                <>
+                <React.Fragment key={bill.id}>
                   <TableRow
-                    key={bill.id}
                     className="cursor-pointer"
                     onClick={() => setExpandedBill(expandedBill === bill.id ? null : bill.id)}
                   >
@@ -565,10 +706,20 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
                         {bill.status}
                       </Badge>
                     </TableCell>
+                    <TableCell onClick={e => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="h-7 w-7 text-muted-foreground hover:text-primary"
+                        onClick={() => setPrintBill(bill)}
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                   {expandedBill === bill.id && (
                     <TableRow key={`${bill.id}-detail`}>
-                      <TableCell colSpan={8} className="bg-muted/30 px-8 py-3">
+                      <TableCell colSpan={9} className="bg-muted/30 px-8 py-3">
                         <div className="text-xs font-medium text-muted-foreground mb-1.5">Investigations:</div>
                         <div className="space-y-0.5">
                           {bill.items.map((item, i) => (
@@ -590,7 +741,7 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </React.Fragment>
               ))
             )}
           </TableBody>
@@ -603,6 +754,122 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
           </div>
         )}
       </div>
+
+      {/* Mobile Lab Bills Cards */}
+      <div className="md:hidden space-y-2">
+        {historyLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-border bg-white p-4 space-y-2">
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-3 w-1/3" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+          ))
+        ) : bills.length === 0 ? (
+          <div className="rounded-xl border border-border bg-white py-12 text-center text-muted-foreground">
+            <FlaskConical className="h-9 w-9 mx-auto mb-3 opacity-40" />
+            <div className="font-medium">No lab bills found</div>
+            <div className="text-xs mt-1">Lab bills will appear here once created</div>
+          </div>
+        ) : (
+          bills.map((bill) => (
+            <div
+              key={`mobile-${bill.id}`}
+              className="rounded-xl border border-border bg-white p-4 space-y-2 cursor-pointer"
+              onClick={() => setExpandedBill(expandedBill === bill.id ? null : bill.id)}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-medium text-sm truncate">
+                    {bill.patient.firstName} {bill.patient.lastName}
+                  </div>
+                  <div className="text-xs text-muted-foreground font-mono">{bill.patient.patientId}</div>
+                </div>
+                <Badge variant={STATUS_COLORS[bill.status] ?? "secondary"}>
+                  {bill.status}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{bill.lab.name}</span>
+                <span>
+                  {new Date(bill.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium">₹{bill.total.toLocaleString("en-IN")}</span>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-green-600 font-medium">Paid ₹{bill.amountPaid.toLocaleString("en-IN")}</span>
+                  {bill.balanceDue > 0 && (
+                    <span className="text-orange-600 font-medium">Due ₹{bill.balanceDue.toLocaleString("en-IN")}</span>
+                  )}
+                </div>
+              </div>
+              {expandedBill === bill.id && (
+                <div className="pt-2 border-t border-border/40 space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Investigations:</div>
+                  {bill.items.map((item, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span>{item.name}</span>
+                      <span className="font-medium">₹{item.amount.toLocaleString("en-IN")}</span>
+                    </div>
+                  ))}
+                  {bill.paymentMode && (
+                    <div className="text-xs text-muted-foreground mt-1">Payment: {bill.paymentMode}</div>
+                  )}
+                </div>
+              )}
+              <div className="flex justify-end pt-1" onClick={(e) => e.stopPropagation()}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="h-7 w-7 text-muted-foreground hover:text-primary"
+                  onClick={() => setPrintBill(bill)}
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+        {!historyLoading && bills.length > 0 && (
+          <div className="px-1 py-1">
+            <span className="text-xs text-muted-foreground">
+              {bills.length} bill{bills.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Print Modal */}
+      {printBill && (
+        <ReportPrintModal
+          open={!!printBill}
+          onClose={() => setPrintBill(null)}
+          patient={{
+            id: printBill.patient.id,
+            patientId: printBill.patient.patientId,
+            fullName: `${printBill.patient.firstName} ${printBill.patient.lastName ?? ""}`.trim(),
+            phone: printBill.patient.phone,
+            age: printBill.patient.age ?? null,
+            gender: printBill.patient.gender ?? null,
+            address: printBill.patient.address ?? null,
+          }}
+          mode="lab"
+          labBill={{
+            billNumber: printBill.billNumber,
+            labName: printBill.lab.name,
+            total: printBill.total,
+            amountPaid: printBill.amountPaid,
+            balanceDue: printBill.balanceDue,
+            discount: printBill.discount,
+            subtotal: printBill.subtotal,
+            paymentMode: printBill.paymentMode,
+            items: printBill.items,
+            createdAt: String(printBill.createdAt),
+            printHeaderKey: printBill.lab.printHeaderKey ?? undefined,
+          }}
+        />
+      )}
     </>
   )
 }

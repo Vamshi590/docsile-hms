@@ -180,7 +180,7 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
       </div>
 
       {/* Follow-Ups Table */}
-      <div className="rounded-xl border border-border bg-white overflow-hidden">
+      <div className="hidden md:block rounded-xl border border-border bg-white overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-100 hover:bg-gray-100">
@@ -293,6 +293,84 @@ export function FollowUpsTab({ refreshRef }: { refreshRef?: React.MutableRefObje
           </div>
         )}
       </div>
+      {/* Mobile Follow-Ups Cards */}
+      <div className="md:hidden space-y-2">
+        {loading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-border bg-white p-4 space-y-2">
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-3 w-1/3" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+          ))
+        ) : followUps.length === 0 ? (
+          <div className="rounded-xl border border-border bg-white py-12 text-center text-muted-foreground">
+            <CalendarClock className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+            <div className="font-medium">No follow-ups found</div>
+            <div className="text-xs mt-1">No patients due for follow-up in this period</div>
+          </div>
+        ) : (
+          followUps.map((fu) => (
+            <div key={`mobile-${fu.type}-${fu.id}`} className="rounded-xl border border-border bg-white p-4 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-medium text-sm truncate">{fu.patientName}</div>
+                  <div className="text-xs text-muted-foreground">{fu.uhid}{fu.phone ? ` · ${fu.phone}` : ""}</div>
+                </div>
+                <Badge variant={fu.type === "OPD" ? "secondary" : "outline"} className="text-xs shrink-0">
+                  {fu.type}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={`text-sm ${getFollowUpDateStyle(fu)}`}>
+                  {formatDateLong(fu.followUpDate)}
+                </span>
+                {fu.isOverdue && (
+                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Overdue</Badge>
+                )}
+              </div>
+              {fu.diagnosis && (
+                <div className="text-xs text-muted-foreground line-clamp-2">{fu.diagnosis}</div>
+              )}
+              {fu.additionalNotes && (
+                <div className="text-xs text-muted-foreground line-clamp-1">
+                  {(() => {
+                    const raw = fu.additionalNotes
+                    try {
+                      const parsed = JSON.parse(raw)
+                      return (parsed?.notes ?? parsed?.value ?? String(parsed)) || null
+                    } catch {
+                      return raw
+                    }
+                  })()}
+                </div>
+              )}
+              <div className="flex items-center justify-end gap-1 pt-1">
+                {fu.email && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    title="Send email"
+                    onClick={() => setEmailTarget(fu)}
+                  >
+                    <Mail className="h-4 w-4" />
+                  </Button>
+                )}
+                <WhatsAppButton phone={fu.phone} message={getFollowUpWhatsAppMessage(fu)} />
+              </div>
+            </div>
+          ))
+        )}
+        {!loading && followUps.length > 0 && (
+          <div className="px-1 py-1">
+            <span className="text-xs text-muted-foreground">
+              {followUps.length} record{followUps.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+        )}
+      </div>
+
       {emailTarget && (
         <SendEmailModal
           record={emailTarget}
