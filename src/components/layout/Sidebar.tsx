@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Settings, LogOut, Hospital } from "lucide-react"
+import { Settings, LogOut, Hospital, Menu } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -59,6 +59,17 @@ export function Sidebar({ user, hospitalName = "Docsile HMS", enabledModules = [
 
   return (
     <>
+      {/* Mobile hamburger — fixed top-left, only visible on small screens when sidebar is closed */}
+      {!visible && (
+        <button
+          className="fixed top-2 left-2 z-50 md:hidden flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white shadow-md"
+          onClick={showSidebar}
+          aria-label="Open menu"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+      )}
+
       {/* Overlay backdrop */}
       {visible && (
         <div
