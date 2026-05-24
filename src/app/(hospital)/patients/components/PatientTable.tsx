@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronUp, ChevronDown, MoreVertical, Pencil, Trash2 } from "lucide-react"
+import { ChevronUp, ChevronDown, MoreVertical, Pencil, Trash2, Zap, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatCurrency, calculateAge } from "@/lib/utils"
 import { PatientStatusBadge } from "./PatientStatusBadge"
@@ -52,11 +52,20 @@ interface PatientTableProps {
   userRole?: string
   onEdit?: (patient: PatientRow) => void
   onDelete?: (patient: PatientRow) => void
+  /** Trigger quick-print for completed patients. */
+  onQuickPrint?: (patient: PatientRow) => void
+  /** Patient ID currently being printed (shows a spinner on that row's button). */
+  quickPrintingId?: string | null
+  /** Whether the hospital has at least one default print item configured. */
+  defaultPrintConfigured?: boolean
 }
 
 type SortKey = "patientId" | "name" | "status" | "appointmentDate" | "createdAt"
 
-export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, onDelete }: PatientTableProps) {
+export function PatientTable({
+  patients, onRowClick, loading, userRole, onEdit, onDelete,
+  onQuickPrint, quickPrintingId, defaultPrintConfigured,
+}: PatientTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("createdAt")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
@@ -124,13 +133,99 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
         </TableHead>
         <TableHead>Services</TableHead>
         <TableHead>Receipt</TableHead>
+        <TableHead className="w-10 text-center">Print</TableHead>
         <TableHead className="w-12"></TableHead>
       </TableRow>
     </TableHeader>
   )
 
-  if (loading) {
-    return (
+  return (
+    <>
+    {/* ── Mobile card list (hidden on md+) ── */}
+    <div className="md:hidden space-y-2">
+      {loading ? (
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="rounded-xl border border-border bg-white p-4 space-y-2">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-1/2" />
+              <Skeleton className="h-3 w-1/3" />
+            </div>
+          ))}
+        </div>
+      ) : patients.length === 0 ? (
+        <div className="py-12 text-center text-sm text-muted-foreground">No patients found</div>
+      ) : (
+        sorted.map((patient) => {
+          const fullName = [patient.firstName, patient.lastName].filter(Boolean).join(" ")
+          const token = tokenMap.get(patient.id)
+          return (
+            <div
+              key={patient.id}
+              onClick={() => onRowClick(patient)}
+              className="rounded-xl border border-border bg-white p-4 active:bg-gray-50 cursor-pointer"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{fullName}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    #{patient.patientId} · Token {token}
+                  </p>
+                </div>
+                <PatientStatusBadge status={patient.status} />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {patient.age != null && <span>Age {patient.age}</span>}
+                <span>{patient.gender}</span>
+                {patient.phone && <span>{patient.phone}</span>}
+              </div>
+              {(patient.doctorName || patient.appointmentDate) && (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {patient.doctorName && <span>{patient.doctorName}</span>}
+                  {patient.doctorName && patient.appointmentDate && <span> · </span>}
+                  {patient.appointmentDate && (
+                    <span>{new Date(patient.appointmentDate).toLocaleDateString("en-IN")}</span>
+                  )}
+                </div>
+              )}
+              {(onEdit || onDelete || onQuickPrint) && (
+                <div className="mt-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  {onQuickPrint && defaultPrintConfigured && patient.status === "COMPLETED" && (
+                    <button
+                      onClick={() => onQuickPrint(patient)}
+                      disabled={quickPrintingId === patient.id}
+                      className="text-xs px-2 py-1 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                    >
+                      {quickPrintingId === patient.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Print"}
+                    </button>
+                  )}
+                  {onEdit && (
+                    <button
+                      onClick={() => onEdit(patient)}
+                      className="text-xs px-2 py-1 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                    >
+                      Edit
+                    </button>
+                  )}
+                  {onDelete && userRole === "ADMIN" && (
+                    <button
+                      onClick={() => onDelete(patient)}
+                      className="text-xs px-2 py-1 rounded-md border border-destructive/30 text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })
+      )}
+    </div>
+
+    {/* ── Desktop table (hidden below md) ── */}
+    <div className="hidden md:block">
+    {loading ? (
       <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
         <Table>
           {headers}
@@ -147,17 +242,14 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
                 <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                <TableCell><Skeleton className="h-6 w-6 rounded mx-auto" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-6" /></TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-    )
-  }
-
-  if (patients.length === 0) {
-    return (
+    ) : patients.length === 0 ? (
       <div className="rounded-xl border border-border/60 bg-white py-14 px-6 text-center shadow-sm">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -171,10 +263,7 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
           Try a different date, or click <span className="font-medium text-foreground">Add Patient</span> to register a new visit.
         </p>
       </div>
-    )
-  }
-
-  return (
+    ) : (
     <TooltipProvider delayDuration={150}>
     <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
       <Table>
@@ -287,6 +376,35 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
                     <span className="text-muted-foreground/50">—</span>
                   )}
                 </TableCell>
+                <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                  {patient.status === "COMPLETED" ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          disabled={!defaultPrintConfigured || quickPrintingId === patient.patientId}
+                          className={cn(
+                            "h-7 w-7 transition-opacity",
+                            defaultPrintConfigured
+                              ? "text-primary opacity-70 group-hover:opacity-100"
+                              : "text-muted-foreground/40",
+                          )}
+                          onClick={() => onQuickPrint?.(patient)}
+                        >
+                          {quickPrintingId === patient.patientId
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <Zap className="h-4 w-4" />}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="text-xs">
+                        {defaultPrintConfigured
+                          ? "Quick print (default receipts)"
+                          : "Configure defaults in Settings → Print Defaults"}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                </TableCell>
                 <TableCell onClick={e => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -321,5 +439,8 @@ export function PatientTable({ patients, onRowClick, loading, userRole, onEdit, 
       </div>
     </div>
     </TooltipProvider>
+    )}
+    </div>
+    </>
   )
 }
