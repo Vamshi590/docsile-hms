@@ -1,22 +1,8 @@
 import type { ElementType } from "react"
 import {
-  Users,
-  Eye,
-  Stethoscope,
-  BedDouble,
-  Shield,
-  ClipboardList,
-  FlaskConical,
-  FileBarChart,
-  Wallet,
-  Pill,
-  Glasses,
-  ScrollText,
-  DatabaseZap,
-  BarChart3,
-  UserCog,
-  LayoutDashboard,
-  Phone,
+  Users, Eye, Stethoscope, BedDouble, Shield, ClipboardList,
+  FlaskConical, FileBarChart, Wallet, Pill, Glasses, ScrollText,
+  DatabaseZap, BarChart3, UserCog, LayoutDashboard, Phone,
 } from "lucide-react"
 
 export type NavItem = {
@@ -24,8 +10,8 @@ export type NavItem = {
   icon: ElementType
   label: string
   exact?: boolean
-  adminOnly?: boolean
   moduleCode?: string
+  permission?: string
 }
 
 export type NavSection = {
@@ -37,43 +23,43 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "",
     items: [
-      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
+      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true, permission: "dashboard:view" },
     ],
   },
   {
     label: "Clinical",
     items: [
-      { href: "/patients", icon: Users, label: "Patients", moduleCode: "patients" },
-      { href: "/workup", icon: Eye, label: "Refraction", moduleCode: "workup" },
-      { href: "/doctor", icon: Stethoscope, label: "Doctor", moduleCode: "doctor" },
-      { href: "/inpatients", icon: BedDouble, label: "In-Patients", moduleCode: "inpatients" },
+      { href: "/patients", icon: Users, label: "Patients", moduleCode: "patients", permission: "patients:view" },
+      { href: "/workup", icon: Eye, label: "Refraction", moduleCode: "workup", permission: "workup:view" },
+      { href: "/doctor", icon: Stethoscope, label: "Doctor", moduleCode: "doctor", permission: "doctor:view" },
+      { href: "/inpatients", icon: BedDouble, label: "In-Patients", moduleCode: "inpatients", permission: "inpatients:view" },
     ],
   },
   {
     label: "Services",
     items: [
-      { href: "/pharmacy", icon: Pill, label: "Pharmacy", moduleCode: "pharmacy" },
-      { href: "/optical", icon: Glasses, label: "Optical", moduleCode: "optical" },
-      { href: "/labs", icon: FlaskConical, label: "Labs", moduleCode: "labs" },
+      { href: "/pharmacy", icon: Pill, label: "Pharmacy", moduleCode: "pharmacy", permission: "pharmacy:view" },
+      { href: "/optical", icon: Glasses, label: "Optical", moduleCode: "optical", permission: "optical:view" },
+      { href: "/labs", icon: FlaskConical, label: "Labs", moduleCode: "labs", permission: "labs:view" },
       { href: "/call-logs", icon: Phone, label: "Call Logs", moduleCode: "call-logs" },
     ],
   },
   {
     label: "Finance",
     items: [
-      { href: "/insurance", icon: Shield, label: "Insurance", moduleCode: "insurance" },
-      { href: "/dues-followups", icon: ClipboardList, label: "Dues & Follow-Ups" },
-      { href: "/expenses", icon: Wallet, label: "Expenses", moduleCode: "expenses" },
+      { href: "/insurance", icon: Shield, label: "Insurance", moduleCode: "insurance", permission: "insurance:view" },
+      { href: "/dues-followups", icon: ClipboardList, label: "Dues & Follow-Ups", permission: "dues:view" },
+      { href: "/expenses", icon: Wallet, label: "Expenses", moduleCode: "expenses", permission: "expenses:view" },
     ],
   },
   {
     label: "Insights",
     items: [
-      { href: "/analytics", icon: BarChart3, label: "Analytics", moduleCode: "analytics" },
-      { href: "/reports", icon: FileBarChart, label: "Reports", moduleCode: "reports" },
-      { href: "/data", icon: DatabaseZap, label: "Data Export" },
-      { href: "/license-tracker", icon: ScrollText, label: "Licenses", moduleCode: "license-tracker" },
-      { href: "/staff", icon: UserCog, label: "Staff", adminOnly: true },
+      { href: "/analytics", icon: BarChart3, label: "Analytics", moduleCode: "analytics", permission: "reports:view" },
+      { href: "/reports", icon: FileBarChart, label: "Reports", moduleCode: "reports", permission: "reports:view" },
+      { href: "/data", icon: DatabaseZap, label: "Data Export", permission: "data:export" },
+      { href: "/license-tracker", icon: ScrollText, label: "Licenses", moduleCode: "license-tracker", permission: "licenses:view" },
+      { href: "/staff", icon: UserCog, label: "Staff", permission: "staff:view" },
     ],
   },
 ]

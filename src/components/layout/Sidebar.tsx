@@ -11,7 +11,7 @@ import { getInitials } from "@/lib/utils"
 import { NAV_SECTIONS } from "./nav-items"
 
 interface SidebarProps {
-  user: { fullName: string; role: string }
+  user: { fullName: string; role: string; permissions: string[] }
   hospitalName?: string
   enabledModules?: string[]
 }
@@ -105,9 +105,8 @@ export function Sidebar({ user, hospitalName = "Docsile HMS", enabledModules = [
         <nav className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
           {NAV_SECTIONS.map((section) => {
             const visibleItems = section.items.filter((item) => {
-              if (item.adminOnly && user.role !== "ADMIN") return false
-              if (item.moduleCode && !enabledModules.includes(item.moduleCode))
-                return false
+              if (item.permission && !user.permissions.includes(item.permission)) return false
+              if (item.moduleCode && !enabledModules.includes(item.moduleCode)) return false
               return true
             })
             if (visibleItems.length === 0) return null

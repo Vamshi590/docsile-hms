@@ -19,7 +19,7 @@ import { NAV_SECTIONS } from "./nav-items"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
 interface TopNavBarProps {
-  user: { fullName: string; role: string }
+  user: { fullName: string; role: string; permissions: string[] }
   hospitalName: string
   enabledModules: string[]
 }
@@ -35,7 +35,7 @@ export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps
   }
 
   const allItems = NAV_SECTIONS.flatMap((s) => s.items).filter((item) => {
-    if (item.adminOnly && user.role !== "ADMIN") return false
+    if (item.permission && !user.permissions.includes(item.permission)) return false
     if (item.moduleCode && !enabledModules.includes(item.moduleCode)) return false
     return true
   })
@@ -139,7 +139,7 @@ export function TopNavBar({ user, hospitalName, enabledModules }: TopNavBarProps
         <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
           {NAV_SECTIONS.map((section) => {
             const visibleItems = section.items.filter((item) => {
-              if (item.adminOnly && user.role !== "ADMIN") return false
+              if (item.permission && !user.permissions.includes(item.permission)) return false
               if (item.moduleCode && !enabledModules.includes(item.moduleCode)) return false
               return true
             })
