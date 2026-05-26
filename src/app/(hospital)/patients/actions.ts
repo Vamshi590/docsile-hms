@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { getHospitalProfile as getCachedHospitalProfile } from "@/lib/db"
-import { requireAuth } from "@/lib/auth"
+import { requireAuth, requireServerPermission } from "@/lib/auth"
 import { getISTDayBounds, computePatientStatus } from "@/lib/utils"
 import { z } from "zod"
 
@@ -83,6 +83,7 @@ async function getNextPrescriptionNumber(): Promise<string> {
 // ─── Server Actions ───────────────────────────────────────────────────────────
 
 export async function getNextPatientId(_type: "OPD" | "IPD" = "OPD") {
+  await requireServerPermission("patients:view")
   return getNextPatientNumber()
 }
 
@@ -92,6 +93,7 @@ export async function getPatients(filters: {
   status?: string
   type?: "OPD" | "IPD"
 }) {
+  await requireServerPermission("patients:view")
   const supabase = await createClient()
   const { date, search, status, type = "OPD" } = filters
 
@@ -244,6 +246,7 @@ function mapPatients(patients: any[], dateBounds: { start: Date; end: Date } | n
 }
 
 export async function getPatientById(patientId: string) {
+  await requireServerPermission("patients:view")
   const supabase = await createClient()
   const { data: patient, error } = await supabase
     .from("Patient")
@@ -279,7 +282,7 @@ export async function getPatientById(patientId: string) {
 // ─── Step 1: Create Patient ───────────────────────────────────────────────────
 
 export async function createPatient(data: z.infer<typeof PatientSchema>) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("patients:create")
   const validated = PatientSchema.safeParse(data)
   if (!validated.success) {
     return { success: false as const, error: validated.error.issues[0]?.message ?? "Invalid patient data" }
@@ -330,7 +333,7 @@ export async function createPatient(data: z.infer<typeof PatientSchema>) {
 // ─── Update Patient (if user edits Step 1 after creation) ─────────────────────
 
 export async function updatePatientInfo(patientId: string, data: z.infer<typeof PatientSchema>) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("patients:edit")
   const validated = PatientSchema.safeParse(data)
   if (!validated.success) {
     return { success: false as const, error: validated.error.issues[0]?.message ?? "Invalid patient data" }
@@ -377,7 +380,7 @@ export async function createPrescriptionWithBilling(data: {
   patientId: string
   billing: z.infer<typeof BillingSchema>
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("doctor:consult")
   const billingValidated = BillingSchema.safeParse(data.billing)
 
   if (!billingValidated.success) {
@@ -549,7 +552,7 @@ export async function createPrescriptionWithBilling(data: {
 }
 
 export async function updatePatientStatus(patientId: string, status: string) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("patients:edit")
   try {
     const supabase = await createClient()
     const { data: patient, error } = await supabase
@@ -569,7 +572,7 @@ export async function updatePatientStatus(patientId: string, status: string) {
 }
 
 export async function movePatientToDate(patientId: string, newDate: string, reason?: string) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("patients:edit")
   try {
     const supabase = await createClient()
 
@@ -610,7 +613,7 @@ export async function addServiceToPatient(data: {
   discount: number
   notes?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("patients:edit")
   try {
     const supabase = await createClient()
 
@@ -775,6 +778,7 @@ export async function addServiceToPatient(data: {
 // ─── Search Existing Patients ─────────────────────────────────────────────────
 
 export async function searchExistingPatients(query: string) {
+  await requireServerPermission("patients:view")
   if (!query || query.length < 2) return []
 
   const supabase = await createClient()
@@ -803,6 +807,7 @@ export async function searchExistingPatients(query: string) {
 }
 
 export async function getPatientWithLastVisit(patientId: string) {
+  await requireServerPermission("patients:view")
   const supabase = await createClient()
 
   const { data: patient, error } = await supabase
@@ -834,6 +839,7 @@ export async function getPatientWithLastVisit(patientId: string) {
 // ─── Service Templates ────────────────────────────────────────────────────────
 
 export async function getServiceTemplates() {
+  await requireServerPermission("patients:view")
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("ServiceTemplate")
@@ -855,8 +861,7 @@ export async function createServiceTemplate(data: {
   description?: string
   amount: number
 }) {
-  const user = await requireAuth()
-  if (user.role !== "ADMIN") return { success: false, error: "Admin only" }
+  const user = await requireServerPermission("settings:edit")
   try {
     const supabase = await createClient()
     const { data: template, error } = await supabase
@@ -880,8 +885,7 @@ export async function updateServiceTemplate(id: string, data: {
   amount?: number
   isActive?: boolean
 }) {
-  const user = await requireAuth()
-  if (user.role !== "ADMIN") return { success: false, error: "Admin only" }
+  const user = await requireServerPermission("settings:edit")
   try {
     const supabase = await createClient()
     const { data: template, error } = await supabase
@@ -901,8 +905,7 @@ export async function updateServiceTemplate(id: string, data: {
 }
 
 export async function deleteServiceTemplate(id: string) {
-  const user = await requireAuth()
-  if (user.role !== "ADMIN") return { success: false, error: "Admin only" }
+  const user = await requireServerPermission("settings:edit")
   try {
     const supabase = await createClient()
     const { error } = await supabase
@@ -929,8 +932,7 @@ export async function getCurrentUserRole() {
 // ─── Delete Patient (Admin only) ─────────────────────────────────────────────
 
 export async function deletePatient(patientId: string) {
-  const user = await requireAuth()
-  if (user.role !== "ADMIN") return { success: false as const, error: "Admin only" }
+  const user = await requireServerPermission("patients:delete")
   try {
     const supabase = await createClient()
 
@@ -1020,6 +1022,7 @@ export async function deletePatient(patientId: string) {
 // ─── Receipt Data (for print modal) ──────────────────────────────────────────
 
 export async function getPatientReceiptData(patientId: string) {
+  await requireServerPermission("patients:view")
   const supabase = await createClient()
 
   const [patientResult, hospitalResult] = await Promise.all([
@@ -1060,6 +1063,7 @@ export async function getPatientReceiptData(patientId: string) {
 // ─── Dropdown Options (doctor name, department, referred by) ──────────────────
 
 export async function getDropdownOptions(fieldName: string): Promise<string[]> {
+  await requireServerPermission("patients:view")
   const supabase = await createClient()
   const { data: options, error } = await supabase
     .from("DropdownOption")
@@ -1081,7 +1085,7 @@ export async function getDropdownOptions(fieldName: string): Promise<string[]> {
  * cheaper than the multi-call alternative.
  */
 export async function getPatientRegistrationFormData() {
-  await requireAuth()
+  await requireServerPermission("patients:create")
   const supabase = await createClient()
 
   const [hospitalCached, nextId, serviceTemplates, dropdownRes] = await Promise.all([
@@ -1091,17 +1095,18 @@ export async function getPatientRegistrationFormData() {
     supabase
       .from("DropdownOption")
       .select("fieldName, value")
-      .in("fieldName", ["doctorName", "department", "referredBy"])
+      .in("fieldName", ["doctorName", "department", "referredBy", "address"])
       .order("value", { ascending: true }),
   ])
 
-  const grouped: { doctorName: string[]; department: string[]; referredBy: string[] } = {
-    doctorName: [], department: [], referredBy: [],
+  const grouped: { doctorName: string[]; department: string[]; referredBy: string[]; address: string[] } = {
+    doctorName: [], department: [], referredBy: [], address: [],
   }
   for (const row of dropdownRes.data ?? []) {
     if (row.fieldName === "doctorName") grouped.doctorName.push(row.value)
     else if (row.fieldName === "department") grouped.department.push(row.value)
     else if (row.fieldName === "referredBy") grouped.referredBy.push(row.value)
+    else if (row.fieldName === "address") grouped.address.push(row.value)
   }
 
   return {
@@ -1111,11 +1116,12 @@ export async function getPatientRegistrationFormData() {
     doctorOptions: grouped.doctorName,
     departmentOptions: grouped.department,
     referralOptions: grouped.referredBy,
+    addressOptions: grouped.address,
   }
 }
 
 export async function addDropdownOption(fieldName: string, value: string) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("patients:create")
   try {
     const supabase = await createClient()
 

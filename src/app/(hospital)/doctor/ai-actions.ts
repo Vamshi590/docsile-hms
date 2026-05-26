@@ -1,9 +1,15 @@
 "use server"
 
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { callGemini, type GeminiMessage } from "@/lib/ai/gemini"
 import { getISTDayBounds, calculateAge } from "@/lib/utils"
+import {
+  getAnalyticsOverview, getTimeSeries, getTopServices,
+  getDoctorPerformance, getExpenseBreakdown, getFinancialSummary,
+  getGenderDistribution, getAgeDistribution, getStatusDistribution,
+  getReferralStats,
+} from "@/app/(hospital)/analytics/actions"
 
 // Cap conversation history sent to the model (3 user + 3 assistant pairs).
 const MAX_HISTORY_TURNS = 6
@@ -12,22 +18,59 @@ const MAX_HISTORY_TURNS = 6
 // data is in the patient context block so it answers from facts, not guesses.
 const SYSTEM_PROMPT = `You are Sitha, an AI assistant for ophthalmology clinicians at this hospital.
 
-Below in the first user message you will see a structured patient brief with these sections:
-PATIENT, TODAY, DUES, OPD VISITS, REFRACTION HISTORY, LAB BILLS, IPD ADMISSIONS,
-INSURANCE CLAIMS, OPTICAL ORDERS, PHARMACY. Quote numbers, dates and names
-EXACTLY as they appear there.
+The first user message in this conversation contains a "PATIENT BRIEF". One of three things will be true:
+1. A patient is locked in — the brief begins with "=== PATIENT ===" and contains real data. Use it.
+2. No patient identifier was provided yet — the brief is a short note starting with "(NO PATIENT)". In this case, ask the user politely for the patient's UID (e.g. P-0005) or 10-digit phone number, then they can re-send the question.
+3. The user's identifier matched no record — the brief starts with "(NOT FOUND)". Tell the user no patient matches and ask them to recheck the ID or phone.
 
-Rules:
-- Answer from the patient brief whenever the answer is there. Be specific (₹ amounts, exact dates, doctor names).
-- If the brief does not contain the answer, say so plainly. Do NOT invent visits, bills, surgeries, medications, or amounts.
-- Currency is Indian Rupees (₹). Dates are YYYY-MM-DD.
+Output format (IMPORTANT — your reply is rendered as markdown):
+- Default to short paragraphs or compact bullet lists ("- item"). Avoid walls of text.
+- For multi-fact answers, use bullets — one fact per line.
+- For grouped answers (e.g. "dues by source"), use a short bold label then the value: "**Cash:** ₹2,500".
+- Use "## Section" headings only when the answer naturally splits into two or more topics.
+- Quote numbers, dates, names and IDs EXACTLY as they appear in the brief.
+- Currency is ₹ (Indian Rupees). Dates are YYYY-MM-DD.
+- Keep replies tight — 3–6 bullets or 2–3 short paragraphs is usually right. No filler.
+
+Accuracy rules:
+- Answer from the brief whenever the data is there. Be specific (amounts, dates, doctor names).
+- If the brief does NOT contain the answer, say so plainly. Do NOT invent visits, bills, surgeries, medications or amounts.
 - For clinical advice (dosing, differentials, drug interactions), be cautious and recommend the clinician verify. You are decision support, not authority.
-- Default to concise replies — short paragraphs or compact bullet lists. Skip filler disclaimers; one short caveat per session is enough.`
+- Skip filler disclaimers; one short caveat per session is enough.`
+
+// Analytics system prompt — hospital-level data advisor.
+const ANALYTICS_SYSTEM_PROMPT = `You are Sitha, an AI analytics advisor for a hospital's management team.
+
+The first user message contains a "HOSPITAL ANALYTICS BRIEF" with real, live data pulled from the hospital's database — patients, revenue, collections, dues, expenses, doctor performance, services, and more.
+
+Your role:
+- Answer any question about hospital performance, revenue, operations, or patient trends using ONLY the data in the brief.
+- Calculate rates, ratios, and comparisons on-the-fly (e.g. "collection rate = collected / billed × 100").
+- Give concrete, data-driven recommendations when asked how to improve (e.g. "your collection rate is 61% — here are three ways to close the gap").
+- Flag anomalies you notice even if not asked — high dues, low-performing days, expense spikes.
+
+When asked for a FINANCIAL HEALTH REPORT or FINANCIAL SUMMARY, always cover ALL of the following in order, using the exact section structure the user requested:
+1. Revenue & Collections — total billed, collected, collection rate %, net cash flow; category breakdown (Consultations/Labs/Pharmacy/Optical/IPD) with ₹ and % of total.
+2. Outstanding Dues — by module (OPD/IPD/Lab/Optical/Pharmacy) and grand total; flag the module with highest outstanding.
+3. Expense Health — total expenses, top categories, expense-to-revenue ratio (expenses ÷ billed × 100); assess if healthy (<30% is good, 30–50% needs attention, >50% is concerning).
+4. Performance Highlights — top doctor (patients + revenue), top service (revenue + count), weakest category.
+5. Financial Health Score & Improvement Plan — score the overall health as Good / Needs Attention / Critical based on: collection rate (>85% = good, 70–85% = attention, <70% = critical), expense ratio, and dues-to-revenue ratio. Then give 4–6 specific, actionable improvement steps tied directly to the numbers — name exact figures, exact modules, exact gaps.
+
+Output format (your reply is rendered as markdown):
+- Use **bold labels** for financial figures: "**Consultations:** ₹1,20,000 (45%)"
+- Use "## Heading" for each major section of a financial report.
+- Use compact bullet lists inside sections; avoid walls of text.
+- Quote numbers EXACTLY from the brief. Currency is ₹. Dates are YYYY-MM-DD.
+- For improvement advice, anchor every point to actual data — never give generic advice.
+- If a metric is not in the brief, say so plainly. Never invent numbers.`
 
 export type AskInput = {
-  patientId: string
+  /** Optional — when set the brief is built for this patient directly. */
+  patientId?: string | null
   question: string
   history?: GeminiMessage[]
+  /** Which page/module the user is asking from — drives context type. */
+  module?: string
 }
 
 export type AskOutput =
@@ -35,7 +78,7 @@ export type AskOutput =
   | { ok: false; error: string }
 
 export async function askSithaAI(input: AskInput): Promise<AskOutput> {
-  await requireAuth()
+  await requireServerPermission("doctor:consult")
 
   const question = (input.question ?? "").trim()
   if (!question) return { ok: false, error: "Empty question." }
@@ -43,9 +86,28 @@ export async function askSithaAI(input: AskInput): Promise<AskOutput> {
     return { ok: false, error: "Question is too long (max 4000 characters)." }
   }
 
-  const context = await buildPatientContext(input.patientId)
-
+  const isAnalytics = input.module === "analytics"
   const trimmedHistory = (input.history ?? []).slice(-MAX_HISTORY_TURNS)
+
+  if (isAnalytics) {
+    const brief = await buildAnalyticsContext()
+    const messages: GeminiMessage[] = [
+      { role: "user", text: `HOSPITAL ANALYTICS BRIEF (do not echo verbatim):\n${brief}` },
+      { role: "model", text: "Analytics brief loaded. Ask anything about hospital performance." },
+      ...trimmedHistory,
+      { role: "user", text: question },
+    ]
+    const result = await callGemini({
+      system: ANALYTICS_SYSTEM_PROMPT,
+      messages,
+      maxOutputTokens: 2500,
+      temperature: 0.3,
+    })
+    if (!result.ok) return { ok: false, error: result.error }
+    return { ok: true, answer: result.text }
+  }
+
+  const context = await resolvePatientContext(input)
 
   const messages: GeminiMessage[] = [
     { role: "user", text: `PATIENT BRIEF (do not echo verbatim):\n${context}` },
@@ -63,6 +125,93 @@ export async function askSithaAI(input: AskInput): Promise<AskOutput> {
 
   if (!result.ok) return { ok: false, error: result.error }
   return { ok: true, answer: result.text }
+}
+
+// ── Context resolver — handles both locked-patient and generic chat modes ──
+
+async function resolvePatientContext(input: AskInput): Promise<string> {
+  // Caller (e.g. inline patient view) locked in a patient — use it directly.
+  if (input.patientId) {
+    return buildPatientContext(input.patientId)
+  }
+
+  // Generic mode: scan the user's question + recent history for a patient
+  // identifier (UID like P-0005 / 0005, or a 10-digit phone). Most recent
+  // mention wins so the user can switch patients mid-chat.
+  const userTexts = [
+    input.question,
+    ...(input.history ?? []).filter(m => m.role === "user").map(m => m.text).reverse(),
+  ]
+  const token = extractPatientToken(userTexts.join("\n"))
+  if (!token) {
+    return "(NO PATIENT)\nNo patient identifier was provided. Ask the user to share a patient UID (e.g. P-0005) or 10-digit phone number, then they can re-send the question."
+  }
+
+  const resolved = await findPatientByToken(token)
+  if (!resolved) {
+    return `(NOT FOUND)\nNo patient record matched "${token}". Ask the user to double-check the UID or phone and try again.`
+  }
+  return buildPatientContext(resolved)
+}
+
+// Pulls the most likely patient identifier out of free-form text:
+//   - 10-digit phone number → prefer when seen alone
+//   - "P-0005" / "P0005" style UID
+//   - bare 3+ digit sequence (e.g. "0005") — used as a UID prefix
+// Returns the raw token (server will fuzzy-match it). Null if nothing matched.
+function extractPatientToken(text: string): string | null {
+  if (!text) return null
+  const blob = text.replace(/[‐-―]/g, "-") // normalise unicode dashes
+  // 10-digit phone (allow optional +91 prefix).
+  const phone = blob.match(/(?:\+?91)?[\s-]?([6-9]\d{9})\b/)
+  if (phone) return phone[1]
+  // UID with prefix letters and digits (P-0005, OPD-0001, etc.)
+  const uid = blob.match(/\b[A-Za-z]{1,5}-?\d{3,7}\b/)
+  if (uid) return uid[0]
+  // Bare digit sequence (3-7 digits) — treat as a UID search.
+  const digits = blob.match(/\b\d{3,7}\b/)
+  if (digits) return digits[0]
+  return null
+}
+
+// Resolves a free-form token to a Patient.patientId (human UID). Tries
+// multiple shapes since users type UIDs inconsistently ("P-0005", "P0005",
+// "0005" — the DB just stores the digits) and Indian phone numbers may come
+// with or without "+91". Returns null if no match.
+async function findPatientByToken(token: string): Promise<string | null> {
+  const supabase = await createClient()
+  const cleaned = token.trim()
+  if (!cleaned) return null
+
+  // Build an ordered list of search variants to try.
+  const variants: Array<{ field: "patientId" | "phone"; pattern: string }> = []
+
+  // 10-digit phone — match trailing 10 digits (handles +91 prefix in stored values too).
+  if (/^\d{10}$/.test(cleaned)) {
+    variants.push({ field: "phone", pattern: `%${cleaned}` })
+  }
+
+  // UID variants — try the literal first, then digit-only fallback (covers
+  // the common "P-0005" typed against a "0005" record).
+  if (/^[A-Za-z0-9-]+$/.test(cleaned)) {
+    variants.push({ field: "patientId", pattern: `%${cleaned}%` })
+    const digitsOnly = cleaned.replace(/\D/g, "")
+    if (digitsOnly && digitsOnly !== cleaned) {
+      variants.push({ field: "patientId", pattern: `%${digitsOnly}%` })
+    }
+  }
+
+  for (const v of variants) {
+    const { data } = await supabase
+      .from("Patient")
+      .select("patientId")
+      .ilike(v.field, v.pattern)
+      .limit(1)
+      .maybeSingle()
+    if (data?.patientId) return data.patientId as string
+  }
+
+  return null
 }
 
 // ── Patient context builder ──────────────────────────────────────────────────
@@ -164,32 +313,47 @@ type PharmacyBillRow = {
   items?: Array<{ medicineName?: string; quantity?: number }>
 }
 
-async function buildPatientContext(humanPatientId: string): Promise<string> {
+async function buildPatientContext(idOrPatientId: string): Promise<string> {
   const supabase = await createClient()
 
-  // 1. Fetch patient + tightly-coupled records in one query.
-  const { data: patientRaw, error: patientErr } = await supabase
-    .from("Patient")
-    .select(
-      "id, patientId, firstName, lastName, age, dateOfBirth, gender, " +
-      "patientType, status, appointmentDate, createdAt, doctorName, " +
-      "department, referredBy, " +
-      "prescriptions:Prescription(" +
-        "id, prescriptionDate, status, doctorName, diagnosis, presentComplaint, " +
-        "previousHistory, medicines, investigations, followUpDate, " +
-        "temperature, pulseRate, spo2, total, amountPaid, balanceDue, paymentMode, createdAt, " +
-        "items:InvoiceItem(description, amount, sortOrder), " +
-        "payments:Payment(amount, paymentMode, paymentDate), " +
-        "eyeReading:EyeReading(presentPrescription, clinicalFindings)" +
-      "), " +
-      "eyeReadings:EyeReading(presentPrescription, autoRefractometer, readingDate, createdAt)"
-    )
-    .eq("patientId", humanPatientId)
-    .single()
+  const PATIENT_SELECT =
+    "id, patientId, firstName, lastName, age, dateOfBirth, gender, " +
+    "patientType, status, appointmentDate, createdAt, doctorName, " +
+    "department, referredBy, " +
+    "prescriptions:Prescription(" +
+      "id, prescriptionDate, status, doctorName, diagnosis, presentComplaint, " +
+      "previousHistory, medicines, investigations, followUpDate, " +
+      "temperature, pulseRate, spo2, total, amountPaid, balanceDue, paymentMode, createdAt, " +
+      "items:InvoiceItem(description, amount, sortOrder), " +
+      "payments:Payment(amount, paymentMode, paymentDate), " +
+      "eyeReading:EyeReading(presentPrescription, clinicalFindings)" +
+    "), " +
+    "eyeReadings:EyeReading(presentPrescription, autoRefractometer, readingDate, createdAt)"
 
-  if (patientErr || !patientRaw) return "Patient brief unavailable."
+  // Look up by human patientId first (OPD list passes this). If that misses
+  // (e.g. caller passed the Patient.id cuid because they came from the IPD
+  // list, where InPatient.patientId is a cuid FK to Patient.id), retry by id.
+  let { data: patientRaw } = await supabase
+    .from("Patient")
+    .select(PATIENT_SELECT)
+    .eq("patientId", idOrPatientId)
+    .maybeSingle()
+
+  if (!patientRaw) {
+    const retry = await supabase
+      .from("Patient")
+      .select(PATIENT_SELECT)
+      .eq("id", idOrPatientId)
+      .maybeSingle()
+    patientRaw = retry.data
+  }
+
+  if (!patientRaw) return "Patient brief unavailable."
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const patient = patientRaw as any
+  // From here on we always have the resolved human patientId for downstream
+  // child queries (lab/optical/pharmacy all key off Patient.patientId).
+  const humanPatientId: string = patient.patientId
 
   // 2. Side queries (parallel) keyed by the human patientId / cuid.
   const [
@@ -542,6 +706,256 @@ function summariseRefraction(json: string): string | null {
     return out
   } catch { return null }
 }
+// ── Analytics context builder ────────────────────────────────────────────────
+// Builds a comprehensive hospital-level brief: revenue, collections, dues,
+// expenses, doctor performance, top services, trends, demographics.
+// Fetches data in parallel — p95 latency ~600 ms on a warm Supabase instance.
+
+async function buildAnalyticsContext(): Promise<string> {
+  const supabase = await createClient()
+  const now = new Date()
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const monthName = now.toLocaleString("en-IN", { month: "long", year: "numeric" })
+
+  const [
+    overviewToday,
+    overviewMonth,
+    financialMonth,
+    topServices,
+    doctorPerf,
+    expenses,
+    weekSeries,
+    gender,
+    ageGroups,
+    statusDist,
+    referrals,
+    opdDuesRes,
+    ipdDuesRes,
+    labDuesRes,
+    optDuesRes,
+    pharmDuesRes,
+    paymentModesRes,
+    ipdStatsRes,
+  ] = await Promise.all([
+    getAnalyticsOverview("today"),
+    getAnalyticsOverview("month"),
+    getFinancialSummary("month"),
+    getTopServices("month"),
+    getDoctorPerformance("month"),
+    getExpenseBreakdown("month"),
+    getTimeSeries("week"),
+    getGenderDistribution("month"),
+    getAgeDistribution("month"),
+    getStatusDistribution("month"),
+    getReferralStats("month"),
+
+    // Outstanding dues across all modules (all-time, not period-filtered)
+    supabase.from("Prescription").select("balanceDue").gt("balanceDue", 0),
+    supabase.from("InPatient").select("balanceAmount").gt("balanceAmount", 0),
+    supabase.from("LabBill").select("balanceDue").gt("balanceDue", 0),
+    supabase.from("OpticalBill").select("balanceDue").gt("balanceDue", 0),
+    supabase.from("PharmacyBill").select("billAmount, paidAmount").gt("billAmount", 0),
+
+    // Payment mode breakdown for this month (OPD payments)
+    supabase.from("Payment").select("paymentMode, amount").gte("paymentDate", startOfMonth),
+
+    // IPD this month: admission count, operations, financials
+    supabase.from("InPatient")
+      .select("operationName, netAmount, totalReceivedAmount, balanceAmount, packageAmount")
+      .gte("admissionDate", startOfMonth),
+  ])
+
+  // ── Aggregate dues ────────────────────────────────────────────────────────
+  type DueRow = { balanceDue?: number; balanceAmount?: number; billAmount?: number; paidAmount?: number }
+  const opdDue  = ((opdDuesRes.data ?? []) as DueRow[]).reduce((s, r) => s + (r.balanceDue ?? 0), 0)
+  const ipdDue  = ((ipdDuesRes.data ?? []) as DueRow[]).reduce((s, r) => s + (r.balanceAmount ?? 0), 0)
+  const labDue  = ((labDuesRes.data ?? []) as DueRow[]).reduce((s, r) => s + (r.balanceDue ?? 0), 0)
+  const optDue  = ((optDuesRes.data ?? []) as DueRow[]).reduce((s, r) => s + (r.balanceDue ?? 0), 0)
+  const pharmDue= ((pharmDuesRes.data ?? []) as DueRow[]).reduce((s, r) => s + Math.max(0, (r.billAmount ?? 0) - (r.paidAmount ?? 0)), 0)
+  const totalDue = opdDue + ipdDue + labDue + optDue + pharmDue
+
+  // ── Aggregate payment modes ───────────────────────────────────────────────
+  const modeMap = new Map<string, number>()
+  for (const p of (paymentModesRes.data ?? []) as Array<{ paymentMode: string | null; amount: number }>) {
+    if (!p.amount) continue
+    const mode = (p.paymentMode ?? "Other").trim() || "Other"
+    modeMap.set(mode, (modeMap.get(mode) ?? 0) + p.amount)
+  }
+  const totalModeAmt = Array.from(modeMap.values()).reduce((s, a) => s + a, 0)
+
+  // ── Aggregate IPD this month ──────────────────────────────────────────────
+  type IpdRow = { operationName: string | null; netAmount: number; totalReceivedAmount: number; balanceAmount: number; packageAmount: number }
+  const ipdRows = (ipdStatsRes.data ?? []) as IpdRow[]
+  const ipdAdmissions = ipdRows.length
+  const ipdOps = ipdRows.filter(r => r.operationName).length
+  const ipdRevenue = ipdRows.reduce((s, r) => s + (r.netAmount ?? 0), 0)
+  const ipdCollected = ipdRows.reduce((s, r) => s + (r.totalReceivedAmount ?? 0), 0)
+  const ipdBalance = ipdRows.reduce((s, r) => s + (r.balanceAmount ?? 0), 0)
+  const avgPackage = ipdAdmissions > 0 ? Math.round(ipdRevenue / ipdAdmissions) : 0
+
+  // ── Build brief ───────────────────────────────────────────────────────────
+  const lines: string[] = []
+
+  lines.push("=== HOSPITAL ANALYTICS BRIEF ===")
+  lines.push(`Date: ${now.toISOString().slice(0, 10)}   Period context: ${monthName}`)
+
+  // TODAY
+  if (overviewToday) {
+    const o = overviewToday
+    lines.push("")
+    lines.push("=== TODAY ===")
+    lines.push(`Patients seen: ${o.totalPatients}  |  New registrations: ${o.newPatientsToday}`)
+    lines.push(`Revenue billed: ₹${fmtMoney(o.totalRevenue)}  |  Collected: ₹${fmtMoney(o.totalCollected)}`)
+    if (o.totalExpenses > 0) lines.push(`Expenses today: ₹${fmtMoney(o.totalExpenses)}`)
+    if (o.totalInpatients > 0) lines.push(`Active IPD patients: ${o.activeInpatients}  |  Total IPD admissions today: ${o.totalInpatients}`)
+    if (o.totalSurgeries > 0) lines.push(`Surgeries today: ${o.totalSurgeries}`)
+  }
+
+  // THIS MONTH
+  if (overviewMonth) {
+    const o = overviewMonth
+    const fin = financialMonth
+    const collRate = o.totalRevenue > 0 ? ((o.totalCollected / o.totalRevenue) * 100).toFixed(1) : "0"
+    const netFlow = o.totalCollected - o.totalExpenses
+    lines.push("")
+    lines.push(`=== THIS MONTH (${monthName}) ===`)
+    lines.push(`Total patients: ${o.totalPatients}`)
+    lines.push(`Revenue billed:  ₹${fmtMoney(o.totalRevenue)}`)
+    lines.push(`Collected:       ₹${fmtMoney(o.totalCollected)}  (collection rate: ${collRate}%)`)
+    if (fin) lines.push(`Discount given:  ₹${fmtMoney(fin.totalDiscount)}`)
+    lines.push(`Dues added:      ₹${fmtMoney(o.totalDues)}`)
+    lines.push(`Expenses:        ₹${fmtMoney(o.totalExpenses)}`)
+    lines.push(`Net cash flow:   ₹${fmtMoney(netFlow)}  (${netFlow >= 0 ? "SURPLUS" : "DEFICIT"})`)
+    if (o.collectionRate > 0) lines.push(`Revenue per patient: ₹${fmtMoney(o.revenuePerPatient)}`)
+    lines.push("")
+    lines.push("Revenue breakdown by category:")
+    const totalRev = o.totalRevenue || 1
+    if (o.totalConsultationRevenue > 0) lines.push(`  Consultations: ₹${fmtMoney(o.totalConsultationRevenue)} (${pct(o.totalConsultationRevenue, totalRev)})`)
+    if (o.totalLabRevenue > 0)          lines.push(`  Labs:          ₹${fmtMoney(o.totalLabRevenue)} (${pct(o.totalLabRevenue, totalRev)})`)
+    if (o.totalPharmacyRevenue > 0)     lines.push(`  Pharmacy:      ₹${fmtMoney(o.totalPharmacyRevenue)} (${pct(o.totalPharmacyRevenue, totalRev)})`)
+    if (o.totalOpticalRevenue > 0)      lines.push(`  Optical:       ₹${fmtMoney(o.totalOpticalRevenue)} (${pct(o.totalOpticalRevenue, totalRev)})`)
+    if (o.totalInpatientRevenue > 0)    lines.push(`  In-Patient:    ₹${fmtMoney(o.totalInpatientRevenue)} (${pct(o.totalInpatientRevenue, totalRev)})`)
+  }
+
+  // OUTSTANDING DUES (all-time unpaid balances across all modules)
+  lines.push("")
+  lines.push("=== OUTSTANDING DUES (all-time, unpaid) ===")
+  if (totalDue <= 0) {
+    lines.push("No outstanding dues across any module.")
+  } else {
+    if (opdDue > 0)   lines.push(`  OPD (consultations): ₹${fmtMoney(opdDue)}`)
+    if (ipdDue > 0)   lines.push(`  IPD (inpatients):    ₹${fmtMoney(ipdDue)}`)
+    if (labDue > 0)   lines.push(`  Lab:                 ₹${fmtMoney(labDue)}`)
+    if (optDue > 0)   lines.push(`  Optical:             ₹${fmtMoney(optDue)}`)
+    if (pharmDue > 0) lines.push(`  Pharmacy:            ₹${fmtMoney(pharmDue)}`)
+    lines.push(`  TOTAL OUTSTANDING:   ₹${fmtMoney(totalDue)}`)
+  }
+
+  // PAYMENT MODE BREAKDOWN (this month, OPD)
+  if (modeMap.size > 0) {
+    lines.push("")
+    lines.push("=== PAYMENT MODE BREAKDOWN (this month, OPD collections) ===")
+    const sorted = Array.from(modeMap.entries()).sort((a, b) => b[1] - a[1])
+    for (const [mode, amount] of sorted) {
+      lines.push(`  ${mode}: ₹${fmtMoney(amount)} (${pct(amount, totalModeAmt)})`)
+    }
+  }
+
+  // IPD THIS MONTH
+  if (ipdAdmissions > 0) {
+    lines.push("")
+    lines.push(`=== IN-PATIENT (IPD) THIS MONTH ===`)
+    lines.push(`Admissions: ${ipdAdmissions}`)
+    lines.push(`Operations/surgeries: ${ipdOps}`)
+    lines.push(`Average package: ₹${fmtMoney(avgPackage)}`)
+    lines.push(`Revenue billed: ₹${fmtMoney(ipdRevenue)}  |  Collected: ₹${fmtMoney(ipdCollected)}  |  Outstanding: ₹${fmtMoney(ipdBalance)}`)
+    const ipdRate = ipdRevenue > 0 ? ((ipdCollected / ipdRevenue) * 100).toFixed(1) : "0"
+    lines.push(`IPD collection rate: ${ipdRate}%`)
+  }
+
+  // LAST 7 DAYS TREND
+  if (weekSeries.length > 0) {
+    lines.push("")
+    lines.push("=== LAST 7 DAYS TREND ===")
+    for (const day of weekSeries) {
+      const net = day.collected - day.expenses
+      lines.push(`  ${day.date}: ${day.patients} patients · billed ₹${fmtMoney(day.revenue)} · collected ₹${fmtMoney(day.collected)} · expenses ₹${fmtMoney(day.expenses)} · net ₹${fmtMoney(net)}`)
+    }
+  }
+
+  // TOP SERVICES (this month)
+  if (topServices.length > 0) {
+    lines.push("")
+    lines.push("=== TOP SERVICES THIS MONTH (by revenue) ===")
+    for (let i = 0; i < Math.min(topServices.length, 12); i++) {
+      const s = topServices[i]
+      const avgPerService = s.count > 0 ? Math.round(s.revenue / s.count) : 0
+      lines.push(`  ${i + 1}. ${s.name}: ₹${fmtMoney(s.revenue)} (${s.count}× · avg ₹${fmtMoney(avgPerService)})`)
+    }
+  }
+
+  // DOCTOR PERFORMANCE (this month)
+  if (doctorPerf.length > 0) {
+    lines.push("")
+    lines.push("=== DOCTOR PERFORMANCE THIS MONTH ===")
+    for (let i = 0; i < Math.min(doctorPerf.length, 10); i++) {
+      const d = doctorPerf[i]
+      const revPerPt = d.patients > 0 ? Math.round(d.revenue / d.patients) : 0
+      lines.push(`  ${i + 1}. ${d.name}: ${d.patients} patients · ₹${fmtMoney(d.revenue)} revenue · ₹${fmtMoney(revPerPt)}/patient`)
+    }
+  }
+
+  // EXPENSE BREAKDOWN (this month)
+  if (expenses.length > 0) {
+    const totalExp = expenses.reduce((s, e) => s + e.amount, 0)
+    lines.push("")
+    lines.push(`=== EXPENSE BREAKDOWN THIS MONTH (total ₹${fmtMoney(totalExp)}) ===`)
+    const sorted = [...expenses].sort((a, b) => b.amount - a.amount)
+    for (const exp of sorted) {
+      lines.push(`  ${exp.category}: ₹${fmtMoney(exp.amount)} (${pct(exp.amount, totalExp)})`)
+    }
+  }
+
+  // PATIENT DEMOGRAPHICS
+  lines.push("")
+  lines.push("=== PATIENT DEMOGRAPHICS (this month) ===")
+  if (gender) {
+    const total = gender.male + gender.female + gender.other
+    lines.push(`Gender: Male ${gender.male} (${pct(gender.male, total)}), Female ${gender.female} (${pct(gender.female, total)}), Other ${gender.other}`)
+  }
+  if (ageGroups.length > 0) {
+    const topAges = [...ageGroups].sort((a, b) => b.count - a.count).slice(0, 6)
+    lines.push(`Age groups (most to least): ${topAges.map(a => `${a.label} (${a.count})`).join(", ")}`)
+  }
+
+  // PATIENT STATUS DISTRIBUTION
+  if (statusDist.length > 0) {
+    lines.push("")
+    lines.push("=== PATIENT STATUS DISTRIBUTION ===")
+    const sorted = [...statusDist].sort((a, b) => b.count - a.count)
+    const totalPts = sorted.reduce((s, d) => s + d.count, 0)
+    for (const s of sorted.slice(0, 8)) {
+      lines.push(`  ${s.status}: ${s.count} (${pct(s.count, totalPts)})`)
+    }
+  }
+
+  // TOP REFERRAL SOURCES
+  if (referrals.length > 0) {
+    lines.push("")
+    lines.push("=== TOP REFERRAL SOURCES ===")
+    for (const r of referrals.slice(0, 8)) {
+      lines.push(`  ${r.name}: ${r.count} patients`)
+    }
+  }
+
+  return lines.join("\n")
+}
+
+function pct(value: number, total: number): string {
+  if (!total || !Number.isFinite(value) || !Number.isFinite(total)) return "0%"
+  return `${((value / total) * 100).toFixed(1)}%`
+}
+
 function futureFollowUp(rxs: RxRow[]): string | null {
   const today = Date.now()
   // First future-dated follow-up, sorted ascending.

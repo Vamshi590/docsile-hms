@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 import { getISTDayBounds, toLocalDateISO, computePatientStatus } from "@/lib/utils"
 
 export async function getWorkupQueue(date?: string) {
+  await requireServerPermission("workup:view")
   const targetDate = date ?? toLocalDateISO()
   const { start, end } = getISTDayBounds(targetDate)
   const startMs = start.getTime()
@@ -98,8 +99,9 @@ export async function getWorkupQueue(date?: string) {
   })
 }
 
-export async function getPatientForWorkup(patientId: string) {
-  const { start, end } = getISTDayBounds()
+export async function getPatientForWorkup(patientId: string, date?: string) {
+  await requireServerPermission("workup:view")
+  const { start, end } = getISTDayBounds(date)
   const startMs = start.getTime()
   const endMs = end.getTime()
   const supabase = await createClient()
@@ -133,7 +135,7 @@ export async function getPatientForWorkup(patientId: string) {
 export async function startWorkup(patientId: string) {
   // Status is computed from data (eyeReadings + prescriptions), not stored.
   // This function is kept for compatibility but no longer updates status.
-  await requireAuth()
+  await requireServerPermission("workup:create")
   revalidatePath("/workup")
   return { success: true }
 }
@@ -147,7 +149,7 @@ export async function saveEyeReading(data: {
   clinicalFindings?: Record<string, unknown>
   readingDate: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("workup:create")
   const supabase = await createClient()
 
   try {

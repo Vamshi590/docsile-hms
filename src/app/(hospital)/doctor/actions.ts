@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 import { getISTDayBounds, toLocalDateISO, computePatientStatus } from "@/lib/utils"
 import { z } from "zod"
 
 export async function getDoctorQueue(date?: string) {
+  await requireServerPermission("doctor:view")
   const supabase = await createClient()
   const targetDate = date ?? toLocalDateISO()
   const { start, end } = getISTDayBounds(targetDate)
@@ -104,9 +105,10 @@ export async function getDoctorQueue(date?: string) {
   })
 }
 
-export async function getPatientForConsultation(patientId: string) {
+export async function getPatientForConsultation(patientId: string, date?: string) {
+  await requireServerPermission("doctor:view")
   const supabase = await createClient()
-  const { start, end } = getISTDayBounds()
+  const { start, end } = getISTDayBounds(date)
   const startMs = start.getTime()
   const endMs = end.getTime()
 
@@ -166,6 +168,8 @@ const PrescriptionSchema = z.object({
   temperature: z.number().optional().nullable(),
   pulseRate: z.number().int().optional().nullable(),
   spo2: z.number().int().optional().nullable(),
+  heightCm: z.number().optional().nullable(),
+  weightKg: z.number().optional().nullable(),
   presentComplaint: z.string().optional(),
   previousHistory: z.string().optional(),
   diagnosis: z.string().optional(),
@@ -185,7 +189,7 @@ const PrescriptionSchema = z.object({
 })
 
 export async function savePrescription(data: z.infer<typeof PrescriptionSchema>) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("doctor:consult")
   const validated = PrescriptionSchema.safeParse(data)
   if (!validated.success) {
     return { success: false, error: validated.error.issues[0]?.message ?? "Invalid data" }
@@ -223,6 +227,8 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
       temperature: pd.temperature ?? null,
       pulseRate: pd.pulseRate ?? null,
       spo2: pd.spo2 ?? null,
+      heightCm: pd.heightCm ?? null,
+      weightKg: pd.weightKg ?? null,
       presentComplaint: pd.presentComplaint ?? null,
       previousHistory: pd.previousHistory ?? null,
       diagnosis: pd.diagnosis ?? null,
@@ -285,6 +291,7 @@ export async function savePrescription(data: z.infer<typeof PrescriptionSchema>)
 // PrescriptionForm needs at mount time. Loaded once per page (server-side) so
 // the form no longer fires 6 separate calls on every patient click.
 export async function getPrescriptionReferenceData() {
+  await requireServerPermission("doctor:view")
   const supabase = await createClient()
 
   const [medsRes, invsRes, dropdownsRes, templatesRes] = await Promise.all([
@@ -304,7 +311,7 @@ export async function getPrescriptionReferenceData() {
     supabase
       .from("DropdownOption")
       .select("fieldName, value")
-      .in("fieldName", ["presentComplaint", "previousHistory", "diagnosis"])
+      .in("fieldName", ["presentComplaint", "previousHistory", "diagnosis", "additionalNotes"])
       .order("value", { ascending: true }),
     supabase
       .from("PredefinedTemplate")
@@ -313,7 +320,7 @@ export async function getPrescriptionReferenceData() {
       .order("name", { ascending: true }),
   ])
 
-  const bucket: Record<string, string[]> = { presentComplaint: [], previousHistory: [], diagnosis: [] }
+  const bucket: Record<string, string[]> = { presentComplaint: [], previousHistory: [], diagnosis: [], additionalNotes: [] }
   for (const row of (dropdownsRes.data ?? []) as { fieldName: string; value: string }[]) {
     if (bucket[row.fieldName]) bucket[row.fieldName].push(row.value)
   }
@@ -324,11 +331,13 @@ export async function getPrescriptionReferenceData() {
     complaintOptions: bucket.presentComplaint,
     previousHistoryOptions: bucket.previousHistory,
     diagnosisOptions: bucket.diagnosis,
+    additionalNotesOptions: bucket.additionalNotes,
     templates: templatesRes.data ?? [],
   }
 }
 
 export async function getMedicineMaster() {
+  await requireServerPermission("doctor:view")
   const supabase = await createClient()
   const { data } = await supabase
     .from("MedicineMaster")
@@ -340,6 +349,7 @@ export async function getMedicineMaster() {
 }
 
 export async function getInvestigationMaster() {
+  await requireServerPermission("doctor:view")
   const supabase = await createClient()
   const { data } = await supabase
     .from("InvestigationMaster")
@@ -351,6 +361,7 @@ export async function getInvestigationMaster() {
 }
 
 export async function getPredefinedTemplates() {
+  await requireServerPermission("doctor:view")
   const supabase = await createClient()
   const { data } = await supabase
     .from("PredefinedTemplate")
@@ -361,6 +372,7 @@ export async function getPredefinedTemplates() {
 }
 
 export async function getDropdownOptions(fieldName: string) {
+  await requireServerPermission("doctor:view")
   const supabase = await createClient()
   const { data: options } = await supabase
     .from("DropdownOption")
@@ -371,7 +383,7 @@ export async function getDropdownOptions(fieldName: string) {
 }
 
 export async function addDropdownOption(fieldName: string, value: string) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("doctor:consult")
   try {
     const supabase = await createClient()
 
@@ -406,7 +418,7 @@ export async function createMedicine(data: {
   defaultDays?: string
   note?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("doctor:consult")
   try {
     const supabase = await createClient()
     const now = new Date().toISOString()
@@ -427,12 +439,24 @@ export async function createMedicine(data: {
 export async function updatePatientToWithDoctor(patientId: string) {
   // Status is computed from data — no DB status update needed.
   // Kept for compatibility but is now a no-op.
-  await requireAuth()
+  await requireServerPermission("doctor:consult")
   revalidatePath("/doctor")
 }
 
-export async function getReceiptData(patientId: string) {
+/**
+ * Load the data needed to render a patient's receipts.
+ *
+ * Default behavior: returns only today's prescription / eye reading (matches the
+ * doctor queue UX, where receipts are for the active consultation).
+ *
+ * Pass `{ latest: true }` to return the patient's most recent prescription and
+ * eye reading regardless of date — used by the patients page where a completed
+ * visit may have happened on an earlier day.
+ */
+export async function getReceiptData(patientId: string, opts?: { latest?: boolean }) {
+  await requireServerPermission("doctor:view")
   const supabase = await createClient()
+  const useLatest = opts?.latest === true
   const { start, end } = getISTDayBounds()
   const startMs = start.getTime()
   const endMs = end.getTime()
@@ -458,16 +482,18 @@ export async function getReceiptData(patientId: string) {
   const patient = patientResult.data
   const hospital = hospitalResult.data
 
-  // Filter nested relations to today's date
   if (patient) {
+    const sortByCreatedDesc = (a: any, b: any) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+
     patient.eyeReadings = (patient.eyeReadings ?? [])
-      .filter((er: any) => isInDay(er.readingDate))
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .filter((er: any) => useLatest ? true : isInDay(er.readingDate))
+      .sort(sortByCreatedDesc)
       .slice(0, 1)
 
     patient.prescriptions = (patient.prescriptions ?? [])
-      .filter((rx: any) => isInDay(rx.prescriptionDate))
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .filter((rx: any) => useLatest ? true : isInDay(rx.prescriptionDate))
+      .sort(sortByCreatedDesc)
       .slice(0, 1)
   }
 
