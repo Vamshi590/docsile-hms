@@ -8,6 +8,7 @@ import { getHospitalProfile } from "@/lib/db"
 import { InstallPrompt } from "@/components/pwa/InstallPrompt"
 import { getAdminConfig, type AdminConfig } from "@/lib/admin-client"
 import { routeModule, isModuleEnabled } from "@/lib/module-gate"
+import { UserProvider } from "@/contexts/UserContext"
 
 export default async function HospitalLayout({
   children,
@@ -63,17 +64,19 @@ export default async function HospitalLayout({
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
-      <BillingBanner message={config.billing.bannerMessage} />
-      {navStyle === "top" ? (
-        <TopNavBar {...navProps} />
-      ) : (
-        <Sidebar {...navProps} />
-      )}
-      <main className="h-full overflow-y-auto flex-1">
-        <div className="min-h-full px-3 py-4 md:px-4 md:py-6 lg:px-6 lg:pt-6 lg:pb-8">{children}</div>
-      </main>
-      <InstallPrompt />
-    </div>
+    <UserProvider user={user}>
+      <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
+        <BillingBanner message={config.billing.bannerMessage} />
+        {navStyle === "top" ? (
+          <TopNavBar {...navProps} />
+        ) : (
+          <Sidebar {...navProps} />
+        )}
+        <main className="h-full overflow-y-auto flex-1">
+          <div className="min-h-full px-3 py-4 md:px-4 md:py-6 lg:px-6 lg:pt-6 lg:pb-8">{children}</div>
+        </main>
+        <InstallPrompt />
+      </div>
+    </UserProvider>
   )
 }
