@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Filter, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Plus, Printer, Search, Filter, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,10 +41,125 @@ import {
   getStockSummary,
   getSuppliers,
 } from "../actions";
+import { getHospitalProfileForReceipts } from "@/app/(hospital)/inpatients/actions";
+import { printReceiptsHtml } from "@/lib/print-receipts";
 
 type StockItem = Awaited<ReturnType<typeof getStock>>[number];
 type Medicine = Awaited<ReturnType<typeof getMedicines>>[number];
 type Supplier = Awaited<ReturnType<typeof getSuppliers>>[number];
+type HospitalProfileForReceipts = Awaited<ReturnType<typeof getHospitalProfileForReceipts>>;
+
+/** Escape HTML special characters before inlining user text into a print template. */
+function esc(s: string | null | undefined): string {
+  if (s == null) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Build an A4 portrait inventory sheet HTML for shelf cross-checking. Renders
+ * every stock row currently visible in the table (respects search + filter
+ * chips), shows medicine name + generic + batch + expiry + qty + MRP + value +
+ * supplier, and includes a tick column for the physical check.
+ */
+function buildInventoryPrintHtml(
+  items: StockItem[],
+  hp: HospitalProfileForReceipts,
+  ctx: { filterLabel: string; searchTerm: string; totalQuantity: number; stockValue: number; printedAt: string }
+): string {
+  const hospitalName = hp?.displayName || hp?.name || "Hospital";
+
+  const rows = items.map((item, i) => {
+    const expiry = item.expiryDate ? new Date(item.expiryDate) : null;
+    const expiryStr = expiry
+      ? expiry.toLocaleDateString("en-IN", { year: "numeric", month: "short" })
+      : "—";
+    const expiringSoon = expiry && expiry.getTime() < Date.now() + 90 * 24 * 60 * 60 * 1000;
+    const lowStock = (item.quantity ?? 0) <= 10;
+    const value = (item.quantity ?? 0) * (item.costPrice ?? 0);
+    const rowStyle = expiringSoon
+      ? "background:#fff7ed;"
+      : lowStock
+      ? "background:#fef2f2;"
+      : "";
+
+    return `
+      <tr style="${rowStyle}">
+        <td class="border border-black p-1 text-center" style="font-size:9px;">${i + 1}</td>
+        <td class="border border-black p-1">
+          <div style="font-weight:600;">${esc(item.medicine?.name)}</div>
+          ${item.medicine?.genericName ? `<div style="font-size:8px;color:#555;">${esc(item.medicine.genericName)}</div>` : ""}
+          ${item.medicine?.manufacturer ? `<div style="font-size:8px;color:#777;">${esc(item.medicine.manufacturer)}</div>` : ""}
+        </td>
+        <td class="border border-black p-1 font-mono" style="font-size:9px;">${esc(item.batchNumber)}</td>
+        <td class="border border-black p-1 text-center" style="font-size:9px;">${esc(expiryStr)}</td>
+        <td class="border border-black p-1 text-right" style="font-weight:600;">${item.quantity ?? 0}</td>
+        <td class="border border-black p-1 text-right">${(item.mrp ?? 0).toFixed(2)}</td>
+        <td class="border border-black p-1 text-right">${value.toFixed(2)}</td>
+        <td class="border border-black p-1" style="font-size:9px;">${esc(item.supplier?.name) || "—"}</td>
+        <td class="border border-black p-1 text-center" style="width:20px;">&nbsp;</td>
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <div class="receipt-page">
+      <div class="border-b-2 border-black pb-2 mb-3 text-center">
+        ${hp?.logoUrl ? `<img src="${esc(hp.logoUrl)}" alt="" style="height:44px;margin:0 auto 4px;" />` : ""}
+        <h1 class="text-lg font-bold tracking-tight">${esc(hospitalName)}</h1>
+        ${hp?.address ? `<p class="text-[10px]">${esc(hp.address)}</p>` : ""}
+        ${hp?.phone || hp?.email ? `<p class="text-[10px]">${[hp.phone && `Phone: ${esc(hp.phone)}`, hp.email && `Email: ${esc(hp.email)}`].filter(Boolean).join(" · ")}</p>` : ""}
+      </div>
+
+      <h2 class="text-sm text-center font-bold py-1 mb-2 border border-black">PHARMACY STOCK — SHELF CHECK SHEET</h2>
+
+      <div class="grid grid-cols-2 gap-2 text-[10px] mb-2 pb-1 border-b border-black">
+        <div>
+          <div><strong>Filter:</strong> ${esc(ctx.filterLabel)}</div>
+          ${ctx.searchTerm ? `<div><strong>Search:</strong> ${esc(ctx.searchTerm)}</div>` : ""}
+        </div>
+        <div class="text-right">
+          <div><strong>Printed:</strong> ${esc(ctx.printedAt)}</div>
+          <div><strong>Lines:</strong> ${items.length} · <strong>Units:</strong> ${ctx.totalQuantity} · <strong>Value:</strong> ${ctx.stockValue.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <table class="w-full border-collapse text-[10px]">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th class="border border-black p-1 text-center font-bold" style="width:4%;">#</th>
+            <th class="border border-black p-1 text-left font-bold">MEDICINE</th>
+            <th class="border border-black p-1 text-left font-bold" style="width:13%;">BATCH</th>
+            <th class="border border-black p-1 text-center font-bold" style="width:11%;">EXPIRY</th>
+            <th class="border border-black p-1 text-right font-bold" style="width:7%;">QTY</th>
+            <th class="border border-black p-1 text-right font-bold" style="width:9%;">MRP</th>
+            <th class="border border-black p-1 text-right font-bold" style="width:10%;">VALUE</th>
+            <th class="border border-black p-1 text-left font-bold" style="width:14%;">SUPPLIER</th>
+            <th class="border border-black p-1 text-center font-bold" style="width:5%;">✓</th>
+          </tr>
+        </thead>
+        <tbody>${rows || `<tr><td colspan="9" class="border border-black p-3 text-center" style="color:#666;">No stock items match this filter.</td></tr>`}</tbody>
+      </table>
+
+      <div class="mt-4 pt-2 text-[10px]" style="display:flex;justify-content:space-between;">
+        <div>
+          <div><strong>Legend:</strong>
+            <span style="background:#fef2f2;padding:0 6px;margin-left:6px;">Low Stock (≤10)</span>
+            <span style="background:#fff7ed;padding:0 6px;margin-left:6px;">Expiring ≤ 90 days</span>
+          </div>
+        </div>
+        <div>
+          <div><strong>Checked by:</strong> __________________________</div>
+          <div style="margin-top:4px;"><strong>Signature:</strong> __________________________</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 const CATEGORIES = [
   "Tablet",
@@ -90,6 +206,7 @@ export function InventoryTab({
 }: {
   onStockChanged?: () => void;
 }) {
+  const { can } = usePermissions();
   const [activeTab, setActiveTab] = useState<"stock" | "medicines">("stock");
   const [stock, setStock] = useState<StockItem[]>([]);
   const [medicines, setMedicines] = useState<Medicine[]>([]);
@@ -343,6 +460,30 @@ export function InventoryTab({
     }
   };
 
+  const [hospitalProfile, setHospitalProfile] = useState<HospitalProfileForReceipts | null>(null);
+  const [printingInventory, setPrintingInventory] = useState(false);
+
+  async function handlePrintInventory() {
+    setPrintingInventory(true);
+    try {
+      let hp = hospitalProfile;
+      if (!hp) {
+        hp = await getHospitalProfileForReceipts();
+        setHospitalProfile(hp);
+      }
+      const totalQuantity = stock.reduce((s, i) => s + (i.quantity ?? 0), 0);
+      const stockValue = stock.reduce((s, i) => s + (i.quantity ?? 0) * (i.costPrice ?? 0), 0);
+      const filterLabel = filter === "all" ? "All Stock" : filter === "lowStock" ? "Low Stock" : "Near Expiry";
+      const printedAt = new Date().toLocaleString("en-IN");
+      const html = buildInventoryPrintHtml(stock, hp, { filterLabel, searchTerm: search, totalQuantity, stockValue, printedAt });
+      printReceiptsHtml({ title: "Pharmacy Inventory — Shelf Check Sheet", contentHtml: html });
+    } catch {
+      toast.error("Could not print inventory");
+    } finally {
+      setPrintingInventory(false);
+    }
+  }
+
   const isNearExpiry = (date: Date | string) => {
     const d = new Date(date);
     const threeMonths = new Date();
@@ -436,7 +577,19 @@ export function InventoryTab({
         )}
 
         <div className="flex items-center gap-2 ml-auto">
+          {activeTab === "stock" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrintInventory}
+              disabled={printingInventory}
+            >
+              <Printer className="h-4 w-4 mr-1.5" />
+              {printingInventory ? "Preparing…" : "Print Inventory"}
+            </Button>
+          )}
           {/* Add Medicine Dialog */}
+          {can("pharmacy:manage_stock") && (
           <Dialog
             open={showAddMedicine}
             onOpenChange={(open) => {
@@ -602,8 +755,10 @@ export function InventoryTab({
               </div>
             </DialogContent>
           </Dialog>
+          )}
 
           {/* Add Stock Dialog */}
+          {can("pharmacy:manage_stock") && (
           <Dialog
             open={showAddStock}
             onOpenChange={(open) => {
@@ -878,6 +1033,7 @@ export function InventoryTab({
               </div>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </div>
 
@@ -1024,24 +1180,26 @@ export function InventoryTab({
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setEditingStock(item);
-                                  const expiry = new Date(item.expiryDate);
-                                  const yyyy = expiry.getFullYear();
-                                  const mm = String(expiry.getMonth() + 1).padStart(2, "0");
-                                  setEditStockForm({
-                                    batchNumber: item.batchNumber,
-                                    quantity: item.quantity,
-                                    mrp: item.mrp,
-                                    costPrice: item.costPrice,
-                                    gstPercent: item.gstPercent,
-                                    expiryMonth: `${yyyy}-${mm}`,
-                                  });
-                                }}
-                              >
-                                <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
-                              </DropdownMenuItem>
+                              {can("pharmacy:manage_stock") && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setEditingStock(item);
+                                    const expiry = new Date(item.expiryDate);
+                                    const yyyy = expiry.getFullYear();
+                                    const mm = String(expiry.getMonth() + 1).padStart(2, "0");
+                                    setEditStockForm({
+                                      batchNumber: item.batchNumber,
+                                      quantity: item.quantity,
+                                      mrp: item.mrp,
+                                      costPrice: item.costPrice,
+                                      gstPercent: item.gstPercent,
+                                      expiryMonth: `${yyyy}-${mm}`,
+                                    });
+                                  }}
+                                >
+                                  <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </td>
@@ -1148,31 +1306,35 @@ export function InventoryTab({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setEditingMedicine(m);
-                                setEditMedForm({
-                                  name: m.name,
-                                  genericName: m.genericName ?? "",
-                                  manufacturer: m.manufacturer ?? "",
-                                  category: m.category ?? "",
-                                  dosageForm: m.dosageForm ?? "",
-                                  strength: m.strength ?? "",
-                                  unitOfMeasure: m.unitOfMeasure,
-                                  hsnCode: m.hsnCode ?? "",
-                                  gstPercent: m.gstPercent,
-                                  scheduleType: m.scheduleType ?? "",
-                                });
-                              }}
-                            >
-                              <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => handleDeleteMedicine(m)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
-                            </DropdownMenuItem>
+                            {can("pharmacy:manage_stock") && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditingMedicine(m);
+                                  setEditMedForm({
+                                    name: m.name,
+                                    genericName: m.genericName ?? "",
+                                    manufacturer: m.manufacturer ?? "",
+                                    category: m.category ?? "",
+                                    dosageForm: m.dosageForm ?? "",
+                                    strength: m.strength ?? "",
+                                    unitOfMeasure: m.unitOfMeasure,
+                                    hsnCode: m.hsnCode ?? "",
+                                    gstPercent: m.gstPercent,
+                                    scheduleType: m.scheduleType ?? "",
+                                  });
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                              </DropdownMenuItem>
+                            )}
+                            {can("pharmacy:manage_stock") && (
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleDeleteMedicine(m)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { usePermissions } from "@/hooks/usePermissions"
 import {
   Plus, BarChart2, TrendingUp, IndianRupee, X,
   MoreVertical, Pencil, Trash2, Loader2, RefreshCw,
-  Users, UserPlus, Clock, CheckCircle2, Settings
+  Users, UserPlus, Clock, CheckCircle2, Settings, Sparkles
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -14,6 +15,7 @@ import { BreadcrumbHeader, FilterBar, DateNavigator, SearchInput } from "@/compo
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { PatientTable, PatientRow } from "./PatientTable"
+import { AskSithaAI } from "../../doctor/components/AskSithaAI"
 import { PatientRegistrationStepper } from "./PatientRegistrationStepper"
 import InPatientAdmissionForm from "@/app/(hospital)/inpatients/components/InPatientAdmissionForm"
 import { InPatientStatusBadge } from "@/app/(hospital)/inpatients/components/InPatientStatusBadge"
@@ -22,12 +24,16 @@ import { PatientDetail } from "./PatientDetail"
 import { ExistingPatientSearch } from "./ExistingPatientSearch"
 import { AddServicesModal } from "./AddServicesModal"
 import { getPatients, searchExistingPatients, deletePatient, getPatientRegistrationFormData } from "../actions"
+import { getReceiptData } from "../../doctor/actions"
+import { QuickPrintRenderer } from "../../doctor/components/QuickPrintRenderer"
+import { printReceiptsHtml } from "@/lib/print-receipts"
+import type { DefaultPrintConfig } from "@/lib/default-print"
 
 type AddFormData = Awaited<ReturnType<typeof getPatientRegistrationFormData>>
 import { getInPatients, deleteInPatient, getInPatientAdmissionFormData } from "@/app/(hospital)/inpatients/actions"
 
 type IpdAddFormData = Awaited<ReturnType<typeof getInPatientAdmissionFormData>>
-import { todayISO, formatDateLong, toLocalDateISO } from "@/lib/utils"
+import { cn, todayISO, formatDateLong, toLocalDateISO } from "@/lib/utils"
 import type { InPatient } from "@/lib/types"
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -41,6 +47,7 @@ type PatientsPageProps = {
   initialUserRole: string
   initialDate: string
   initialSearch: string
+  initialDefaultPrint: DefaultPrintConfig
 }
 
 export function PatientsPage({
@@ -48,8 +55,10 @@ export function PatientsPage({
   initialUserRole,
   initialDate,
   initialSearch,
+  initialDefaultPrint,
 }: PatientsPageProps) {
   const router = useRouter()
+  const { can } = usePermissions()
   const [tab, setTab] = useState<"OPD" | "IPD">("OPD")
   const [selectedDate, setSelectedDate] = useState(initialDate)
   const [search, setSearch] = useState(initialSearch)
@@ -62,6 +71,9 @@ export function PatientsPage({
   const [ipdAddLoading, setIpdAddLoading] = useState(false)
   const [ipdAddFormData, setIpdAddFormData] = useState<IpdAddFormData | null>(null)
   const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(null)
+  // When true, the content area renders with Ask Sitha AI as a sticky right
+  // column instead of opening a slide-out sheet.
+  const [chatOpen, setChatOpen] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [existingPatientId, setExistingPatientId] = useState<string | null>(null)
   const userRole = initialUserRole
@@ -73,6 +85,38 @@ export function PatientsPage({
   const [deleteTarget, setDeleteTarget] = useState<{ type: "OPD" | "IPD"; id: string; name: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // Quick-print state (defaults configured in Settings → Print Defaults)
+  const [defaultPrint] = useState<DefaultPrintConfig>(initialDefaultPrint)
+  const [quickPrintData, setQuickPrintData] = useState<{
+    data: Awaited<ReturnType<typeof getReceiptData>>
+    patientName: string
+  } | null>(null)
+  const [quickPrintingId, setQuickPrintingId] = useState<string | null>(null)
+  const quickPrintRef = useRef<HTMLDivElement>(null)
+
+  async function handleQuickPrint(p: PatientRow) {
+    if (defaultPrint.items.length === 0) return
+    const patientName = `${p.firstName} ${p.lastName ?? ""}`.trim()
+    setQuickPrintingId(p.patientId)
+    try {
+      const data = await getReceiptData(p.patientId, { latest: true })
+      setQuickPrintData({ data, patientName })
+      setTimeout(() => {
+        const html = quickPrintRef.current?.innerHTML ?? ""
+        if (!html) {
+          toast.error("Nothing to print")
+          return
+        }
+        printReceiptsHtml({ title: `Print - ${patientName}`, contentHtml: html })
+        setTimeout(() => setQuickPrintData(null), 1500)
+      }, 50)
+    } catch (err) {
+      console.error("Quick print error:", err)
+      toast.error("Failed to load receipt data")
+    } finally {
+      setQuickPrintingId(null)
+    }
+  }
 
   async function handleAddPatientClick() {
     if (tab === "OPD") {
@@ -190,9 +234,23 @@ export function PatientsPage({
             onBack={() => { setSelectedPatient(null); setSelectedInpatient(null) }}
             backLabel="Patients"
             currentLabel={selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName ?? ""}`.trim() : selectedInpatient?.name ?? ""}
-          />
+          >
+            <button
+              onClick={() => setChatOpen(o => !o)}
+              title={chatOpen ? "Hide Sitha" : "Ask Sitha AI"}
+              className={cn(
+                "h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
+                chatOpen
+                  ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                  : "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+              )}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {chatOpen ? "Hide Sitha" : "Ask Sitha"}
+            </button>
+          </BreadcrumbHeader>
         ) : (
-          <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
+          <div className="grid grid-cols-3 items-center bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="min-w-0">
                 <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Patients</h1>
@@ -206,7 +264,7 @@ export function PatientsPage({
                 <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
               </button>
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex justify-center">
               <TabsList className="bg-muted/50 border border-border/40">
                 <TabsTrigger
                   value="OPD"
@@ -221,6 +279,8 @@ export function PatientsPage({
                   In-Patients
                 </TabsTrigger>
               </TabsList>
+            </div>
+            <div className="flex items-center justify-end gap-2.5">
               <button
                 onClick={() => setShowStats(true)}
                 className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-border/60 bg-white hover:bg-muted/40 transition-colors text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -228,19 +288,34 @@ export function PatientsPage({
                 <BarChart2 className="h-3.5 w-3.5" />
                 Stats
               </button>
-              <Button
-                onClick={handleAddPatientClick}
-                disabled={addLoading || ipdAddLoading}
-                size="sm"
-                className="gap-1.5 h-9"
-              >
-                {(addLoading || ipdAddLoading) ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
+              <button
+                onClick={() => setChatOpen(o => !o)}
+                title={chatOpen ? "Hide Sitha" : "Ask Sitha AI"}
+                className={cn(
+                  "h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
+                  chatOpen
+                    ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                    : "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
                 )}
-                Add Patient
-              </Button>
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {chatOpen ? "Hide Sitha" : "Ask Sitha"}
+              </button>
+              {can(tab === "IPD" ? "inpatients:create" : "patients:create") && (
+                <Button
+                  onClick={handleAddPatientClick}
+                  disabled={addLoading || ipdAddLoading}
+                  size="sm"
+                  className="gap-1.5 h-9"
+                >
+                  {(addLoading || ipdAddLoading) ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  Add Patient
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -282,7 +357,9 @@ export function PatientsPage({
           </FilterBar>
         )}
 
-        {/* Patient detail view */}
+        {/* Patient detail view + optional Sitha column */}
+        <div className={cn(chatOpen && "flex gap-4 items-start")}>
+        <div className={cn(chatOpen && "flex-1 min-w-0")}>
         {selectedInpatient ? (
           <div className="mt-5">
             <InPatientDetailPage
@@ -308,8 +385,11 @@ export function PatientsPage({
                 loading={loading}
                 onRowClick={p => setSelectedPatient(p)}
                 userRole={userRole}
-                onEdit={p => setEditPatient(p)}
-                onDelete={p => setDeleteTarget({ type: "OPD", id: p.patientId, name: `${p.firstName} ${p.lastName ?? ""}`.trim() })}
+                onEdit={can("patients:edit") ? (p => setEditPatient(p)) : undefined}
+                onDelete={can("patients:delete") ? (p => setDeleteTarget({ type: "OPD", id: p.patientId, name: `${p.firstName} ${p.lastName ?? ""}`.trim() })) : undefined}
+                onQuickPrint={handleQuickPrint}
+                quickPrintingId={quickPrintingId}
+                defaultPrintConfigured={defaultPrint.items.length > 0}
               />
             </TabsContent>
             <TabsContent value="IPD" className="mt-4">
@@ -379,8 +459,8 @@ export function PatientsPage({
                               </div>
                             </TableCell>
                             <TableCell>
-                              <span className="text-sm text-muted-foreground">
-                                {doctors || <span className="text-muted-foreground/50">—</span>}
+                              <span className="text-sm font-medium text-foreground">
+                                {doctors || <span className="font-normal text-muted-foreground/50">—</span>}
                               </span>
                             </TableCell>
                             <TableCell>
@@ -391,7 +471,7 @@ export function PatientsPage({
                               </span>
                             </TableCell>
                             <TableCell>
-                              <span className="text-sm text-muted-foreground tabular-nums">
+                              <span className="text-sm font-medium text-foreground tabular-nums">
                                 {new Date(patient.admissionDate).toLocaleDateString("en-IN", {
                                   day: "2-digit",
                                   month: "short",
@@ -421,10 +501,12 @@ export function PatientsPage({
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => setEditInpatient(patient)}>
-                                    <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
-                                  </DropdownMenuItem>
-                                  {userRole === "ADMIN" && (
+                                  {can("inpatients:edit") && (
+                                    <DropdownMenuItem onClick={() => setEditInpatient(patient)}>
+                                      <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                                    </DropdownMenuItem>
+                                  )}
+                                  {can("inpatients:delete") && (
                                     <DropdownMenuItem
                                       onClick={() => setDeleteTarget({ type: "IPD", id: patient.id, name: patient.name })}
                                       className="text-destructive focus:text-destructive"
@@ -452,6 +534,16 @@ export function PatientsPage({
             </TabsContent>
           </>
         )}
+        </div>
+        {chatOpen && (
+          <div className="w-80 shrink-0 sticky top-4 self-start max-h-[calc(100vh-6rem)] overflow-y-auto pr-0.5 mt-5">
+            <AskSithaAI
+              patientId={selectedPatient?.patientId ?? selectedInpatient?.patientId ?? null}
+              module={selectedInpatient ? "inpatients" : "patients"}
+            />
+          </div>
+        )}
+        </div>
       </Tabs>
 
       {/* Stats Modal */}
@@ -622,6 +714,15 @@ export function PatientsPage({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Hidden renderer for quick-print */}
+      {quickPrintData && (
+        <QuickPrintRenderer
+          ref={quickPrintRef}
+          data={quickPrintData.data}
+          items={defaultPrint.items}
+        />
+      )}
     </>
   )
 }

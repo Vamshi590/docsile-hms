@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Plus, Pencil, Settings2, Trash2, MapPin, FlaskConical } from "lucide-react"
+import { usePermissions } from "@/hooks/usePermissions"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -25,6 +26,7 @@ export function LabConfigTab({ initialLabs, loading, onLabsChanged }: {
   loading: boolean
   onLabsChanged?: () => void
 }) {
+  const { can } = usePermissions()
   const [formOpen, setFormOpen] = useState(false)
   const [editingLab, setEditingLab] = useState<LabWithCount | null>(null)
   const [configuringLab, setConfiguringLab] = useState<string | null>(null)
@@ -55,9 +57,11 @@ export function LabConfigTab({ initialLabs, loading, onLabsChanged }: {
   return (
     <>
       <SectionHeader title="Lab Configuration" description="Manage labs and their investigation mappings">
-        <Button size="sm" onClick={() => { setEditingLab(null); setFormOpen(true) }}>
-          <Plus className="h-4 w-4 mr-1" /> Add Lab
-        </Button>
+        {can("labs:config") && (
+          <Button size="sm" onClick={() => { setEditingLab(null); setFormOpen(true) }}>
+            <Plus className="h-4 w-4 mr-1" /> Add Lab
+          </Button>
+        )}
       </SectionHeader>
 
       {/* Labs Table */}
@@ -121,30 +125,36 @@ export function LabConfigTab({ initialLabs, loading, onLabsChanged }: {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setConfiguringLab(lab.id)}
-                        className="text-xs"
-                      >
-                        <Settings2 className="h-3.5 w-3.5 mr-1" /> Configure
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="h-7 w-7"
-                        onClick={() => { setEditingLab(lab); setFormOpen(true) }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                        onClick={() => setDeletingLab(lab)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {can("labs:config") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConfiguringLab(lab.id)}
+                          className="text-xs"
+                        >
+                          <Settings2 className="h-3.5 w-3.5 mr-1" /> Configure
+                        </Button>
+                      )}
+                      {can("labs:config") && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="h-7 w-7"
+                          onClick={() => { setEditingLab(lab); setFormOpen(true) }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {can("labs:config") && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => setDeletingLab(lab)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

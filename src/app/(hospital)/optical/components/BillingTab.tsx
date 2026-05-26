@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
+import { usePermissions } from "@/hooks/usePermissions"
 import { Eye, Loader2, Plus, Printer, Search, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -132,6 +133,7 @@ function ReadingRow({ label, data }: { label: string; data: ReadingData }) {
 }
 
 export function BillingTab() {
+  const { can } = usePermissions()
   // Patient
   const [patientSearch, setPatientSearch] = useState("")
   const [patientInfo, setPatientInfo] = useState<PatientInfo | null>(null)
@@ -787,10 +789,12 @@ export function BillingTab() {
 
               {/* Actions */}
               <div className="space-y-2 pt-1">
-                <Button className="w-full" onClick={saveBill} disabled={saving}>
-                  {saving && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
-                  Save Bill
-                </Button>
+                {can("optical:create") && (
+                  <Button className="w-full" onClick={saveBill} disabled={saving}>
+                    {saving && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+                    Save Bill
+                  </Button>
+                )}
                 <Button variant="ghost" className="w-full text-muted-foreground" onClick={clearBill} size="sm">
                   Clear
                 </Button>

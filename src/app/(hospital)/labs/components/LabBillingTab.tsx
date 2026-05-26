@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react"
 import { Search, User, FileText, AlertTriangle, CheckCircle2, Filter, Loader2, FlaskConical, ChevronDown, History, Printer, RefreshCw, ClipboardList } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { usePermissions } from "@/hooks/usePermissions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -88,6 +89,7 @@ const STATUS_COLORS: Record<string, "success" | "warning" | "secondary" | "info"
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
+  const { can } = usePermissions()
   // ── Billing state
   const [searchId, setSearchId] = useState("")
   const [searchLoading, setSearchLoading] = useState(false)
@@ -414,7 +416,7 @@ export function LabBillingTab({ labs: parentLabs }: { labs: LabWithCount[] }) {
               <p className="text-sm font-semibold text-foreground">
                 Auto-Segregated Bills ({labGroups.length} lab{labGroups.length !== 1 ? "s" : ""})
               </p>
-              {labGroups.length > 1 && (
+              {labGroups.length > 1 && can("labs:create") && (
                 <Button onClick={handleProcessAll} disabled={submitting} size="sm">
                   {submitting && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
                   Process All

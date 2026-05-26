@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Loader2, Plus, Search, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,6 +123,7 @@ export function InventoryTab({
 }: {
   onStockChanged?: () => void;
 }) {
+  const { can } = usePermissions();
   const [activeTab, setActiveTab] = useState<"stock" | "products">("stock");
   const [stock, setStock] = useState<StockEntry[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -473,21 +475,25 @@ export function InventoryTab({
           </Button>
         )}
         <div className="flex-1" />
-        <Button
-          size="sm"
-          className="h-9 gap-1.5"
-          onClick={() => setShowProductDialog(true)}
-        >
-          <Plus className="h-3.5 w-3.5" /> Add Product
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-9 gap-1.5"
-          onClick={() => setShowStockDialog(true)}
-        >
-          <Plus className="h-3.5 w-3.5" /> Add Stock
-        </Button>
+        {can("optical:manage_stock") && (
+          <Button
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={() => setShowProductDialog(true)}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Product
+          </Button>
+        )}
+        {can("optical:manage_stock") && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 gap-1.5"
+            onClick={() => setShowStockDialog(true)}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Stock
+          </Button>
+        )}
       </div>
 
       {/* Stock Tab */}
@@ -633,9 +639,11 @@ export function InventoryTab({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openEditStock(item)}>
-                            <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
-                          </DropdownMenuItem>
+                          {can("optical:manage_stock") && (
+                            <DropdownMenuItem onClick={() => openEditStock(item)}>
+                              <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>
@@ -731,12 +739,16 @@ export function InventoryTab({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openEditProduct(p)}>
-                            <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive" onClick={() => setDeletingProductId(p.id)}>
-                            <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
-                          </DropdownMenuItem>
+                          {can("optical:manage_stock") && (
+                            <DropdownMenuItem onClick={() => openEditProduct(p)}>
+                              <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                            </DropdownMenuItem>
+                          )}
+                          {can("optical:manage_stock") && (
+                            <DropdownMenuItem className="text-destructive" onClick={() => setDeletingProductId(p.id)}>
+                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>

@@ -2,6 +2,7 @@
 
 import { X, MapPin, CreditCard, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { usePermissions } from "@/hooks/usePermissions"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -31,6 +32,7 @@ export function LabBillCard({
   onUpdateDiscount, onUpdateDiscountReason, onUpdatePaymentMode, onUpdateAmountPaid,
   onRemoveItem, onProcess, submitting,
 }: LabBillCardProps) {
+  const { can } = usePermissions()
   const subtotal = items.reduce((s, i) => s + i.amount, 0)
   const total = Math.max(0, subtotal - discount)
   const balance = total - amountPaid
@@ -128,10 +130,12 @@ export function LabBillCard({
             </div>
           )}
 
-          <Button onClick={onProcess} disabled={submitting || items.length === 0} className="w-full" size="sm">
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CreditCard className="h-4 w-4 mr-1" />}
-            {submitting ? "Processing..." : `Process Payment — ₹${total.toLocaleString("en-IN")}`}
-          </Button>
+          {can("labs:create") && (
+            <Button onClick={onProcess} disabled={submitting || items.length === 0} className="w-full" size="sm">
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CreditCard className="h-4 w-4 mr-1" />}
+              {submitting ? "Processing..." : `Process Payment — ₹${total.toLocaleString("en-IN")}`}
+            </Button>
+          )}
         </div>
       )}
     </div>
