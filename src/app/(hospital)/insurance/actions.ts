@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 import { z } from "zod"
 import { getNextInsClaimNumber } from "@/lib/id-generators"
-import type { InsuranceClaimStatus, InsuranceStatusHistoryEntry } from "@/lib/types"
+import type { InsuranceClaimStatus, InsuranceStatusHistoryEntry, PaymentRecord } from "@/lib/types"
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -33,6 +33,7 @@ const InsuranceCompanySchema = z.object({
 // ─── Insurance Company CRUD ──────────────────────────────────────────────────
 
 export async function getInsuranceCompanies() {
+  await requireServerPermission("insurance:view")
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("InsuranceCompany")
@@ -44,6 +45,7 @@ export async function getInsuranceCompanies() {
 }
 
 export async function getAllInsuranceCompanies() {
+  await requireServerPermission("insurance:view")
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("InsuranceCompany")
@@ -54,6 +56,7 @@ export async function getAllInsuranceCompanies() {
 }
 
 export async function createInsuranceCompany(data: z.infer<typeof InsuranceCompanySchema>) {
+  await requireServerPermission("insurance:create")
   const validated = InsuranceCompanySchema.safeParse(data)
   if (!validated.success) {
     return { success: false as const, error: validated.error.issues[0]?.message ?? "Invalid data" }
@@ -75,6 +78,7 @@ export async function createInsuranceCompany(data: z.infer<typeof InsuranceCompa
 }
 
 export async function updateInsuranceCompany(id: string, data: z.infer<typeof InsuranceCompanySchema> & { isActive?: boolean }) {
+  await requireServerPermission("insurance:edit")
   try {
     const supabase = await createClient()
     const { data: company, error } = await supabase
@@ -100,6 +104,7 @@ export async function updateInsuranceCompany(id: string, data: z.infer<typeof In
 }
 
 export async function deleteInsuranceCompany(id: string) {
+  await requireServerPermission("insurance:edit")
   try {
     const supabase = await createClient()
     const { error } = await supabase
@@ -124,6 +129,7 @@ export async function getInsuranceClaims(filters: {
   dateTo?: string
   showClosed?: boolean
 }) {
+  await requireServerPermission("insurance:view")
   const { search, statuses, insuranceCompany, dateFrom, dateTo, showClosed } = filters
   const supabase = await createClient()
 
@@ -191,6 +197,7 @@ export async function getInsuranceClaims(filters: {
 }
 
 export async function getInsuranceClaimById(id: string) {
+  await requireServerPermission("insurance:view")
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("InsuranceClaim")
@@ -202,7 +209,7 @@ export async function getInsuranceClaimById(id: string) {
 }
 
 export async function createInsuranceClaim(data: z.infer<typeof InsuranceClaimSchema>) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("insurance:create")
   const validated = InsuranceClaimSchema.safeParse(data)
   if (!validated.success) {
     return { success: false as const, error: validated.error.issues[0]?.message ?? "Invalid data" }
@@ -220,6 +227,7 @@ export async function createInsuranceClaim(data: z.infer<typeof InsuranceClaimSc
 
     const claimNumber = await getNextInsClaimNumber()
     const totalBillAmount = ip.netAmount
+    const alreadyPaid = ip.totalReceivedAmount ?? 0
     const patientPayable = totalBillAmount - pd.preauthAmount
 
     const initialHistory: InsuranceStatusHistoryEntry[] = [{
@@ -259,7 +267,8 @@ export async function createInsuranceClaim(data: z.infer<typeof InsuranceClaimSc
         preauthAmount: pd.preauthAmount,
         totalApprovedAmount: pd.preauthAmount,
         patientPayableAmount: Math.max(0, patientPayable),
-        patientBalance: Math.max(0, patientPayable),
+        patientPaidAmount: alreadyPaid,
+        patientBalance: Math.max(0, patientPayable - alreadyPaid),
         discount: ip.discount,
         status: "PREAUTH_SUBMITTED",
         preauthSubmittedDate: now,
@@ -294,7 +303,7 @@ export async function updateInsuranceClaimStatus(
     deductions?: number
   }
 ) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("insurance:edit")
   try {
     const supabase = await createClient()
     const { data: claim, error: fetchError } = await supabase
@@ -373,7 +382,8 @@ export async function updateInsuranceClaimStatus(
         updateData.patientPayableAmount = Math.max(0, claim.totalBillAmount - settled - claim.discount)
         updateData.patientBalance = Math.max(0, claim.totalBillAmount - settled - claim.discount - claim.patientPaidAmount)
 
-        // Update linked inpatient balance to reflect insurance settlement
+        // Update linked inpatient: add settlement as a payment record so future
+        // recomputes (e.g. addInPatientPayment) don't erase the insurance amount.
         if (claim.inPatientId) {
           const { data: ip } = await supabase
             .from("InPatient")
@@ -381,11 +391,23 @@ export async function updateInsuranceClaimStatus(
             .eq("id", claim.inPatientId)
             .single()
           if (ip) {
-            const newTotalReceived = ip.totalReceivedAmount + settled
+            const existing: PaymentRecord[] = ip.paymentRecords ? JSON.parse(ip.paymentRecords) : []
+            // Replace any prior Insurance settlement record to avoid double-counting on re-settlement
+            const withoutPrior = existing.filter(r => r.amountType !== "Insurance")
+            const settlementRecord: PaymentRecord = {
+              date: new Date().toISOString().slice(0, 10),
+              amountType: "Insurance",
+              paymentMode: "Insurance",
+              amount: settled,
+              notes: `Insurance settlement${data.settlementReference ? ` (Ref: ${data.settlementReference})` : ""}`,
+            }
+            const updatedRecords = [...withoutPrior, settlementRecord]
+            const newTotalReceived = updatedRecords.reduce((s, r) => s + r.amount, 0)
             const newBalance = Math.max(0, ip.netAmount - newTotalReceived)
             await supabase
               .from("InPatient")
               .update({
+                paymentRecords: JSON.stringify(updatedRecords),
                 totalReceivedAmount: newTotalReceived,
                 balanceAmount: newBalance,
                 updatedAt: new Date().toISOString(),
@@ -425,7 +447,7 @@ export async function updateInsuranceClaimDetails(id: string, data: {
   totalBillAmount?: number
   notes?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("insurance:edit")
   try {
     const supabase = await createClient()
     const { error } = await supabase
@@ -450,7 +472,7 @@ export async function addInsurancePatientPayment(data: {
   paymentMode: string
   notes?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("insurance:edit")
   try {
     const supabase = await createClient()
     const { data: claim, error: fetchError } = await supabase
@@ -460,33 +482,22 @@ export async function addInsurancePatientPayment(data: {
       .single()
     if (fetchError || !claim) return { success: false as const, error: "Claim not found" }
 
-    const newPaid = claim.patientPaidAmount + data.amount
-    const newBalance = Math.max(0, claim.patientPayableAmount - newPaid)
-
+    const now = new Date().toISOString()
     const history: InsuranceStatusHistoryEntry[] = claim.statusHistory
       ? JSON.parse(claim.statusHistory)
       : []
 
     history.push({
       status: claim.status as InsuranceClaimStatus,
-      date: new Date().toISOString(),
+      date: now,
       notes: `Patient payment: ₹${data.amount} via ${data.paymentMode}${data.notes ? ` - ${data.notes}` : ""}`,
       updatedBy: user.fullName,
     })
 
-    const { error: updateError } = await supabase
-      .from("InsuranceClaim")
-      .update({
-        patientPaidAmount: newPaid,
-        patientBalance: newBalance,
-        statusHistory: JSON.stringify(history),
-        updatedBy: user.id,
-        updatedAt: new Date().toISOString(),
-      })
-      .eq("id", data.claimId)
-    if (updateError) throw updateError
-
-    // Update linked inpatient balance to reflect patient payment
+    // Write to InPatient first so we can compute the authoritative total.
+    // paymentRecords is the single source of truth — both balance fields
+    // are derived from it so they never drift apart.
+    let patientCashPaid = claim.patientPaidAmount + data.amount // safe fallback
     if (claim.inPatientId) {
       const { data: ip } = await supabase
         .from("InPatient")
@@ -494,19 +505,47 @@ export async function addInsurancePatientPayment(data: {
         .eq("id", claim.inPatientId)
         .single()
       if (ip) {
-        const newTotalReceived = ip.totalReceivedAmount + data.amount
+        const existing = ip.paymentRecords ? JSON.parse(ip.paymentRecords) : []
+        const newRecord = {
+          date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()),
+          amountType: "Cash",
+          paymentMode: data.paymentMode,
+          amount: data.amount,
+          notes: data.notes ?? null,
+        }
+        const updatedRecords = [...existing, newRecord]
+        const newTotalReceived = updatedRecords.reduce((s: number, r: { amount: number }) => s + r.amount, 0)
         const newIpBalance = Math.max(0, ip.netAmount - newTotalReceived)
         await supabase
           .from("InPatient")
           .update({
+            paymentRecords: JSON.stringify(updatedRecords),
             totalReceivedAmount: newTotalReceived,
             balanceAmount: newIpBalance,
-            updatedAt: new Date().toISOString(),
+            updatedAt: now,
           })
           .eq("id", claim.inPatientId)
         revalidatePath("/inpatients")
+        revalidatePath("/patients")
+        // Recompute from updated records so claim gets the authoritative value
+        patientCashPaid = updatedRecords
+          .filter((r: { amountType: string }) => r.amountType.toLowerCase() !== "insurance")
+          .reduce((s: number, r: { amount: number }) => s + r.amount, 0)
       }
     }
+
+    const newBalance = Math.max(0, claim.patientPayableAmount - patientCashPaid)
+    const { error: updateError } = await supabase
+      .from("InsuranceClaim")
+      .update({
+        patientPaidAmount: patientCashPaid,
+        patientBalance: newBalance,
+        statusHistory: JSON.stringify(history),
+        updatedBy: user.id,
+        updatedAt: now,
+      })
+      .eq("id", data.claimId)
+    if (updateError) throw updateError
 
     revalidatePath("/insurance")
     return { success: true as const }
@@ -517,6 +556,7 @@ export async function addInsurancePatientPayment(data: {
 
 // Search inpatients for claim form
 export async function searchInPatientsForInsurance(search: string) {
+  await requireServerPermission("insurance:view")
   if (!search || search.length < 2) return []
   const supabase = await createClient()
   const { data, error } = await supabase

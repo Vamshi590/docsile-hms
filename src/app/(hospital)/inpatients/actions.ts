@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 import { z } from "zod"
 import { getNextInsClaimNumber } from "@/lib/id-generators"
 import type { InPatientStatus, PaymentRecord, PackageInclusion, MedicalValues, InsuranceStatusHistoryEntry } from "@/lib/types"
@@ -69,6 +69,7 @@ async function getNextIpNumber(): Promise<string> {
 }
 
 export async function getNextInPatientId(): Promise<string> {
+  await requireServerPermission("inpatients:view")
   return getNextIpNumber()
 }
 
@@ -83,6 +84,7 @@ export async function getInPatients(filters: {
   doctor?: string
   department?: string
 }) {
+  await requireServerPermission("inpatients:view")
   const supabase = await createClient()
   const { search, statuses, showDischarged, dateFrom, dateTo, doctor, department } = filters
 
@@ -153,7 +155,7 @@ export async function getInPatients(filters: {
  * Mirrors `getPatientRegistrationFormData` (OPD).
  */
 export async function getInPatientAdmissionFormData() {
-  await requireAuth()
+  await requireServerPermission("inpatients:create")
   const supabase = await createClient()
 
   // Dynamic imports to avoid hard cross-module deps at the top of the file.
@@ -194,6 +196,7 @@ export async function getInPatientAdmissionFormData() {
 }
 
 export async function getInPatientById(id: string) {
+  await requireServerPermission("inpatients:view")
   const supabase = await createClient()
   const { data } = await supabase
     .from("InPatient")
@@ -204,7 +207,7 @@ export async function getInPatientById(id: string) {
 }
 
 export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("inpatients:create")
   const validated = InPatientSchema.safeParse(data)
   if (!validated.success) {
     return { success: false, error: validated.error.issues[0]?.message ?? "Invalid data" }
@@ -336,7 +339,7 @@ export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
 }
 
 export async function updateInPatientStatus(id: string, status: InPatientStatus) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("inpatients:edit")
   const supabase = await createClient()
   try {
     const now = new Date().toISOString()
@@ -362,7 +365,7 @@ export async function addInPatientPayment(data: {
   notes?: string
   date?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("inpatients:edit")
   const supabase = await createClient()
   try {
     const { data: ip } = await supabase
@@ -395,6 +398,33 @@ export async function addInPatientPayment(data: {
         updatedAt: now,
       })
       .eq("id", data.inpatientId)
+
+    // Sync to linked insurance claim — always, after every payment.
+    // Recalculate patientPaidAmount from the full updated paymentRecords array
+    // (sum only non-insurance entries, which are patient cash payments).
+    // This is idempotent and never drifts regardless of payment order.
+    try {
+      const { data: claimRows } = await supabase
+        .from("InsuranceClaim")
+        .select("id, patientPayableAmount, status")
+        .eq("inPatientId", data.inpatientId)
+        .order("createdAt", { ascending: false })
+        .limit(1)
+      const linkedClaim = claimRows?.[0]
+      if (linkedClaim && linkedClaim.status !== "CLAIM_REJECTED" && linkedClaim.status !== "SETTLED") {
+        const patientCashPaid = updated
+          .filter(r => r.amountType.toLowerCase() !== "insurance")
+          .reduce((s, r) => s + r.amount, 0)
+        const newClaimBalance = Math.max(0, linkedClaim.patientPayableAmount - patientCashPaid)
+        await supabase
+          .from("InsuranceClaim")
+          .update({ patientPaidAmount: patientCashPaid, patientBalance: newClaimBalance, updatedAt: now })
+          .eq("id", linkedClaim.id)
+        revalidatePath("/insurance")
+      }
+    } catch {
+      // Non-fatal: sync failure should not block the inpatient payment
+    }
 
     // Auto-create insurance claim if this is an insurance payment and no claim exists
     if (data.amountType.toLowerCase() === "insurance") {
@@ -468,7 +498,7 @@ export async function dischargeInPatient(data: {
   dischargeMedications?: string
   followUpInstructions?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("inpatients:discharge")
   const supabase = await createClient()
   try {
     const summaryJson = JSON.stringify({
@@ -510,7 +540,7 @@ export async function updateInPatientDetails(id: string, data: {
   onDutyDoctors?: string[]
   doctorNames?: string[]
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("inpatients:edit")
   const supabase = await createClient()
   try {
     const updateData: Record<string, unknown> = {
@@ -545,7 +575,7 @@ export async function updateInPatientDetails(id: string, data: {
 // ─── Delete InPatient (Admin only) ───────────────────────────────────────────
 
 export async function deleteInPatient(id: string) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("inpatients:delete")
   if (user.role !== "ADMIN") return { success: false as const, error: "Admin only" }
   const supabase = await createClient()
   try {
@@ -577,7 +607,7 @@ export async function updateInPatientBasicInfo(id: string, data: {
   referredBy?: string
   admissionNotes?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("inpatients:edit")
   const supabase = await createClient()
   try {
     const now = new Date().toISOString()
@@ -601,7 +631,7 @@ export async function updateInPatientBasicInfo(id: string, data: {
 // ─── Update InPatient (full) ────────────────────────────────────────────────
 
 export async function updateInPatient(id: string, data: z.infer<typeof InPatientSchema>) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("inpatients:edit")
   const validated = InPatientSchema.safeParse(data)
   if (!validated.success) {
     return { success: false as const, error: validated.error.issues[0]?.message ?? "Invalid data" }
@@ -664,7 +694,7 @@ export async function updateInPatient(id: string, data: z.infer<typeof InPatient
 // ─── Get Hospital Profile (for receipts) ─────────────────────────────────────
 
 export async function getHospitalProfileForReceipts() {
-  await requireAuth()
+  await requireServerPermission("inpatients:view")
   const supabase = await createClient()
   const { data } = await supabase.from("HospitalProfile").select("*").limit(1).single()
   return data

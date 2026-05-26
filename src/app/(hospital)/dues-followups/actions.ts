@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireAuth, requireServerPermission } from "@/lib/auth"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -68,7 +68,7 @@ export async function getDues(filters: {
   dateTo?: string
   sortBy?: "amount_desc" | "amount_asc" | "date_desc" | "date_asc"
 }) {
-  await requireAuth()
+  await requireServerPermission("dues:view")
   const supabase = await createClient()
 
   const { search, type = "ALL", dateFrom, dateTo, sortBy = "date_desc" } = filters
@@ -273,7 +273,7 @@ export async function getFollowUps(filters: {
   dateTo?: string
   includeOverdue?: boolean
 }) {
-  await requireAuth()
+  await requireServerPermission("dues:view")
   const supabase = await createClient()
 
   const { notesSearch, type = "ALL", doctor, department, includeOverdue = false } = filters
@@ -405,7 +405,7 @@ export async function getFollowUps(filters: {
 // ─── Mark Due as Paid ────────────────────────────────────────────────────────
 
 export async function markDueAsPaid(id: string, type: "OPD" | "IPD" | "LAB" | "PHARMACY") {
-  const user = await requireAuth()
+  const user = await requireServerPermission("dues:edit")
   const supabase = await createClient()
 
   try {
@@ -521,6 +521,7 @@ export async function markDueAsPaid(id: string, type: "OPD" | "IPD" | "LAB" | "P
 // ─── Get Doctor List (for filter dropdown) ───────────────────────────────────
 
 export async function getDoctorList() {
+  await requireServerPermission("dues:view")
   const supabase = await createClient()
   const { data: doctors } = await supabase
     .from("Prescription")
@@ -534,6 +535,7 @@ export async function getDoctorList() {
 // ─── Get Department List (for filter dropdown) ───────────────────────────────
 
 export async function getDepartmentList() {
+  await requireServerPermission("dues:view")
   const supabase = await createClient()
   const { data: departments } = await supabase
     .from("Prescription")
@@ -547,7 +549,7 @@ export async function getDepartmentList() {
 // ─── Get Available Email Templates from Sitha AI ────────────────────────────
 
 export async function getAvailableTemplates(): Promise<Array<{code: string; name: string}>> {
-  await requireAuth()
+  await requireServerPermission("dues:view")
 
   const sithaUrl = process.env.SITHA_API_URL
   const sithaKey = process.env.SITHA_API_KEY
@@ -590,7 +592,7 @@ export async function sendPatientEmail(input: {
   templateCode: string
   variables: Record<string, string>
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAuth()
+  await requireServerPermission("dues:edit")
 
   const sithaUrl = process.env.SITHA_API_URL
   const sithaKey = process.env.SITHA_API_KEY

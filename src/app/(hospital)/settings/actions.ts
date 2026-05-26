@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 import { z } from "zod"
 import {
   parseDefaultPrintConfig,
@@ -23,6 +23,7 @@ const ServiceSchema = z.object({
 })
 
 export async function getServiceTemplates(includeInactive = false) {
+  await requireServerPermission("settings:view")
   const supabase = await createClient()
   let query = supabase
     .from("ServiceTemplate")
@@ -37,7 +38,7 @@ export async function getServiceTemplates(includeInactive = false) {
 }
 
 export async function createServiceTemplate(data: z.infer<typeof ServiceSchema>) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("settings:edit")
   const supabase = await createClient()
   const validated = ServiceSchema.safeParse(data)
   if (!validated.success) {
@@ -70,7 +71,7 @@ export async function createServiceTemplate(data: z.infer<typeof ServiceSchema>)
 }
 
 export async function updateServiceTemplate(id: string, data: Partial<z.infer<typeof ServiceSchema>> & { isActive?: boolean }) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
@@ -97,7 +98,7 @@ export async function updateServiceTemplate(id: string, data: Partial<z.infer<ty
 }
 
 export async function deleteServiceTemplate(id: string) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("ServiceTemplate").delete().eq("id", id)
@@ -112,6 +113,7 @@ export async function deleteServiceTemplate(id: string) {
 // ─── Hospital Profile ─────────────────────────────────────────────────────────
 
 export async function getHospitalProfile() {
+  await requireServerPermission("settings:view")
   const supabase = await createClient()
   const { data } = await supabase.from("HospitalProfile").select("*").limit(1).single()
   return data
@@ -129,7 +131,7 @@ export async function updateHospitalProfile(data: {
   registrationFeeAmount?: number
   registrationFeeDefaultChecked?: boolean
 }) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const now = new Date().toISOString()
@@ -176,6 +178,7 @@ export async function updateHospitalProfile(data: {
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export async function getUsers() {
+  await requireServerPermission("staff:view")
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("User")
@@ -194,7 +197,7 @@ export async function createUser(data: {
   department?: string
   designation?: string
 }) {
-  await requireAuth()
+  await requireServerPermission("staff:create")
   const supabase = await createClient()
   try {
     // Check if email exists
@@ -234,7 +237,7 @@ export async function createUser(data: {
 }
 
 export async function toggleUserActive(id: string) {
-  await requireAuth()
+  await requireServerPermission("staff:deactivate")
   const supabase = await createClient()
   try {
     const { data: user } = await supabase.from("User").select("isActive").eq("id", id).single()
@@ -250,6 +253,7 @@ export async function toggleUserActive(id: string) {
 // ─── Prescription Templates ───────────────────────────────────────────────────
 
 export async function getPrescriptionTemplates(includeInactive = false) {
+  await requireServerPermission("settings:view")
   const supabase = await createClient()
   let query = supabase.from("PredefinedTemplate").select("*").order("code", { ascending: true })
   if (!includeInactive) query = query.eq("isActive", true)
@@ -269,7 +273,7 @@ export async function createPrescriptionTemplate(data: {
   followUpDays?: number
   additionalNotes?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const code = data.code.trim().toUpperCase()
@@ -319,7 +323,7 @@ export async function updatePrescriptionTemplate(
     isActive?: boolean
   }
 ) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
@@ -349,7 +353,7 @@ export async function updatePrescriptionTemplate(
 }
 
 export async function deletePrescriptionTemplate(id: string) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("PredefinedTemplate").delete().eq("id", id)
@@ -364,6 +368,7 @@ export async function deletePrescriptionTemplate(id: string) {
 // ─── Inpatient Templates ──────────────────────────────────────────────────────
 
 export async function getInpatientTemplates(includeInactive = false) {
+  await requireServerPermission("settings:view")
   const supabase = await createClient()
   let query = supabase.from("InpatientTemplate").select("*").order("code", { ascending: true })
   if (!includeInactive) query = query.eq("isActive", true)
@@ -381,7 +386,7 @@ export async function createInpatientTemplate(data: {
   followUpDays?: number
   additionalNotes?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const code = data.code.trim().toUpperCase()
@@ -427,7 +432,7 @@ export async function updateInpatientTemplate(
     isActive?: boolean
   }
 ) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
@@ -455,7 +460,7 @@ export async function updateInpatientTemplate(
 }
 
 export async function deleteInpatientTemplate(id: string) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("InpatientTemplate").delete().eq("id", id)
@@ -470,6 +475,7 @@ export async function deleteInpatientTemplate(id: string) {
 // ─── Predefined Packages ─────────────────────────────────────────────────────
 
 export async function getPredefinedPackages(includeInactive = false) {
+  await requireServerPermission("settings:view")
   const supabase = await createClient()
   let query = supabase.from("PredefinedPackage").select("*").order("name", { ascending: true })
   if (!includeInactive) query = query.eq("isActive", true)
@@ -484,7 +490,7 @@ export async function createPredefinedPackage(data: {
   totalAmount: number
   discount: number
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const { data: existing } = await supabase.from("PredefinedPackage").select("id").eq("name", data.name.trim()).single()
@@ -523,7 +529,7 @@ export async function updatePredefinedPackage(
     isActive?: boolean
   }
 ) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
@@ -548,7 +554,7 @@ export async function updatePredefinedPackage(
 }
 
 export async function deletePredefinedPackage(id: string) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("PredefinedPackage").delete().eq("id", id)
@@ -563,6 +569,7 @@ export async function deletePredefinedPackage(id: string) {
 // ─── Predefined Surgeries ────────────────────────────────────────────────────
 
 export async function getPredefinedSurgeries(includeInactive: boolean = false) {
+  await requireServerPermission("settings:view")
   const supabase = await createClient()
   let q = supabase
     .from("PredefinedSurgery")
@@ -588,7 +595,7 @@ export async function createPredefinedSurgery(data: {
   operationDetails?: string | null
   sortOrder?: number
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("settings:edit")
   if (!data.name?.trim()) {
     return { success: false as const, error: "Surgery name is required" }
   }
@@ -633,7 +640,7 @@ export async function updatePredefinedSurgery(id: string, data: {
   isActive?: boolean
   sortOrder?: number
 }) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   try {
     const supabase = await createClient()
     const update: Record<string, unknown> = { updatedAt: new Date().toISOString() }
@@ -657,7 +664,7 @@ export async function updatePredefinedSurgery(id: string, data: {
 }
 
 export async function deletePredefinedSurgery(id: string) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   // Soft-delete: same pattern as deletePredefinedPackage
   const supabase = await createClient()
   const { error } = await supabase
@@ -675,6 +682,7 @@ export async function deletePredefinedSurgery(id: string) {
 // ─── Predefined Discharges ───────────────────────────────────────────────────
 
 export async function getPredefinedDischarges(includeInactive: boolean = false) {
+  await requireServerPermission("settings:view")
   const supabase = await createClient()
   let q = supabase
     .from("PredefinedDischarge")
@@ -698,7 +706,7 @@ export async function createPredefinedDischarge(data: {
   followUpInstructions?: string | null
   sortOrder?: number
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("settings:edit")
   if (!data.name?.trim()) {
     return { success: false as const, error: "Template name is required" }
   }
@@ -740,7 +748,7 @@ export async function updatePredefinedDischarge(id: string, data: {
   isActive?: boolean
   sortOrder?: number
 }) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   try {
     const supabase = await createClient()
     const update: Record<string, unknown> = { updatedAt: new Date().toISOString() }
@@ -762,7 +770,7 @@ export async function updatePredefinedDischarge(id: string, data: {
 }
 
 export async function deletePredefinedDischarge(id: string) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   // Soft delete: sets isActive=false, mirrors deletePredefinedSurgery behavior.
   const supabase = await createClient()
   const { error } = await supabase
@@ -780,6 +788,7 @@ export async function deletePredefinedDischarge(id: string) {
 // ─── Medicine Master ──────────────────────────────────────────────────────────
 
 export async function getMedicineMasterList(includeInactive = false) {
+  await requireServerPermission("settings:view")
   const supabase = await createClient()
   let query = supabase
     .from("MedicineMaster")
@@ -800,7 +809,7 @@ export async function createMedicineMaster(data: {
   note?: string
   sortOrder?: number
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const { data: existing } = await supabase.from("MedicineMaster").select("id").eq("name", data.name.trim()).single()
@@ -843,7 +852,7 @@ export async function updateMedicineMaster(
     isActive?: boolean
   }
 ) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
@@ -870,7 +879,7 @@ export async function updateMedicineMaster(
 }
 
 export async function deleteMedicineMaster(id: string) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("MedicineMaster").delete().eq("id", id)
@@ -895,7 +904,7 @@ export async function getDefaultPrintConfig(): Promise<DefaultPrintConfig> {
 }
 
 export async function saveDefaultPrintConfig(input: DefaultPrintConfig) {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const config = validateDefaultPrintConfig(input)
@@ -933,7 +942,7 @@ export async function saveDefaultPrintConfig(input: DefaultPrintConfig) {
 // ─── Nav Style ────────────────────────────────────────────────────────────────
 
 export async function updateNavStyle(style: "side" | "top") {
-  await requireAuth()
+  await requireServerPermission("settings:edit")
   const supabase = await createClient()
   try {
     const { data: existing } = await supabase

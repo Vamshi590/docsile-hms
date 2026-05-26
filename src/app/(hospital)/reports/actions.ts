@@ -1,10 +1,12 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { requireServerPermission } from "@/lib/auth"
 
 // ─── Patient Search ──────────────────────────────────────────────────────────
 
 export async function searchPatients(query: string) {
+  await requireServerPermission("reports:view")
   if (!query || query.length < 2) return []
 
   const supabase = await createClient()
@@ -48,6 +50,7 @@ export async function searchPatients(query: string) {
 // ─── Patient Summary ─────────────────────────────────────────────────────────
 
 export async function getPatientSummary(patientId: string) {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
 
   const { data: patient, error } = await supabase
@@ -112,6 +115,7 @@ export async function getPatientSummary(patientId: string) {
 // ─── Visit History (Prescriptions as visits) ─────────────────────────────────
 
 export async function getVisitHistory(patientId: string) {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
 
   const { data: prescriptions, error } = await supabase
@@ -130,6 +134,7 @@ export async function getVisitHistory(patientId: string) {
 // ─── Prescriptions with medicines ────────────────────────────────────────────
 
 export async function getPrescriptions(patientId: string) {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
 
   const { data: prescriptions, error } = await supabase
@@ -152,6 +157,7 @@ export async function getPrescriptions(patientId: string) {
 // ─── Inpatient Records ───────────────────────────────────────────────────────
 
 export async function getInpatientRecords(patientInternalId: string) {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
 
   const { data: inpatient, error } = await supabase
@@ -171,6 +177,7 @@ export async function getInpatientRecords(patientInternalId: string) {
 // ─── Receipt data for printing ───────────────────────────────────────────────
 
 export async function getReportReceiptData(patientId: string) {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
 
   const [patientResult, hospitalResult] = await Promise.all([
@@ -210,12 +217,13 @@ export async function getReportReceiptData(patientId: string) {
 // ─── Lab Records ─────────────────────────────────────────────────────────────
 
 export async function getLabRecords(patientId: string) {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
 
   const { data: labBills, error } = await supabase
     .from("LabBill")
     .select(
-      "*, lab:Lab(name), items:LabBillItem(id, name, amount), payments:LabPayment(id, amount, paymentMode, paymentDate)"
+      "*, lab:Lab(name, printHeaderKey), items:LabBillItem(id, name, amount), payments:LabPayment(id, amount, paymentMode, paymentDate)"
     )
     .eq("patientId", patientId)
     .order("createdAt", { ascending: false })
@@ -236,6 +244,7 @@ export async function getLabRecords(patientId: string) {
 // ─── Billing & Payments ──────────────────────────────────────────────────────
 
 export async function getBillingOverview(patientId: string, patientInternalId: string) {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
 
   const [prescriptionsRes, labBillsRes, inpatientRes] = await Promise.all([

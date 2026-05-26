@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import bcrypt from "bcryptjs"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireAdmin, requireServerPermission } from "@/lib/auth"
 import { z } from "zod"
 import { DEFAULT_ROLE_PERMISSIONS, getAllPermissionKeys } from "@/lib/permissions"
 
@@ -29,6 +29,7 @@ const StaffSchema = z.object({
 
 export async function getStaffMembers() {
   await requireAdmin()
+  await requireServerPermission("staff:view")
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("User")
@@ -40,6 +41,7 @@ export async function getStaffMembers() {
 
 export async function getStaffMember(id: string) {
   await requireAdmin()
+  await requireServerPermission("staff:view")
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("User")
@@ -52,6 +54,7 @@ export async function getStaffMember(id: string) {
 
 export async function createStaffMember(data: z.infer<typeof StaffSchema>) {
   await requireAdmin()
+  await requireServerPermission("staff:create")
   const validated = StaffSchema.safeParse(data)
   if (!validated.success) {
     return { success: false, error: validated.error.issues[0]?.message ?? "Invalid data" }
@@ -115,6 +118,7 @@ export async function updateStaffMember(
   data: Partial<z.infer<typeof StaffSchema>>
 ) {
   await requireAdmin()
+  await requireServerPermission("staff:edit")
   const supabase = await createClient()
   try {
     const updateData: Record<string, unknown> = { updatedAt: new Date().toISOString() }
@@ -154,6 +158,7 @@ export async function updateStaffMember(
 
 export async function toggleStaffActive(id: string) {
   const admin = await requireAdmin()
+  await requireServerPermission("staff:deactivate")
   if (admin.id === id) {
     return { success: false, error: "You cannot deactivate yourself" }
   }
@@ -171,6 +176,7 @@ export async function toggleStaffActive(id: string) {
 
 export async function resetStaffPassword(id: string, newPassword: string) {
   await requireAdmin()
+  await requireServerPermission("staff:edit")
   if (newPassword.length < 6) return { success: false, error: "Password must be at least 6 characters" }
   try {
     const hashedPassword = await bcrypt.hash(newPassword, 10)
@@ -199,6 +205,7 @@ export async function resetStaffPassword(id: string, newPassword: string) {
 
 export async function getRoles() {
   await requireAdmin()
+  await requireServerPermission("staff:view")
   const supabase = await createClient()
   const { data, error } = await supabase.from("Role").select("*").order("name", { ascending: true })
   if (error) throw error
@@ -212,6 +219,7 @@ export async function createRole(data: {
   permissions: string[]
 }) {
   await requireAdmin()
+  await requireServerPermission("staff:manage_roles")
   const supabase = await createClient()
   if (!data.name.trim()) return { success: false, error: "Role name required" }
   if (!data.displayName.trim()) return { success: false, error: "Display name required" }
@@ -241,6 +249,7 @@ export async function createRole(data: {
 
 export async function updateRolePermissions(id: string, permissions: string[]) {
   await requireAdmin()
+  await requireServerPermission("staff:manage_roles")
   const supabase = await createClient()
   try {
     await supabase
@@ -259,6 +268,7 @@ export async function updateRole(
   data: { displayName?: string; description?: string; isActive?: boolean }
 ) {
   await requireAdmin()
+  await requireServerPermission("staff:manage_roles")
   const supabase = await createClient()
   try {
     const { data: role } = await supabase.from("Role").select("id").eq("id", id).single()
@@ -279,6 +289,7 @@ export async function updateRole(
 
 export async function deleteRole(id: string) {
   await requireAdmin()
+  await requireServerPermission("staff:manage_roles")
   const supabase = await createClient()
   try {
     const { data: role } = await supabase.from("Role").select("id, name, isSystem").eq("id", id).single()
@@ -302,6 +313,7 @@ export async function deleteRole(id: string) {
 
 export async function seedSystemRoles() {
   await requireAdmin()
+  await requireServerPermission("staff:manage_roles")
   const supabase = await createClient()
   try {
     const systemRoles = [

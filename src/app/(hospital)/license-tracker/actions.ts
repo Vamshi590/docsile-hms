@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 
 export async function getLicenses() {
+  await requireServerPermission("licenses:view")
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("License")
@@ -24,7 +25,7 @@ export async function createLicense(data: {
   reminderDays?: number
   notes?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("licenses:create")
   const supabase = await createClient()
   try {
     const now = new Date().toISOString()
@@ -64,7 +65,7 @@ export async function updateLicense(id: string, data: {
   status?: string
   notes?: string
 }) {
-  await requireAuth()
+  await requireServerPermission("licenses:create")
   const supabase = await createClient()
   try {
     const updateData: Record<string, unknown> = { ...data, updatedAt: new Date().toISOString() }
@@ -85,7 +86,7 @@ export async function updateLicense(id: string, data: {
 }
 
 export async function deleteLicense(id: string) {
-  await requireAuth()
+  await requireServerPermission("licenses:delete")
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("License").delete().eq("id", id)
@@ -98,7 +99,7 @@ export async function deleteLicense(id: string) {
 }
 
 export async function saveLicenseDocumentUrl(licenseId: string, url: string) {
-  await requireAuth()
+  await requireServerPermission("licenses:create")
   const supabase = await createClient()
   try {
     const { error } = await supabase
@@ -114,7 +115,7 @@ export async function saveLicenseDocumentUrl(licenseId: string, url: string) {
 }
 
 export async function removeLicenseDocument(licenseId: string, filePath: string) {
-  await requireAuth()
+  await requireServerPermission("licenses:delete")
   const supabase = await createClient()
   try {
     const { error: storageError } = await supabase.storage

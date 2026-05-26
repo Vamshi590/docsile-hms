@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 
 // ─── Default Categories (matching old app) ───────────────────────────────────
 
@@ -20,7 +20,7 @@ const DEFAULT_CATEGORIES = [
 ]
 
 export async function seedDefaultCategories() {
-  const user = await requireAuth()
+  const user = await requireServerPermission("expenses:view")
   const supabase = await createClient()
   const { count } = await supabase.from("ExpenseCategory").select("*", { count: "exact", head: true })
   if ((count ?? 0) > 0) return
@@ -44,6 +44,7 @@ export async function seedDefaultCategories() {
 // ─── Category CRUD ───────────────────────────────────────────────────────────
 
 export async function getCategories() {
+  await requireServerPermission("expenses:view")
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("ExpenseCategory")
@@ -56,7 +57,7 @@ export async function getCategories() {
 }
 
 export async function createCategory(data: { name: string; color: string }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("expenses:create")
   const supabase = await createClient()
   try {
     // Get max sortOrder
@@ -93,7 +94,7 @@ export async function createCategory(data: { name: string; color: string }) {
 }
 
 export async function updateCategory(id: string, data: { name?: string; color?: string }) {
-  await requireAuth()
+  await requireServerPermission("expenses:edit")
   const supabase = await createClient()
   try {
     const { data: category, error } = await supabase
@@ -114,7 +115,7 @@ export async function updateCategory(id: string, data: { name?: string; color?: 
 }
 
 export async function deleteCategory(id: string) {
-  await requireAuth()
+  await requireServerPermission("expenses:edit")
   const supabase = await createClient()
   const { count } = await supabase.from("Expense").select("*", { count: "exact", head: true }).eq("categoryId", id)
   if ((count ?? 0) > 0) {
@@ -131,7 +132,7 @@ export async function deleteCategory(id: string) {
 }
 
 export async function reorderCategories(orderedIds: string[]) {
-  await requireAuth()
+  await requireServerPermission("expenses:edit")
   const supabase = await createClient()
   const now = new Date().toISOString()
   await Promise.all(
@@ -146,6 +147,7 @@ export async function reorderCategories(orderedIds: string[]) {
 // ─── Expense CRUD ────────────────────────────────────────────────────────────
 
 export async function getExpensesByDateRange(startDate: string, endDate: string) {
+  await requireServerPermission("expenses:view")
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("Expense")
@@ -164,7 +166,7 @@ export async function createExpense(data: {
   date: string
   reason?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("expenses:create")
   const supabase = await createClient()
   try {
     const now = new Date().toISOString()
@@ -197,7 +199,7 @@ export async function updateExpense(id: string, data: {
   date?: string
   reason?: string
 }) {
-  await requireAuth()
+  await requireServerPermission("expenses:edit")
   const supabase = await createClient()
   try {
     const updateData: Record<string, unknown> = { ...data, updatedAt: new Date().toISOString() }
@@ -217,7 +219,7 @@ export async function updateExpense(id: string, data: {
 }
 
 export async function deleteExpense(id: string) {
-  await requireAuth()
+  await requireServerPermission("expenses:delete")
   const supabase = await createClient()
   try {
     const { error } = await supabase.from("Expense").delete().eq("id", id)

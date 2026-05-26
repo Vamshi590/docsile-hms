@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { requireServerPermission } from "@/lib/auth"
 import type { Database } from "@/lib/supabase/types"
 
 // ─── DB ROW TYPES ───────────────────────────────────
@@ -35,6 +36,19 @@ export interface AnalyticsOverview {
   totalSurgeries: number
   patientChange: number
   revenueChange: number
+  collectionRate: number
+  revenuePerPatient: number
+  followUpVisits: number
+  avgDailyPatients: number
+  surgeryRecommended: number
+  surgeryConverted: number
+  conversionRate: number
+  consultationDiscount: number
+  labDiscount: number
+  pharmacyDiscount: number
+  opticalDiscount: number
+  inpatientDiscount: number
+  totalDiscount: number
 }
 
 export interface GenderDistribution {
@@ -82,6 +96,32 @@ export interface FinancialSummary {
   totalExpenses: number
   netCashFlow: number
   dailyBreakdown: DailyFinancial[]
+  discountByModule: {
+    consultations: number
+    labs: number
+    pharmacy: number
+    optical: number
+    inpatient: number
+  }
+}
+
+export interface PaymentModeBreakdown {
+  mode: string
+  amount: number
+  percentage: number
+}
+
+export interface SurgeryBreakdown {
+  name: string
+  count: number
+}
+
+export interface RegionStat {
+  region: string
+  total: number
+  newPatients: number
+  returning: number
+  percentage: number
 }
 
 export interface DailyFinancial {
@@ -153,6 +193,7 @@ export async function getAnalyticsOverview(
   customStart?: string,
   customEnd?: string
 ): Promise<AnalyticsOverview> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const prev = getPreviousRange(start, end)
@@ -174,6 +215,10 @@ export async function getAnalyticsOverview(
     activeInpatientsRes,
     surgeriesData,
     inpatientBillingData,
+    prevLabBillsData,
+    prevPharmacyBillsData,
+    prevOpticalBillsData,
+    prevInpatientData,
   ] = await Promise.all([
     // Current period patients
     supabase.from("Patient").select("*", { count: "exact", head: true })
@@ -223,6 +268,22 @@ export async function getAnalyticsOverview(
     supabase.from("InPatient").select("*")
       .gte("admissionDate", from).lt("admissionDate", to)
       .returns<InPatientRow[]>(),
+    // Previous period lab bills
+    supabase.from("LabBill").select("*")
+      .gte("createdAt", prevFrom).lt("createdAt", prevTo).neq("status", "CANCELLED")
+      .returns<LabBillRow[]>(),
+    // Previous period pharmacy bills
+    supabase.from("PharmacyBill").select("*")
+      .gte("billDate", prevFrom).lt("billDate", prevTo).neq("status", "CANCELLED")
+      .returns<PharmacyBillRow[]>(),
+    // Previous period optical bills
+    supabase.from("OpticalBill").select("*")
+      .gte("billDate", prevFrom).lt("billDate", prevTo).neq("status", "CANCELLED")
+      .returns<OpticalBillRow[]>(),
+    // Previous period inpatient — partial select (only netAmount needed for revenueChange)
+    supabase.from("InPatient").select("netAmount")
+      .gte("admissionDate", prevFrom).lt("admissionDate", prevTo)
+      .returns<Pick<InPatientRow, "netAmount">[]>(),
   ])
 
   const totalPatients = totalPatientsRes.count ?? 0
@@ -246,6 +307,7 @@ export async function getAnalyticsOverview(
     total: labBillsRows.reduce((s, r) => s + (r.total || 0), 0),
     amountPaid: labBillsRows.reduce((s, r) => s + (r.amountPaid || 0), 0),
     balanceDue: labBillsRows.reduce((s, r) => s + (r.balanceDue || 0), 0),
+    discount: labBillsRows.reduce((s, r) => s + (r.discount || 0), 0),
   }
 
   const pharmacyBillsRows = pharmacyBillsData.data ?? []
@@ -253,6 +315,7 @@ export async function getAnalyticsOverview(
     billAmount: pharmacyBillsRows.reduce((s, r) => s + (r.billAmount || 0), 0),
     paidAmount: pharmacyBillsRows.reduce((s, r) => s + (r.paidAmount || 0), 0),
     balanceDue: pharmacyBillsRows.reduce((s, r) => s + (r.balanceDue || 0), 0),
+    discountAmount: pharmacyBillsRows.reduce((s, r) => s + (r.discountAmount || 0), 0),
   }
 
   const opticalBillsRows = opticalBillsData.data ?? []
@@ -260,6 +323,7 @@ export async function getAnalyticsOverview(
     billAmount: opticalBillsRows.reduce((s, r) => s + (r.billAmount || 0), 0),
     paidAmount: opticalBillsRows.reduce((s, r) => s + (r.paidAmount || 0), 0),
     balanceDue: opticalBillsRows.reduce((s, r) => s + (r.balanceDue || 0), 0),
+    discountAmount: opticalBillsRows.reduce((s, r) => s + (r.discountAmount || 0), 0),
   }
 
   const totalInpatients = totalInpatientsRes.count ?? 0
@@ -271,6 +335,7 @@ export async function getAnalyticsOverview(
     netAmount: inpatientBillingRows.reduce((s, r) => s + (r.netAmount || 0), 0),
     totalReceivedAmount: inpatientBillingRows.reduce((s, r) => s + (r.totalReceivedAmount || 0), 0),
     balanceAmount: inpatientBillingRows.reduce((s, r) => s + (r.balanceAmount || 0), 0),
+    discount: inpatientBillingRows.reduce((s, r) => s + (r.discount || 0), 0),
   }
 
   const today = new Date()
@@ -303,7 +368,11 @@ export async function getAnalyticsOverview(
     opticalBillsSum.balanceDue +
     inpatientBillingSum.balanceAmount
 
-  const prevRevenue = prevPrescriptionsTotal
+  const prevLabRevenue = (prevLabBillsData.data ?? []).reduce((s, r) => s + (r.total || 0), 0)
+  const prevPharmacyRevenue = (prevPharmacyBillsData.data ?? []).reduce((s, r) => s + (r.billAmount || 0), 0)
+  const prevOpticalRevenue = (prevOpticalBillsData.data ?? []).reduce((s, r) => s + (r.billAmount || 0), 0)
+  const prevInpatientRevenue = (prevInpatientData.data ?? []).reduce((s, r) => s + (r.netAmount || 0), 0)
+  const prevRevenue = prevPrescriptionsTotal + prevLabRevenue + prevPharmacyRevenue + prevOpticalRevenue + prevInpatientRevenue
 
   const patientChange = prevPatients > 0
     ? Math.round(((totalPatients - prevPatients) / prevPatients) * 100)
@@ -311,6 +380,57 @@ export async function getAnalyticsOverview(
   const revenueChange = prevRevenue > 0
     ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100)
     : 0
+
+  const collectionRate = totalRevenue > 0
+    ? Math.round((totalCollected / totalRevenue) * 100)
+    : 0
+  const revenuePerPatient = totalPatients > 0
+    ? Math.round(totalRevenue / totalPatients)
+    : 0
+
+  // Follow-up visits: patients who visited in this period AND had a prior prescription
+  const currentPatientIds = new Set(prescriptionsRows.map(r => r.patientId).filter(Boolean))
+  let followUpVisits = 0
+  if (currentPatientIds.size > 0) {
+    const { count } = await supabase.from("Prescription")
+      .select("patientId", { count: "exact", head: true })
+      .lt("prescriptionDate", from)
+      .in("patientId", Array.from(currentPatientIds) as string[])
+    followUpVisits = Math.min(count ?? 0, currentPatientIds.size)
+  }
+
+  const daysInPeriod = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000))
+  const avgDailyPatients = Math.round(totalPatients / daysInPeriod)
+
+  // Conversion rate: prescriptions with "surgery" in additionalNotes → checked against InPatient
+  const { data: surgeryRxData } = await supabase.from("Prescription")
+    .select("patientId")
+    .gte("prescriptionDate", from).lt("prescriptionDate", to)
+    .neq("status", "CANCELLED")
+    .ilike("additionalNotes", "%surgery%")
+    .returns<{ patientId: string }[]>()
+
+  const surgeryPatientIds = [...new Set((surgeryRxData ?? []).map(r => r.patientId).filter(Boolean))]
+  const surgeryRecommended = surgeryPatientIds.length
+
+  let surgeryConverted = 0
+  if (surgeryPatientIds.length > 0) {
+    const { count } = await supabase.from("InPatient")
+      .select("patientId", { count: "exact", head: true })
+      .in("patientId", surgeryPatientIds)
+    surgeryConverted = count ?? 0
+  }
+
+  const conversionRate = surgeryRecommended > 0
+    ? Math.round((surgeryConverted / surgeryRecommended) * 100)
+    : 0
+
+  const consultationDiscount = prescriptionsSum.discount
+  const labDiscount = labBillsSum.discount
+  const pharmacyDiscount = pharmacyBillsSum.discountAmount
+  const opticalDiscount = opticalBillsSum.discountAmount
+  const inpatientDiscount = inpatientBillingSum.discount
+  const totalDiscount = consultationDiscount + labDiscount + pharmacyDiscount + opticalDiscount + inpatientDiscount
 
   return {
     totalPatients,
@@ -329,6 +449,19 @@ export async function getAnalyticsOverview(
     totalSurgeries: surgeries,
     patientChange,
     revenueChange,
+    collectionRate,
+    revenuePerPatient,
+    followUpVisits,
+    avgDailyPatients,
+    surgeryRecommended,
+    surgeryConverted,
+    conversionRate,
+    consultationDiscount,
+    labDiscount,
+    pharmacyDiscount,
+    opticalDiscount,
+    inpatientDiscount,
+    totalDiscount,
   }
 }
 
@@ -339,6 +472,7 @@ export async function getGenderDistribution(
   customStart?: string,
   customEnd?: string
 ): Promise<GenderDistribution> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const from = start.toISOString()
@@ -368,6 +502,7 @@ export async function getAgeDistribution(
   customStart?: string,
   customEnd?: string
 ): Promise<AgeGroup[]> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const from = start.toISOString()
@@ -405,6 +540,7 @@ export async function getRevenueByCategory(
   customStart?: string,
   customEnd?: string
 ): Promise<RevenueByCategory[]> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const from = start.toISOString()
@@ -450,6 +586,7 @@ export async function getTimeSeries(
   customStart?: string,
   customEnd?: string
 ): Promise<TimeSeriesPoint[]> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const from = start.toISOString()
@@ -505,18 +642,28 @@ export async function getTopServices(
   customStart?: string,
   customEnd?: string
 ): Promise<TopService[]> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const from = start.toISOString()
   const to = end.toISOString()
 
-  // Fetch invoice items with their prescription's date and status via join
+  // Step 1: get valid prescription IDs in the date range
+  const { data: rxData } = await supabase.from("Prescription")
+    .select("id")
+    .gte("prescriptionDate", from)
+    .lt("prescriptionDate", to)
+    .neq("status", "CANCELLED")
+    .returns<{ id: string }[]>()
+
+  const rxIds = (rxData ?? []).map(r => r.id)
+  if (rxIds.length === 0) return []
+
+  // Step 2: get invoice items for those prescriptions
   const { data } = await supabase.from("InvoiceItem")
-    .select("*, prescription!inner(*)")
-    .gte("prescription.prescriptionDate", from)
-    .lt("prescription.prescriptionDate", to)
-    .neq("prescription.status", "CANCELLED")
-    .returns<(InvoiceItemRow & { prescription: PrescriptionRow })[]>()
+    .select("description, amount")
+    .in("prescriptionId", rxIds)
+    .returns<{ description: string; amount: number }[]>()
 
   const items = data ?? []
 
@@ -530,7 +677,7 @@ export async function getTopServices(
   }
 
   return Array.from(map.entries())
-    .map(([name, data]) => ({ name, ...data }))
+    .map(([name, d]) => ({ name, ...d }))
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10)
 }
@@ -542,6 +689,7 @@ export async function getExpenseBreakdown(
   customStart?: string,
   customEnd?: string
 ): Promise<ExpenseByCategory[]> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const from = start.toISOString()
@@ -574,6 +722,7 @@ export async function getFinancialSummary(
   customStart?: string,
   customEnd?: string
 ): Promise<FinancialSummary> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const from = start.toISOString()
@@ -706,7 +855,87 @@ export async function getFinancialSummary(
     totalExpenses,
     netCashFlow: totalCollected - totalExpenses,
     dailyBreakdown: Array.from(dayMap.values()).sort((a, b) => b.date.localeCompare(a.date)),
+    discountByModule: {
+      consultations: rxDiscount,
+      labs: labBillsSum.discount,
+      pharmacy: pharmacyBillsSum.discountAmount,
+      optical: opticalBillsSum.discountAmount,
+      inpatient: inpatientBillingSum.discount,
+    },
   }
+}
+
+// ─── PAYMENT MODE BREAKDOWN ───────────────────────────
+
+function normalizePaymentMode(raw: string | null | undefined): string {
+  if (!raw) return "Cash"
+  const s = raw.trim().toUpperCase()
+  if (s === "CASH") return "Cash"
+  if (s === "UPI") return "UPI"
+  if (s === "CARD") return "Card"
+  if (s === "CHEQUE" || s === "NEFT" || s === "BANK TRANSFER" || s === "ONLINE") return "Cheque/NEFT"
+  if (s === "INSURANCE") return "Insurance"
+  return "Others"
+}
+
+export async function getPaymentModeBreakdown(
+  filter: TimeFilter,
+  customStart?: string,
+  customEnd?: string
+): Promise<PaymentModeBreakdown[]> {
+  await requireServerPermission("reports:view")
+  const supabase = await createClient()
+  const { start, end } = getDateRange(filter, customStart, customEnd)
+  const from = start.toISOString()
+  const to = end.toISOString()
+
+  const [rxData, labData, pharmacyData, opticalData, inpatientData] = await Promise.all([
+    supabase.from("Prescription").select("paymentMode, amountPaid")
+      .gte("prescriptionDate", from).lt("prescriptionDate", to).neq("status", "CANCELLED")
+      .returns<{ paymentMode: string | null; amountPaid: number | null }[]>(),
+    supabase.from("LabBill").select("paymentMode, amountPaid")
+      .gte("createdAt", from).lt("createdAt", to)
+      .returns<{ paymentMode: string | null; amountPaid: number | null }[]>(),
+    supabase.from("PharmacyBill").select("paymentMode, paidAmount")
+      .gte("billDate", from).lt("billDate", to).neq("status", "CANCELLED")
+      .returns<{ paymentMode: string | null; paidAmount: number | null }[]>(),
+    supabase.from("OpticalBill").select("paymentMode, paidAmount")
+      .gte("billDate", from).lt("billDate", to).neq("status", "CANCELLED")
+      .returns<{ paymentMode: string | null; paidAmount: number | null }[]>(),
+    supabase.from("InPatient").select("paymentRecords")
+      .gte("admissionDate", from).lt("admissionDate", to)
+      .returns<{ paymentRecords: string | null }[]>(),
+  ])
+
+  const map = new Map<string, number>()
+
+  const add = (mode: string | null | undefined, amount: number | null | undefined) => {
+    const key = normalizePaymentMode(mode)
+    map.set(key, (map.get(key) ?? 0) + (amount ?? 0))
+  }
+
+  for (const r of rxData.data ?? []) add(r.paymentMode, r.amountPaid)
+  for (const r of labData.data ?? []) add(r.paymentMode, r.amountPaid)
+  for (const r of pharmacyData.data ?? []) add(r.paymentMode, r.paidAmount)
+  for (const r of opticalData.data ?? []) add(r.paymentMode, r.paidAmount)
+
+  for (const row of inpatientData.data ?? []) {
+    try {
+      const records: { paymentMode?: string; amount?: number }[] = JSON.parse(row.paymentRecords ?? "[]")
+      for (const rec of records) add(rec.paymentMode, rec.amount)
+    } catch { /* skip malformed */ }
+  }
+
+  const total = [...map.values()].reduce((s, v) => s + v, 0)
+  const ORDER = ["Cash", "UPI", "Card", "Cheque/NEFT", "Insurance", "Others"]
+
+  return ORDER
+    .filter(m => (map.get(m) ?? 0) > 0)
+    .map(m => ({
+      mode: m,
+      amount: map.get(m) ?? 0,
+      percentage: total > 0 ? Math.round(((map.get(m) ?? 0) / total) * 100) : 0,
+    }))
 }
 
 // ─── DOCTOR PERFORMANCE ──────────────────────────────
@@ -716,6 +945,7 @@ export async function getDoctorPerformance(
   customStart?: string,
   customEnd?: string
 ): Promise<DoctorPerformance[]> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const from = start.toISOString()
@@ -750,6 +980,7 @@ export async function getStatusDistribution(
   customStart?: string,
   customEnd?: string
 ): Promise<StatusDistribution[]> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const from = start.toISOString()
@@ -773,6 +1004,259 @@ export async function getStatusDistribution(
   }))
 }
 
+// ─── COMMON DIAGNOSES ────────────────────────────────
+
+export interface CommonDiagnosis {
+  diagnosis: string
+  count: number
+  percentage: number
+}
+
+export async function getCommonDiagnoses(
+  filter: TimeFilter,
+  customStart?: string,
+  customEnd?: string
+): Promise<CommonDiagnosis[]> {
+  await requireServerPermission("reports:view")
+  const supabase = await createClient()
+  const { start, end } = getDateRange(filter, customStart, customEnd)
+
+  const { data } = await supabase.from("Prescription")
+    .select("diagnosis")
+    .gte("prescriptionDate", start.toISOString())
+    .lt("prescriptionDate", end.toISOString())
+    .neq("status", "CANCELLED")
+    .not("diagnosis", "is", null)
+    .returns<{ diagnosis: string }[]>()
+
+  const map = new Map<string, number>()
+  for (const row of data ?? []) {
+    const key = (row.diagnosis ?? "").trim()
+    if (key) map.set(key, (map.get(key) ?? 0) + 1)
+  }
+
+  const sorted = [...map.entries()].sort((a, b) => b[1] - a[1])
+  const top = sorted.slice(0, 5)
+  const othersCount = sorted.slice(5).reduce((s, [, c]) => s + c, 0)
+  const total = sorted.reduce((s, [, c]) => s + c, 0)
+
+  const result = top.map(([diagnosis, count]) => ({
+    diagnosis,
+    count,
+    percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+  }))
+
+  if (othersCount > 0) {
+    result.push({
+      diagnosis: "Others",
+      count: othersCount,
+      percentage: total > 0 ? Math.round((othersCount / total) * 100) : 0,
+    })
+  }
+
+  return result
+}
+
+// ─── COMMON MEDICINES ────────────────────────────────
+
+export interface CommonMedicine {
+  name: string
+  count: number
+  percentage: number
+}
+
+export async function getCommonMedicines(
+  filter: TimeFilter,
+  customStart?: string,
+  customEnd?: string
+): Promise<CommonMedicine[]> {
+  await requireServerPermission("reports:view")
+  const supabase = await createClient()
+  const { start, end } = getDateRange(filter, customStart, customEnd)
+
+  const { data } = await supabase.from("Prescription")
+    .select("medicines")
+    .gte("prescriptionDate", start.toISOString())
+    .lt("prescriptionDate", end.toISOString())
+    .neq("status", "CANCELLED")
+    .returns<{ medicines: string }[]>()
+
+  const map = new Map<string, number>()
+  for (const row of data ?? []) {
+    try {
+      const meds: { name: string }[] = JSON.parse(row.medicines ?? "[]")
+      for (const med of meds) {
+        const key = (med.name ?? "").trim()
+        if (key) map.set(key, (map.get(key) ?? 0) + 1)
+      }
+    } catch {
+      // skip malformed JSON
+    }
+  }
+
+  const sorted = [...map.entries()].sort((a, b) => b[1] - a[1])
+  const top = sorted.slice(0, 5)
+  const othersCount = sorted.slice(5).reduce((s, [, c]) => s + c, 0)
+  const total = sorted.reduce((s, [, c]) => s + c, 0)
+
+  const result = top.map(([name, count]) => ({
+    name,
+    count,
+    percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+  }))
+
+  if (othersCount > 0) {
+    result.push({
+      name: "Others",
+      count: othersCount,
+      percentage: total > 0 ? Math.round((othersCount / total) * 100) : 0,
+    })
+  }
+
+  return result
+}
+
+// ─── TOP PRESCRIBED INVESTIGATIONS ───────────────────
+
+export interface CommonInvestigation {
+  name: string
+  count: number
+  percentage: number
+}
+
+export async function getTopPrescribedInvestigations(
+  filter: TimeFilter,
+  customStart?: string,
+  customEnd?: string
+): Promise<CommonInvestigation[]> {
+  const supabase = await createClient()
+  const { start, end } = getDateRange(filter, customStart, customEnd)
+
+  const { data } = await supabase.from("Prescription")
+    .select("investigations")
+    .gte("prescriptionDate", start.toISOString())
+    .lt("prescriptionDate", end.toISOString())
+    .neq("status", "CANCELLED")
+    .returns<{ investigations: string }[]>()
+
+  const map = new Map<string, number>()
+  for (const row of data ?? []) {
+    try {
+      const invs: { name: string }[] = JSON.parse(row.investigations ?? "[]")
+      for (const inv of invs) {
+        const key = (inv.name ?? "").trim()
+        if (key) map.set(key, (map.get(key) ?? 0) + 1)
+      }
+    } catch { /* skip malformed */ }
+  }
+
+  const sorted = [...map.entries()].sort((a, b) => b[1] - a[1])
+  const top = sorted.slice(0, 8)
+  const total = sorted.reduce((s, [, c]) => s + c, 0)
+
+  return top.map(([name, count]) => ({
+    name,
+    count,
+    percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+  }))
+}
+
+// ─── TOP PHARMACY SALES ───────────────────────────────
+
+export interface PharmacySaleStat {
+  name: string
+  quantity: number
+  revenue: number
+}
+
+export async function getTopPharmacySales(
+  filter: TimeFilter,
+  customStart?: string,
+  customEnd?: string
+): Promise<PharmacySaleStat[]> {
+  const supabase = await createClient()
+  const { start, end } = getDateRange(filter, customStart, customEnd)
+
+  // Get valid bill IDs in the date range
+  const { data: billData } = await supabase.from("PharmacyBill")
+    .select("id")
+    .gte("billDate", start.toISOString())
+    .lt("billDate", end.toISOString())
+    .not("status", "eq", "CANCELLED")
+    .not("status", "eq", "RETURNED")
+    .returns<{ id: string }[]>()
+
+  const billIds = (billData ?? []).map(b => b.id)
+  if (billIds.length === 0) return []
+
+  const { data } = await supabase.from("PharmacyBillItem")
+    .select("medicineName, quantity, amount")
+    .in("billId", billIds)
+    .returns<{ medicineName: string; quantity: number; amount: number }[]>()
+
+  const map = new Map<string, { quantity: number; revenue: number }>()
+  for (const item of data ?? []) {
+    const key = (item.medicineName ?? "").trim()
+    if (!key) continue
+    const existing = map.get(key) ?? { quantity: 0, revenue: 0 }
+    existing.quantity += item.quantity
+    existing.revenue += item.amount
+    map.set(key, existing)
+  }
+
+  return Array.from(map.entries())
+    .map(([name, s]) => ({ name, ...s }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 8)
+}
+
+// ─── TOP LAB TESTS BILLED ─────────────────────────────
+
+export interface LabTestStat {
+  name: string
+  count: number
+  revenue: number
+}
+
+export async function getTopLabTests(
+  filter: TimeFilter,
+  customStart?: string,
+  customEnd?: string
+): Promise<LabTestStat[]> {
+  const supabase = await createClient()
+  const { start, end } = getDateRange(filter, customStart, customEnd)
+
+  const { data: billData } = await supabase.from("LabBill")
+    .select("id")
+    .gte("createdAt", start.toISOString())
+    .lt("createdAt", end.toISOString())
+    .neq("status", "CANCELLED")
+    .returns<{ id: string }[]>()
+
+  const billIds = (billData ?? []).map(b => b.id)
+  if (billIds.length === 0) return []
+
+  const { data } = await supabase.from("LabBillItem")
+    .select("name, amount")
+    .in("labBillId", billIds)
+    .returns<{ name: string; amount: number }[]>()
+
+  const map = new Map<string, { count: number; revenue: number }>()
+  for (const item of data ?? []) {
+    const key = (item.name ?? "").trim()
+    if (!key) continue
+    const existing = map.get(key) ?? { count: 0, revenue: 0 }
+    existing.count++
+    existing.revenue += item.amount
+    map.set(key, existing)
+  }
+
+  return Array.from(map.entries())
+    .map(([name, s]) => ({ name, ...s }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 8)
+}
+
 // ─── REFERRAL STATS ──────────────────────────────────
 
 export async function getReferralStats(
@@ -780,6 +1264,7 @@ export async function getReferralStats(
   customStart?: string,
   customEnd?: string
 ): Promise<{ name: string; count: number }[]> {
+  await requireServerPermission("reports:view")
   const supabase = await createClient()
   const { start, end } = getDateRange(filter, customStart, customEnd)
   const from = start.toISOString()
@@ -802,4 +1287,92 @@ export async function getReferralStats(
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10)
+}
+
+// ─── SURGERY BREAKDOWN ────────────────────────────────
+
+export async function getSurgeryBreakdown(
+  filter: TimeFilter,
+  customStart?: string,
+  customEnd?: string
+): Promise<SurgeryBreakdown[]> {
+  await requireServerPermission("reports:view")
+  const supabase = await createClient()
+  const { start, end } = getDateRange(filter, customStart, customEnd)
+
+  const { data } = await supabase.from("InPatient")
+    .select("operationName")
+    .gte("admissionDate", start.toISOString())
+    .lt("admissionDate", end.toISOString())
+    .not("operationName", "is", null)
+    .returns<{ operationName: string | null }[]>()
+
+  const map = new Map<string, number>()
+  for (const row of data ?? []) {
+    const key = (row.operationName ?? "").trim()
+    if (key) map.set(key, (map.get(key) ?? 0) + 1)
+  }
+
+  return Array.from(map.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
+// ─── REGION STATS ─────────────────────────────────────
+
+export async function getRegionStats(
+  filter: TimeFilter,
+  customStart?: string,
+  customEnd?: string
+): Promise<RegionStat[]> {
+  await requireServerPermission("reports:view")
+  const supabase = await createClient()
+  const { start, end } = getDateRange(filter, customStart, customEnd)
+  const from = start.toISOString()
+  const to = end.toISOString()
+
+  const { data } = await supabase.from("Patient")
+    .select("id, address, appointmentDate")
+    .gte("appointmentDate", from)
+    .lt("appointmentDate", to)
+    .not("address", "is", null)
+    .returns<{ id: string; address: string | null; appointmentDate: string }[]>()
+
+  const patients = data ?? []
+
+  // Count total visits per patient id to determine new vs returning
+  const { data: allVisits } = await supabase.from("Patient")
+    .select("id, address")
+    .not("address", "is", null)
+    .lt("appointmentDate", to)
+    .returns<{ id: string; address: string | null }[]>()
+
+  const visitCountById = new Map<string, number>()
+  for (const v of allVisits ?? []) {
+    visitCountById.set(v.id, (visitCountById.get(v.id) ?? 0) + 1)
+  }
+
+  const regionMap = new Map<string, { total: number; newPatients: number; returning: number }>()
+
+  for (const p of patients) {
+    const key = (p.address ?? "").trim()
+    if (!key) continue
+    const existing = regionMap.get(key) ?? { total: 0, newPatients: 0, returning: 0 }
+    existing.total++
+    const totalVisits = visitCountById.get(p.id) ?? 1
+    if (totalVisits <= 1) existing.newPatients++
+    else existing.returning++
+    regionMap.set(key, existing)
+  }
+
+  const sorted = Array.from(regionMap.entries())
+    .map(([region, stats]) => ({ region, ...stats }))
+    .sort((a, b) => b.total - a.total)
+
+  const grandTotal = sorted.reduce((s, r) => s + r.total, 0)
+
+  return sorted.map(r => ({
+    ...r,
+    percentage: grandTotal > 0 ? Math.round((r.total / grandTotal) * 100) : 0,
+  }))
 }
