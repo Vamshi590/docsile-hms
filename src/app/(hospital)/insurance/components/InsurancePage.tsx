@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
+import { usePermissions } from "@/hooks/usePermissions"
 import { RefreshCw } from "lucide-react"
 import { BreadcrumbHeader, StatBadge, SearchInput } from "@/components/layout/header"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -47,6 +48,7 @@ export default function InsurancePage({
   initialSearch: string
   initialStatusFilter: string
 }) {
+  const { can } = usePermissions()
   const [claims, setClaims] = useState<InsuranceClaim[]>(initialClaims)
   const [companies, setCompanies] = useState<InsuranceCompany[]>(initialCompanies)
   const [stats, setStats] = useState<Stats | null>(initialStats)
@@ -180,9 +182,11 @@ export default function InsurancePage({
               <Button variant="outline" size="sm" className="h-8" onClick={() => setCompanyManagerOpen(true)}>
                 Companies
               </Button>
-              <Button size="sm" className="h-8" onClick={() => setClaimFormOpen(true)}>
-                + New Claim
-              </Button>
+              {can("insurance:create") && (
+                <Button size="sm" className="h-8" onClick={() => setClaimFormOpen(true)}>
+                  + New Claim
+                </Button>
+              )}
             </div>
           </div>
 

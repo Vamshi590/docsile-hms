@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
+import { usePermissions } from "@/hooks/usePermissions"
 import { Loader2, Plus, Printer } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -36,6 +37,7 @@ interface Props {
 type Claim = NonNullable<Awaited<ReturnType<typeof getInsuranceClaimById>>>
 
 export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: Props) {
+  const { can } = usePermissions()
   const [claim, setClaim] = useState<Claim | null>(null)
   const [companies, setCompanies] = useState<InsuranceCompany[]>([])
   const [loading, setLoading] = useState(true)
@@ -290,7 +292,7 @@ export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: 
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {transitions.length > 0 && (
+              {transitions.length > 0 && can("insurance:edit") && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="outline">Change Status</Button>
@@ -305,9 +307,11 @@ export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: 
                 </DropdownMenu>
               )}
 
-              <Button size="sm" variant="outline" onClick={openPaymentModal}>
-                <Plus className="h-3.5 w-3.5" /> Patient Payment
-              </Button>
+              {can("insurance:edit") && (
+                <Button size="sm" variant="outline" onClick={openPaymentModal}>
+                  <Plus className="h-3.5 w-3.5" /> Patient Payment
+                </Button>
+              )}
 
               {/* Direct one-click bill buttons — this page exists primarily to
                   produce these bills, so we surface all three options instead
@@ -393,7 +397,7 @@ export function InsuranceClaimDetail({ claimId, onBack, onUpdate, onViewBill }: 
                 <CardContent className="p-5">
                   <div className="flex justify-between items-center mb-3">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Insurance Details</p>
-                    {!editingDetails && (
+                    {!editingDetails && can("insurance:edit") && (
                       <Button variant="ghost" size="sm" className="text-xs h-6" onClick={startEditDetails}>Edit</Button>
                     )}
                   </div>
