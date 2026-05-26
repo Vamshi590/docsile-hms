@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +41,7 @@ async function getNextPONumber(): Promise<string> {
 // ─── Medicine Master CRUD ─────────────────────────────────────────────────────
 
 export async function getMedicines(search?: string) {
+  await requireServerPermission("pharmacy:view")
   const supabase = await createClient()
   let query = supabase
     .from("PharmacyMedicine")
@@ -73,7 +74,7 @@ export async function createMedicine(data: {
   gstPercent?: number
   scheduleType?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("pharmacy:manage_stock")
   const supabase = await createClient()
   try {
     const now = new Date().toISOString()
@@ -122,7 +123,7 @@ export async function updateMedicine(id: string, data: {
   scheduleType?: string
   isActive?: boolean
 }) {
-  await requireAuth()
+  await requireServerPermission("pharmacy:manage_stock")
   const supabase = await createClient()
   try {
     const { data: med, error } = await supabase
@@ -140,7 +141,7 @@ export async function updateMedicine(id: string, data: {
 }
 
 export async function deleteMedicine(id: string) {
-  await requireAuth()
+  await requireServerPermission("pharmacy:manage_stock")
   const supabase = await createClient()
   try {
     const { error } = await supabase
@@ -163,6 +164,7 @@ export async function getStock(filters?: {
   nearExpiry?: boolean
   medicineId?: string
 }) {
+  await requireServerPermission("pharmacy:view")
   const supabase = await createClient()
   let query = supabase
     .from("PharmacyStock")
@@ -216,7 +218,7 @@ export async function addStock(data: {
   supplierId?: string
   purchaseOrderId?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("pharmacy:manage_stock")
   const supabase = await createClient()
   try {
     // Check if batch already exists for this medicine
@@ -284,7 +286,7 @@ export async function updateStock(id: string, data: {
   gstPercent?: number
   expiryDate?: string
 }) {
-  await requireAuth()
+  await requireServerPermission("pharmacy:manage_stock")
   const supabase = await createClient()
   try {
     const { expiryDate, ...rest } = data
@@ -305,6 +307,7 @@ export async function updateStock(id: string, data: {
 }
 
 export async function getStockSummary() {
+  await requireServerPermission("pharmacy:view")
   const supabase = await createClient()
   const now = new Date()
   const threeMonths = new Date()
@@ -354,6 +357,7 @@ export async function getStockSummary() {
 // ─── Stock search for billing (find available batches for a medicine) ──────
 
 export async function searchMedicineStock(search: string) {
+  await requireServerPermission("pharmacy:view")
   if (!search || search.length < 2) return []
 
   const supabase = await createClient()
@@ -396,6 +400,7 @@ export async function searchMedicineStock(search: string) {
 // ─── Prescription Lookup for Billing ──────────────────────────────────────────
 
 export async function getPatientPrescription(patientId: string) {
+  await requireServerPermission("pharmacy:view")
   const supabase = await createClient()
 
   const { data: patient, error } = await supabase
@@ -478,7 +483,7 @@ export async function createPharmacyBill(data: {
     gstPercent: number
   }[]
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("pharmacy:create")
   const supabase = await createClient()
   try {
     const billNumber = await getNextBillNumber()
@@ -580,6 +585,7 @@ export async function getPharmacyBills(filters?: {
   search?: string
   status?: string
 }) {
+  await requireServerPermission("pharmacy:view")
   const supabase = await createClient()
   let query = supabase
     .from("PharmacyBill")
@@ -616,6 +622,7 @@ export async function getPharmacyBills(filters?: {
 // ─── Suppliers CRUD ───────────────────────────────────────────────────────────
 
 export async function getSuppliers(search?: string) {
+  await requireServerPermission("pharmacy:view")
   const supabase = await createClient()
   let query = supabase
     .from("PharmacySupplier")
@@ -676,7 +683,7 @@ export async function createSupplier(data: {
   drugLicenseNo?: string
   creditDays?: number
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("pharmacy:manage_stock")
   const supabase = await createClient()
   try {
     const now = new Date().toISOString()
@@ -713,7 +720,7 @@ export async function updateSupplier(id: string, data: {
   creditDays?: number
   isActive?: boolean
 }) {
-  await requireAuth()
+  await requireServerPermission("pharmacy:manage_stock")
   const supabase = await createClient()
   try {
     const { data: supplier, error } = await supabase
@@ -731,7 +738,7 @@ export async function updateSupplier(id: string, data: {
 }
 
 export async function deleteSupplier(id: string) {
-  await requireAuth()
+  await requireServerPermission("pharmacy:manage_stock")
   const supabase = await createClient()
   try {
     const { error } = await supabase
@@ -754,6 +761,7 @@ export async function getPurchaseOrders(filters?: {
   dateFrom?: string
   dateTo?: string
 }) {
+  await requireServerPermission("pharmacy:purchase_orders")
   const supabase = await createClient()
   let query = supabase
     .from("PurchaseOrder")
@@ -790,7 +798,7 @@ export async function createPurchaseOrder(data: {
     expiryDate?: string
   }[]
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("pharmacy:purchase_orders")
   const supabase = await createClient()
   try {
     const orderNumber = await getNextPONumber()
@@ -862,7 +870,7 @@ export async function receivePurchaseOrder(
   poId: string,
   items: { itemId: string; receivedQty: number; batchNumber: string; expiryDate: string; mrp: number; costPrice: number }[]
 ) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("pharmacy:purchase_orders")
   const supabase = await createClient()
   try {
     // Fetch the PO with its items and medicine data
@@ -960,7 +968,7 @@ export async function receivePurchaseOrder(
 }
 
 export async function updatePOStatus(poId: string, status: string) {
-  await requireAuth()
+  await requireServerPermission("pharmacy:purchase_orders")
   const supabase = await createClient()
   try {
     const { error } = await supabase
@@ -973,4 +981,75 @@ export async function updatePOStatus(poId: string, status: string) {
   } catch {
     return { success: false as const, error: "Failed to update status" }
   }
+}
+
+// ─── Pending Medicines ────────────────────────────────────────────────────────
+
+export async function getPendingMedicines(date?: string) {
+  await requireServerPermission("pharmacy:view")
+  const supabase = await createClient()
+
+  const target = date ?? new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+  const start = new Date(`${target}T00:00:00+05:30`).toISOString()
+  const end   = new Date(`${target}T23:59:59+05:30`).toISOString()
+
+  const { data: prescriptions } = await supabase
+    .from("Prescription")
+    .select(`
+      id, prescriptionNumber, doctorName, medicines, prescriptionDate,
+      patient:Patient(id, patientId, firstName, lastName, age, gender, phone)
+    `)
+    .gte("prescriptionDate", start)
+    .lte("prescriptionDate", end)
+    .neq("medicines", "[]")
+    .not("medicines", "is", null)
+    .order("prescriptionDate", { ascending: false })
+
+  if (!prescriptions || prescriptions.length === 0) return []
+
+  const valid = prescriptions.filter((p) => {
+    try {
+      const arr = JSON.parse(p.medicines)
+      return Array.isArray(arr) && arr.length > 0
+    } catch { return false }
+  })
+
+  if (valid.length === 0) return []
+
+  const prescriptionIds = valid.map((p) => p.id)
+  const { data: existingBills } = await supabase
+    .from("PharmacyBill")
+    .select("prescriptionId, status")
+    .in("prescriptionId", prescriptionIds)
+
+  const billsByPrescription = new Map<string, string[]>()
+  for (const b of (existingBills ?? [])) {
+    if (!b.prescriptionId) continue
+    const list = billsByPrescription.get(b.prescriptionId) ?? []
+    list.push(b.status)
+    billsByPrescription.set(b.prescriptionId, list)
+  }
+
+  return valid.flatMap((p) => {
+    const patient = p.patient as unknown as { patientId: string; firstName: string; lastName: string | null; age: number | null; gender: string; phone: string }
+    let medicineCount = 0
+    try { medicineCount = JSON.parse(p.medicines).length } catch { /* ignore */ }
+
+    const billStatuses = billsByPrescription.get(p.id) ?? []
+    const billed = billStatuses.length > 0 && !billStatuses.includes("PENDING") && !billStatuses.includes("PARTIAL")
+    if (billed) return []
+
+    return [{
+      prescriptionId: p.id,
+      prescriptionNumber: p.prescriptionNumber as string | null,
+      doctorName: p.doctorName as string | null,
+      medicineCount,
+      patientId: patient.patientId,
+      patientName: [patient.firstName, patient.lastName].filter(Boolean).join(" "),
+      age: patient.age,
+      gender: patient.gender,
+      phone: patient.phone,
+      billCount: billStatuses.length,
+    }]
+  })
 }

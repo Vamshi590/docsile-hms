@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
@@ -25,6 +25,7 @@ async function getNextLabBillNumber(): Promise<string> {
 // ─── Lab CRUD ────────────────────────────────────────────────────────────────
 
 export async function getLabs() {
+  await requireServerPermission("labs:view")
   const supabase = await createClient()
   const { data: labs, error } = await supabase
     .from("Lab")
@@ -50,6 +51,7 @@ export async function getLabs() {
 }
 
 export async function getLabById(id: string) {
+  await requireServerPermission("labs:view")
   const supabase = await createClient()
   const { data: lab, error } = await supabase
     .from("Lab")
@@ -69,8 +71,8 @@ export async function getLabById(id: string) {
   return { ...lab, investigations: investigations ?? [] }
 }
 
-export async function createLab(data: { name: string; description?: string; location?: string }) {
-  await requireAuth()
+export async function createLab(data: { name: string; description?: string; location?: string; printHeaderKey?: string }) {
+  await requireServerPermission("labs:config")
   try {
     const supabase = await createClient()
     const now = new Date().toISOString()
@@ -86,6 +88,15 @@ export async function createLab(data: { name: string; description?: string; loca
       .select()
       .single()
     if (error) throw error
+
+    // Apply printHeaderKey separately — column added via migration; skip silently if not yet migrated
+    if (data.printHeaderKey && lab) {
+      await supabase
+        .from("Lab")
+        .update({ printHeaderKey: data.printHeaderKey, updatedAt: new Date().toISOString() })
+        .eq("id", lab.id)
+    }
+
     revalidatePath("/labs")
     return { success: true as const, data: lab }
   } catch (error: unknown) {
@@ -96,8 +107,8 @@ export async function createLab(data: { name: string; description?: string; loca
   }
 }
 
-export async function updateLab(id: string, data: { name?: string; description?: string; location?: string; isActive?: boolean }) {
-  await requireAuth()
+export async function updateLab(id: string, data: { name?: string; description?: string; location?: string; isActive?: boolean; printHeaderKey?: string | null }) {
+  await requireServerPermission("labs:config")
   try {
     const supabase = await createClient()
     const { data: lab, error } = await supabase
@@ -115,7 +126,7 @@ export async function updateLab(id: string, data: { name?: string; description?:
 }
 
 export async function deleteLab(id: string) {
-  await requireAuth()
+  await requireServerPermission("labs:config")
   try {
     const supabase = await createClient()
     const { error } = await supabase
@@ -133,6 +144,7 @@ export async function deleteLab(id: string) {
 // ─── Lab Investigation Mapping ───────────────────────────────────────────────
 
 export async function getLabInvestigations(labId: string) {
+  await requireServerPermission("labs:view")
   const supabase = await createClient()
   const { data } = await supabase
     .from("LabInvestigation")
@@ -144,6 +156,7 @@ export async function getLabInvestigations(labId: string) {
 }
 
 export async function getAllInvestigations() {
+  await requireServerPermission("labs:view")
   const supabase = await createClient()
   const { data } = await supabase
     .from("InvestigationMaster")
@@ -155,7 +168,7 @@ export async function getAllInvestigations() {
 }
 
 export async function createInvestigation(data: { name: string; category?: string; description?: string }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("labs:config")
   try {
     const supabase = await createClient()
     const now = new Date().toISOString()
@@ -187,7 +200,7 @@ export async function updateLabInvestigations(
   labId: string,
   investigations: { investigationId: string; amount: number; isDefault: boolean }[]
 ) {
-  await requireAuth()
+  await requireServerPermission("labs:config")
   try {
     const supabase = await createClient()
 
@@ -223,6 +236,7 @@ export async function updateLabInvestigations(
 // ─── Lab Billing - Patient Investigation Lookup ──────────────────────────────
 
 export async function getPatientInvestigations(patientId: string) {
+  await requireServerPermission("labs:view")
   const supabase = await createClient()
 
   // Find patient
@@ -411,6 +425,85 @@ export async function getPatientInvestigations(patientId: string) {
   }
 }
 
+// ─── Pending Lab Investigations (patients with unprocessed investigations) ────
+
+export async function getPendingLabInvestigations(date?: string) {
+  await requireServerPermission("labs:view")
+  const supabase = await createClient()
+
+  // Build IST day bounds for the given date (default today)
+  const target = date ?? new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+  const start = new Date(`${target}T00:00:00+05:30`).toISOString()
+  const end   = new Date(`${target}T23:59:59+05:30`).toISOString()
+
+  // Fetch prescriptions from the target day that have investigations written
+  const { data: prescriptions } = await supabase
+    .from("Prescription")
+    .select(`
+      id, prescriptionNumber, doctorName, investigations, prescriptionDate,
+      patient:Patient(id, patientId, firstName, lastName, age, gender, phone)
+    `)
+    .gte("prescriptionDate", start)
+    .lte("prescriptionDate", end)
+    .neq("investigations", "[]")
+    .not("investigations", "is", null)
+    .order("prescriptionDate", { ascending: false })
+
+  if (!prescriptions || prescriptions.length === 0) return []
+
+  // Keep only prescriptions that parse to a non-empty investigations array
+  const valid = prescriptions.filter((p) => {
+    try {
+      const arr = JSON.parse(p.investigations)
+      return Array.isArray(arr) && arr.length > 0
+    } catch { return false }
+  })
+
+  if (valid.length === 0) return []
+
+  // Fetch existing lab bills for these prescriptions in one query
+  const prescriptionIds = valid.map((p) => p.id)
+  const { data: existingBills } = await supabase
+    .from("LabBill")
+    .select("prescriptionId, status")
+    .in("prescriptionId", prescriptionIds)
+
+  // Group bill statuses by prescriptionId
+  const billsByPrescription = new Map<string, string[]>()
+  for (const b of (existingBills ?? [])) {
+    const list = billsByPrescription.get(b.prescriptionId) ?? []
+    list.push(b.status)
+    billsByPrescription.set(b.prescriptionId, list)
+  }
+
+  return valid.flatMap((p) => {
+    const patient = p.patient as unknown as { patientId: string; firstName: string; lastName: string | null; age: number | null; gender: string; phone: string }
+    let investigationCount = 0
+    try {
+      investigationCount = JSON.parse(p.investigations).length
+    } catch { /* ignore */ }
+
+    const billStatuses = billsByPrescription.get(p.id) ?? []
+    const billed = billStatuses.length > 0 && !billStatuses.includes("PENDING") && !billStatuses.includes("PARTIAL")
+
+    // Exclude fully-billed prescriptions from the pending list
+    if (billed) return []
+
+    return [{
+      prescriptionId: p.id,
+      prescriptionNumber: p.prescriptionNumber as string | null,
+      doctorName: p.doctorName as string | null,
+      investigationCount,
+      patientId: patient.patientId,
+      patientName: [patient.firstName, patient.lastName].filter(Boolean).join(" "),
+      age: patient.age,
+      gender: patient.gender,
+      phone: patient.phone,
+      billCount: billStatuses.length,
+    }]
+  })
+}
+
 // ─── Create Lab Bills ────────────────────────────────────────────────────────
 
 export async function createLabBills(data: {
@@ -425,7 +518,7 @@ export async function createLabBills(data: {
     amountPaid: number
   }[]
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("labs:create")
   try {
     const supabase = await createClient()
     const createdBills: { id: string; billNumber: string; labName: string; total: number }[] = []
@@ -513,10 +606,11 @@ export async function getLabBills(filters: {
   patientId?: string
   status?: string
 }) {
+  await requireServerPermission("labs:view")
   const supabase = await createClient()
   let query = supabase
     .from("LabBill")
-    .select("*, lab:Lab(name), patient:Patient(patientId, firstName, lastName, phone), items:LabBillItem(*), payments:LabPayment(*)")
+    .select("*, lab:Lab(name, printHeaderKey), patient:Patient(id, patientId, firstName, lastName, phone, age, gender, address), items:LabBillItem(*), payments:LabPayment(*)")
     .order("createdAt", { ascending: false })
     .limit(100)
 
@@ -543,6 +637,7 @@ export async function getLabBills(filters: {
 }
 
 export async function getLabBillById(id: string) {
+  await requireServerPermission("labs:view")
   const supabase = await createClient()
   const { data: bill } = await supabase
     .from("LabBill")

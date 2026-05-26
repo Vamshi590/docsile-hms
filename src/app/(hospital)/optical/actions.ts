@@ -1,12 +1,13 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth"
+import { requireServerPermission } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 
 // ─── PRODUCT MASTER CRUD ─────────────────────────────
 
 export async function getOpticalProducts(search?: string) {
+  await requireServerPermission("optical:view")
   const supabase = await createClient()
 
   let query = supabase
@@ -42,7 +43,7 @@ export async function createOpticalProduct(data: {
   hsnCode?: string
   gstPercent?: number
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("optical:manage_stock")
   const supabase = await createClient()
   try {
     const now = new Date().toISOString()
@@ -73,6 +74,7 @@ export async function updateOpticalProduct(id: string, data: Partial<{
   color: string; size: string; coating: string; index: string; modelNumber: string
   hsnCode: string; gstPercent: number; isActive: boolean
 }>) {
+  await requireServerPermission("optical:manage_stock")
   const supabase = await createClient()
   try {
     const { data: product, error } = await supabase
@@ -91,6 +93,7 @@ export async function updateOpticalProduct(id: string, data: Partial<{
 }
 
 export async function deleteOpticalProduct(id: string) {
+  await requireServerPermission("optical:manage_stock")
   const supabase = await createClient()
   try {
     const { error } = await supabase
@@ -113,6 +116,7 @@ export async function getOpticalStock(filters?: {
   category?: string
   lowStock?: boolean
 }) {
+  await requireServerPermission("optical:view")
   const supabase = await createClient()
 
   let query = supabase
@@ -166,7 +170,7 @@ export async function addOpticalStock(data: {
   power?: string
   supplierId?: string
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("optical:manage_stock")
   const supabase = await createClient()
   try {
     // Check if this product + batch + power already exists
@@ -233,6 +237,7 @@ export async function addOpticalStock(data: {
 }
 
 export async function updateOpticalStock(id: string, data: Partial<{ quantity: number; mrp: number; costPrice: number }>) {
+  await requireServerPermission("optical:manage_stock")
   const supabase = await createClient()
   try {
     const { error } = await supabase
@@ -249,6 +254,7 @@ export async function updateOpticalStock(id: string, data: Partial<{ quantity: n
 }
 
 export async function getStockSummary() {
+  await requireServerPermission("optical:view")
   const supabase = await createClient()
 
   const [totalItemsResult, lowStockResult] = await Promise.all([
@@ -275,6 +281,7 @@ export async function getStockSummary() {
 
 // Search stock for billing autocomplete
 export async function searchOpticalStock(search: string) {
+  await requireServerPermission("optical:view")
   if (!search || search.length < 2) return []
 
   const supabase = await createClient()
@@ -327,6 +334,7 @@ export async function searchOpticalStock(search: string) {
 // ─── PATIENT LOOKUP WITH AR READINGS ─────────────────
 
 export async function getPatientWithARReading(patientId: string) {
+  await requireServerPermission("optical:view")
   const supabase = await createClient()
 
   const { data: patient, error } = await supabase
@@ -415,7 +423,7 @@ export async function createOpticalBill(data: {
     gstPercent: number
   }[]
 }) {
-  const user = await requireAuth()
+  const user = await requireServerPermission("optical:create")
   const supabase = await createClient()
 
   try {
@@ -523,6 +531,7 @@ export async function getOpticalBills(filters?: {
   search?: string
   status?: string
 }) {
+  await requireServerPermission("optical:view")
   const supabase = await createClient()
 
   let query = supabase
@@ -536,11 +545,11 @@ export async function getOpticalBills(filters?: {
   }
 
   if (filters?.dateFrom) {
-    query = query.gte("billDate", new Date(filters.dateFrom + "T00:00:00").toISOString())
+    query = query.gte("createdAt", new Date(filters.dateFrom + "T00:00:00+05:30").toISOString())
   }
 
   if (filters?.dateTo) {
-    query = query.lte("billDate", new Date(filters.dateTo + "T23:59:59").toISOString())
+    query = query.lte("createdAt", new Date(filters.dateTo + "T23:59:59+05:30").toISOString())
   }
 
   const { data: bills, error } = await query
@@ -559,6 +568,7 @@ export async function getOpticalBills(filters?: {
 }
 
 export async function updateOpticalBillStatus(billId: string, status: string) {
+  await requireServerPermission("optical:edit")
   const supabase = await createClient()
   try {
     const { error } = await supabase
@@ -572,4 +582,41 @@ export async function updateOpticalBillStatus(billId: string, status: string) {
   } catch {
     return { success: false as const, error: "Failed to update status" }
   }
+}
+
+// ─── OPTICAL SETTINGS (print header) ─────────────────
+
+export async function getOpticalSettings() {
+  await requireServerPermission("optical:view")
+  const supabase = await createClient()
+  const { data } = await supabase.from("HospitalProfile").select("settings").limit(1).single()
+  try {
+    const s = JSON.parse(data?.settings ?? "{}")
+    return { printHeaderKey: (s.opticalPrintHeaderKey as string) ?? "" }
+  } catch {
+    return { printHeaderKey: "" }
+  }
+}
+
+export async function updateOpticalSettings(settings: { printHeaderKey: string }) {
+  await requireServerPermission("optical:manage_stock")
+  const supabase = await createClient()
+  const { data: profile } = await supabase.from("HospitalProfile").select("id, settings").limit(1).single()
+  if (!profile) return { success: false as const, error: "Hospital profile not found" }
+  try {
+    const existing = JSON.parse(profile.settings ?? "{}")
+    existing.opticalPrintHeaderKey = settings.printHeaderKey || undefined
+    await supabase.from("HospitalProfile").update({ settings: JSON.stringify(existing) }).eq("id", profile.id)
+    revalidatePath("/optical")
+    return { success: true as const }
+  } catch {
+    return { success: false as const, error: "Failed to save settings" }
+  }
+}
+
+export async function getOpticalHospitalProfile() {
+  await requireServerPermission("optical:view")
+  const supabase = await createClient()
+  const { data } = await supabase.from("HospitalProfile").select("*").limit(1).single()
+  return data
 }
