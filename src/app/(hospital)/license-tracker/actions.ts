@@ -96,3 +96,39 @@ export async function deleteLicense(id: string) {
     return { success: false as const, error: "Failed to delete license" }
   }
 }
+
+export async function saveLicenseDocumentUrl(licenseId: string, url: string) {
+  await requireAuth()
+  const supabase = await createClient()
+  try {
+    const { error } = await supabase
+      .from("License")
+      .update({ documentUrl: url, updatedAt: new Date().toISOString() })
+      .eq("id", licenseId)
+    if (error) throw error
+    revalidatePath("/license-tracker")
+    return { success: true as const }
+  } catch {
+    return { success: false as const, error: "Failed to save document URL" }
+  }
+}
+
+export async function removeLicenseDocument(licenseId: string, filePath: string) {
+  await requireAuth()
+  const supabase = await createClient()
+  try {
+    const { error: storageError } = await supabase.storage
+      .from("license-documents")
+      .remove([filePath])
+    if (storageError) throw storageError
+    const { error: dbError } = await supabase
+      .from("License")
+      .update({ documentUrl: null, updatedAt: new Date().toISOString() })
+      .eq("id", licenseId)
+    if (dbError) throw dbError
+    revalidatePath("/license-tracker")
+    return { success: true as const }
+  } catch {
+    return { success: false as const, error: "Failed to remove document" }
+  }
+}
