@@ -3,6 +3,7 @@ import type { HospitalHeaderProps } from "../ReceiptHeader";
 
 import DefaultHeader from "./DefaultHeader";
 import SriHarshaEyeHospitalHeader from "./SriHarshaEyeHospital";
+import VennalaLabHeader from "./VennalaLab";
 
 /**
  * Registry mapping hospital names to their custom header components.
@@ -16,6 +17,7 @@ import SriHarshaEyeHospitalHeader from "./SriHarshaEyeHospital";
  */
 const headerRegistry: Record<string, ComponentType<HospitalHeaderProps>> = {
   "sri harsha eye hospital": SriHarshaEyeHospitalHeader,
+  "vennela lab": VennalaLabHeader,
 };
 
 /**
@@ -30,3 +32,12 @@ export function getHeaderComponent(
 }
 
 export { DefaultHeader };
+
+/** All available header options for the header picker UI */
+export const HEADER_OPTIONS: { key: string; label: string }[] = [
+  { key: "default", label: "Default (hospital name)" },
+  ...Object.keys(headerRegistry).map(key => ({
+    key,
+    label: key.split(" ").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+  })),
+]

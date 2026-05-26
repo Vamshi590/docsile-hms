@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Region Tab — Design Proposal</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;background:#f8fafc;color:#0f172a;font-size:14px;}
+
+  .page-header{background:white;border-bottom:1px solid #e2e8f0;padding:14px 24px;font-size:13px;color:#64748b;display:flex;align-items:center;gap:8px;}
+  .page-header strong{color:#0f172a;font-size:15px;font-weight:700;}
+  .filter-pills{display:flex;gap:4px;margin-left:auto;}
+  .pill{padding:4px 12px;border-radius:99px;font-size:11px;font-weight:500;}
+  .pill.active{background:#4f46e5;color:white;}
+  .pill.inactive{background:#f1f5f9;color:#64748b;}
+
+  .tab-bar{background:white;border-bottom:1px solid #e2e8f0;padding:0 24px;display:flex;}
+  .tab{padding:12px 20px;font-size:13px;color:#94a3b8;border-bottom:2px solid transparent;}
+  .tab.active{color:#4f46e5;border-bottom-color:#4f46e5;font-weight:600;}
+
+  .content{padding:24px;max-width:1300px;margin:0 auto;}
+  .space{margin-bottom:20px;}
+
+  .card{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.04);}
+  .card-title{font-size:13px;font-weight:600;color:#0f172a;}
+  .card-sub{font-size:11px;color:#94a3b8;margin-top:2px;margin-bottom:16px;}
+
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+
+  /* REGION LEADERBOARD */
+  .region-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9;}
+  .region-row:last-child{border-bottom:none;}
+  .region-rank{font-size:11px;font-weight:700;color:#94a3b8;width:20px;text-align:center;flex-shrink:0;}
+  .region-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .region-info{flex:1;min-width:0;}
+  .region-name{font-size:13px;font-weight:600;color:#0f172a;}
+  .region-bar-wrap{height:6px;background:#eef2ff;border-radius:99px;overflow:hidden;margin-top:6px;}
+  .region-bar{height:100%;border-radius:99px;}
+  .region-count{font-size:13px;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums;flex-shrink:0;text-align:right;}
+  .region-pct{font-size:10px;color:#94a3b8;flex-shrink:0;width:30px;text-align:right;}
+
+  /* DONUT */
+  .donut-layout{display:flex;align-items:center;gap:18px;}
+  .legend-item{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;}
+  .legend-item:last-child{border-bottom:none;}
+  .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .leg-name{font-size:12px;color:#64748b;flex:1;margin-left:7px;}
+  .leg-val{font-size:12px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;}
+  .leg-pct{font-size:10px;color:#94a3b8;margin-left:4px;}
+
+  /* OPPORTUNITY CARD */
+  .opp-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f1f5f9;}
+  .opp-row:last-child{border-bottom:none;}
+  .opp-name{font-size:12px;font-weight:600;color:#0f172a;}
+  .opp-note{font-size:11px;color:#94a3b8;margin-top:2px;}
+  .opp-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;}
+  .opp-low{background:#fef3c7;color:#d97706;}
+  .opp-med{background:#dbeafe;color:#2563eb;}
+  .opp-high{background:#dcfce7;color:#16a34a;}
+
+  svg text{font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <strong>Analytics</strong>
+  <span style="color:#cbd5e1;">›</span>
+  <span>Region</span>
+  <div class="filter-pills">
+    <span class="pill inactive">Today</span>
+    <span class="pill inactive">Week</span>
+    <span class="pill active">Month</span>
+    <span class="pill inactive">Year</span>
+  </div>
+</div>
+<div class="tab-bar">
+  <div class="tab">Overview</div>
+  <div class="tab">Patients</div>
+  <div class="tab">Revenue &amp; Finance</div>
+  <div class="tab">Performance</div>
+  <div class="tab active">Region</div>
+  <div class="tab">Calls</div>
+</div>
+
+<div class="content">
+
+  <!-- ROW 1: Leaderboard + Donut -->
+  <div class="grid-2 space">
+
+    <!-- Region Leaderboard (full ranked list with bars) -->
+    <div class="card">
+      <div class="card-title">Patients by Region</div>
+      <div class="card-sub">Top regions ranked by patient count</div>
+
+      <div class="region-row">
+        <div class="region-rank" style="color:#f59e0b;">🥇</div>
+        <div class="region-dot" style="background:#4f46e5;"></div>
+        <div class="region-info">
+          <div class="region-name">Narasaraopeta</div>
+          <div class="region-bar-wrap"><div class="region-bar" style="width:100%;background:linear-gradient(90deg,#4f46e5,#818cf8);"></div></div>
+        </div>
+        <div class="region-count">428</div>
+        <div class="region-pct">33%</div>
+      </div>
+
+      <div class="region-row">
+        <div class="region-rank" style="color:#94a3b8;">🥈</div>
+        <div class="region-dot" style="background:#818cf8;"></div>
+        <div class="region-info">
+          <div class="region-name">Guntur</div>
+          <div class="region-bar-wrap"><div class="region-bar" style="width:72%;background:linear-gradient(90deg,#818cf8,#a5b4fc);"></div></div>
+        </div>
+        <div class="region-count">309</div>
+        <div class="region-pct">24%</div>
+      </div>
+
+      <div class="region-row">
+        <div class="region-rank" style="color:#cd7c2f;">🥉</div>
+        <div class="region-dot" style="background:#a5b4fc;"></div>
+        <div class="region-info">
+          <div class="region-name">Bapatla</div>
+          <div class="region-bar-wrap"><div class="region-bar" style="width:51%;background:linear-gradient(90deg,#a5b4fc,#c7d2fe);"></div></div>
+        </div>
+        <div class="region-count">219</div>
+        <div class="region-pct">17%</div>
+      </div>
+
+      <div class="region-row">
+        <div class="region-rank">4</div>
+        <div class="region-dot" style="background:#c7d2fe;"></div>
+        <div class="region-info">
+          <div class="region-name">Ongole</div>
+          <div class="region-bar-wrap"><div class="region-bar" style="width:35%;background:linear-gradient(90deg,#c7d2fe,#e0e7ff);"></div></div>
+        </div>
+        <div class="region-count">151</div>
+        <div class="region-pct">12%</div>
+      </div>
+
+      <div class="region-row">
+        <div class="region-rank">5</div>
+        <div class="region-dot" style="background:#e0e7ff;"></div>
+        <div class="region-info">
+          <div class="region-name">Palnadu</div>
+          <div class="region-bar-wrap"><div class="region-bar" style="width:22%;background:#e0e7ff;"></div></div>
+        </div>
+        <div class="region-count">93</div>
+        <div class="region-pct">7%</div>
+      </div>
+
+      <div class="region-row">
+        <div class="region-rank">6</div>
+        <div class="region-dot" style="background:#f1f5f9;border:1px solid #e2e8f0;"></div>
+        <div class="region-info">
+          <div class="region-name" style="color:#64748b;">Others</div>
+          <div class="region-bar-wrap"><div class="region-bar" style="width:9%;background:#e2e8f0;"></div></div>
+        </div>
+        <div class="region-count" style="color:#64748b;">84</div>
+        <div class="region-pct">7%</div>
+      </div>
+    </div>
+
+    <!-- Donut distribution -->
+    <div class="card">
+      <div class="card-title">Regional Distribution</div>
+      <div class="card-sub">Share of total patients by region</div>
+      <div class="donut-layout">
+        <svg width="150" height="150" viewBox="0 0 150 150" style="flex-shrink:0;">
+          <!-- 33% Narasaraopeta -->
+          <path d="M75,75 L75,12 A63,63 0 0,1 129,107 Z" fill="#4f46e5" opacity="0.92"/>
+          <!-- 24% Guntur -->
+          <path d="M75,75 L129,107 A63,63 0 0,1 30,133 Z" fill="#818cf8" opacity="0.92"/>
+          <!-- 17% Bapatla -->
+          <path d="M75,75 L30,133 A63,63 0 0,1 12,40 Z" fill="#a5b4fc" opacity="0.92"/>
+          <!-- 12% Ongole -->
+          <path d="M75,75 L12,40 A63,63 0 0,1 55,13 Z" fill="#c7d2fe" opacity="0.92"/>
+          <!-- 7% Palnadu -->
+          <path d="M75,75 L55,13 A63,63 0 0,1 75,12 Z" fill="#e0e7ff" opacity="0.92"/>
+          <circle cx="75" cy="75" r="42" fill="white"/>
+          <text x="75" y="71" text-anchor="middle" font-size="10" fill="#94a3b8" font-weight="600">TOTAL</text>
+          <text x="75" y="87" text-anchor="middle" font-size="16" fill="#0f172a" font-weight="900">1,284</text>
+        </svg>
+        <div style="flex:1;">
+          <div class="legend-item"><span class="dot" style="background:#4f46e5;"></span><span class="leg-name">Narasaraopeta</span><span class="leg-val">428</span><span class="leg-pct">33%</span></div>
+          <div class="legend-item"><span class="dot" style="background:#818cf8;"></span><span class="leg-name">Guntur</span><span class="leg-val">309</span><span class="leg-pct">24%</span></div>
+          <div class="legend-item"><span class="dot" style="background:#a5b4fc;"></span><span class="leg-name">Bapatla</span><span class="leg-val">219</span><span class="leg-pct">17%</span></div>
+          <div class="legend-item"><span class="dot" style="background:#c7d2fe;"></span><span class="leg-name">Ongole</span><span class="leg-val">151</span><span class="leg-pct">12%</span></div>
+          <div class="legend-item"><span class="dot" style="background:#e0e7ff;"></span><span class="leg-name">Palnadu</span><span class="leg-val">93</span><span class="leg-pct">7%</span></div>
+          <div class="legend-item"><span class="dot" style="background:#f1f5f9;border:1px solid #e2e8f0;"></span><span class="leg-name" style="color:#94a3b8;">Others</span><span class="leg-val" style="color:#94a3b8;">84</span><span class="leg-pct">7%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 2: New vs Returning by Region + Concentration Opportunity -->
+  <div class="grid-2 space">
+
+    <!-- New vs Returning per region -->
+    <div class="card">
+      <div class="card-title">New vs Returning Patients by Region</div>
+      <div class="card-sub">First-time vs repeat visits per area</div>
+      <div style="display:flex;gap:12px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#64748b;"><span style="width:10px;height:10px;border-radius:2px;background:#4f46e5;display:inline-block;"></span>New</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#64748b;"><span style="width:10px;height:10px;border-radius:2px;background:#c7d2fe;display:inline-block;"></span>Returning</div>
+      </div>
+
+      <!-- Stacked horizontal bars -->
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#334155;font-weight:500;margin-bottom:5px;">
+            <span>Narasaraopeta</span><span style="color:#64748b;">428 total</span>
+          </div>
+          <div style="display:flex;height:10px;border-radius:99px;overflow:hidden;">
+            <div style="width:58%;background:#4f46e5;"></div>
+            <div style="width:42%;background:#c7d2fe;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:3px;"><span>248 new</span><span>180 returning</span></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#334155;font-weight:500;margin-bottom:5px;">
+            <span>Guntur</span><span style="color:#64748b;">309 total</span>
+          </div>
+          <div style="display:flex;height:10px;border-radius:99px;overflow:hidden;">
+            <div style="width:44%;background:#4f46e5;"></div>
+            <div style="width:56%;background:#c7d2fe;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:3px;"><span>136 new</span><span>173 returning</span></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#334155;font-weight:500;margin-bottom:5px;">
+            <span>Bapatla</span><span style="color:#64748b;">219 total</span>
+          </div>
+          <div style="display:flex;height:10px;border-radius:99px;overflow:hidden;">
+            <div style="width:72%;background:#4f46e5;"></div>
+            <div style="width:28%;background:#c7d2fe;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:3px;"><span>158 new</span><span>61 returning</span></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#334155;font-weight:500;margin-bottom:5px;">
+            <span>Ongole</span><span style="color:#64748b;">151 total</span>
+          </div>
+          <div style="display:flex;height:10px;border-radius:99px;overflow:hidden;">
+            <div style="width:38%;background:#4f46e5;"></div>
+            <div style="width:62%;background:#c7d2fe;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:3px;"><span>57 new</span><span>94 returning</span></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#334155;font-weight:500;margin-bottom:5px;">
+            <span>Palnadu</span><span style="color:#64748b;">93 total</span>
+          </div>
+          <div style="display:flex;height:10px;border-radius:99px;overflow:hidden;">
+            <div style="width:81%;background:#4f46e5;"></div>
+            <div style="width:19%;background:#c7d2fe;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:3px;"><span>75 new</span><span>18 returning</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Concentration / Opportunity -->
+    <div class="card">
+      <div class="card-title">Concentration Insights</div>
+      <div class="card-sub">Regions to focus on based on patient volume &amp; growth</div>
+
+      <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:14px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+        <span style="font-size:18px;">💡</span>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#3730a3;">High growth in Bapatla &amp; Palnadu</div>
+          <div style="font-size:11px;color:#4338ca;margin-top:3px;">72% and 81% of patients are new — these regions are expanding and worth more outreach.</div>
+        </div>
+      </div>
+
+      <div class="opp-row">
+        <div>
+          <div class="opp-name">Narasaraopeta</div>
+          <div class="opp-note">Highest volume · loyal base</div>
+        </div>
+        <span class="opp-badge opp-high">Strong</span>
+      </div>
+      <div class="opp-row">
+        <div>
+          <div class="opp-name">Guntur</div>
+          <div class="opp-note">High retention · expand reach</div>
+        </div>
+        <span class="opp-badge opp-med">Stable</span>
+      </div>
+      <div class="opp-row">
+        <div>
+          <div class="opp-name">Bapatla</div>
+          <div class="opp-note">72% new — growing fast</div>
+        </div>
+        <span class="opp-badge opp-high">Opportunity</span>
+      </div>
+      <div class="opp-row">
+        <div>
+          <div class="opp-name">Ongole</div>
+          <div class="opp-note">Low volume · low new rate</div>
+        </div>
+        <span class="opp-badge opp-low">Focus needed</span>
+      </div>
+      <div class="opp-row">
+        <div>
+          <div class="opp-name">Palnadu</div>
+          <div class="opp-note">81% new — untapped area</div>
+        </div>
+        <span class="opp-badge opp-high">Opportunity</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<h2>Tables on Mobile</h2>
+<p class="subtitle">Your app has many data tables (patients, inpatients, labs, billing, insurance). Narrow phone screens can't show 6–8 columns at once. Which treatment do you prefer?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Horizontal Scroll</h3>
+      <p>Table stays as-is but scrolls horizontally. Simple to implement. All columns preserved — user swipes to see more. Works well on tablet.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Phone — Scroll to see more columns →</div>
+        <div class="mockup-body" style="padding:0;overflow:hidden">
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:500px">
+              <thead>
+                <tr style="background:#111;color:#fff">
+                  <th style="padding:6px 10px;text-align:left">Name</th>
+                  <th style="padding:6px 10px;text-align:left">Age</th>
+                  <th style="padding:6px 10px;text-align:left">Phone</th>
+                  <th style="padding:6px 10px;text-align:left;opacity:0.4">Doctor</th>
+                  <th style="padding:6px 10px;text-align:left;opacity:0.2">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-bottom:1px solid #eee"><td style="padding:6px 10px">Ravi Kumar</td><td style="padding:6px 10px">45</td><td style="padding:6px 10px">98765…</td><td style="padding:6px 10px;opacity:0.3">Dr. S…</td><td style="padding:6px 10px;opacity:0.15">22 May</td></tr>
+                <tr style="border-bottom:1px solid #eee;background:#fafafa"><td style="padding:6px 10px">Priya Devi</td><td style="padding:6px 10px">32</td><td style="padding:6px 10px">91234…</td><td style="padding:6px 10px;opacity:0.3">Dr. R…</td><td style="padding:6px 10px;opacity:0.15">21 May</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="text-align:center;color:#888;font-size:10px;padding:4px">← swipe →</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Card Stack (Stacked Rows)</h3>
+      <p>Each row becomes a card on mobile. Key fields shown prominently, secondary info below. Tappable cards — great for touch. More vertical scrolling but no horizontal swipe confusion.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Phone — Each row becomes a card</div>
+        <div class="mockup-body" style="padding:8px;display:flex;flex-direction:column;gap:8px">
+          <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:#fff">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-weight:600;font-size:13px">Ravi Kumar</div>
+              <div style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:4px">OPD</div>
+            </div>
+            <div style="font-size:11px;color:#666;margin-top:4px">Age: 45 · 98765-43210</div>
+            <div style="font-size:11px;color:#888;margin-top:2px">Dr. Sharma · 22 May 2026</div>
+          </div>
+          <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:#fff">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-weight:600;font-size:13px">Priya Devi</div>
+              <div style="font-size:10px;background:#dcfce7;color:#15803d;padding:2px 6px;border-radius:4px">IPD</div>
+            </div>
+            <div style="font-size:11px;color:#666;margin-top:4px">Age: 32 · 91234-56789</div>
+            <div style="font-size:11px;color:#888;margin-top:2px">Dr. Rao · 21 May 2026</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Hide Columns on Mobile</h3>
+      <p>Show only the most important 2–3 columns on mobile (name, status, action button). All columns visible on tablet/desktop. Clean and readable — just less detail at a glance.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Phone — Only key columns shown</div>
+        <div class="mockup-body" style="padding:0;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:#111;color:#fff">
+                <th style="padding:8px 12px;text-align:left">Name</th>
+                <th style="padding:8px 12px;text-align:left">Status</th>
+                <th style="padding:8px 12px;text-align:right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid #eee">
+                <td style="padding:8px 12px">
+                  <div style="font-weight:500">Ravi Kumar</div>
+                  <div style="font-size:10px;color:#888">Age 45 · OPD</div>
+                </td>
+                <td style="padding:8px 12px"><span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:4px">Active</span></td>
+                <td style="padding:8px 12px;text-align:right"><button style="font-size:10px;background:#111;color:#fff;border:none;border-radius:4px;padding:4px 8px">View</button></td>
+              </tr>
+              <tr style="border-bottom:1px solid #eee;background:#fafafa">
+                <td style="padding:8px 12px">
+                  <div style="font-weight:500">Priya Devi</div>
+                  <div style="font-size:10px;color:#888">Age 32 · IPD</div>
+                </td>
+                <td style="padding:8px 12px"><span style="font-size:10px;background:#dcfce7;color:#15803d;padding:2px 6px;border-radius:4px">Admitted</span></td>
+                <td style="padding:8px 12px;text-align:right"><button style="font-size:10px;background:#111;color:#fff;border:none;border-radius:4px;padding:4px 8px">View</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

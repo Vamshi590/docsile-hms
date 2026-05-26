@@ -1,7 +1,13 @@
 import "server-only";
 
 export type AdminConfig = {
-  hospital: { id: string; code: string; name: string; timezone: string };
+  hospital: {
+    id: string;
+    code: string;
+    name: string;
+    timezone: string;
+    type: "EYE" | "GENERAL";
+  };
   subscription: {
     planCode: string;
     planName: string;

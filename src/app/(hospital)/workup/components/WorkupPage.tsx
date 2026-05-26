@@ -168,7 +168,7 @@ export function WorkupPage({
           {/* Right column: Sight Type + Ask Sitha AI */}
           <div className="w-80 shrink-0 sticky top-4 self-start space-y-3 max-h-[calc(100vh-6rem)] overflow-y-auto pr-0.5">
             <SightTypePicker value={sightType} onChange={setSightType} />
-            <AskSithaAI patientId={selected.patientId} />
+            <AskSithaAI patientId={selected.patientId} module="workup" />
           </div>
         </div>
       ) : (

@@ -1,0 +1,4 @@
+{"type":"server-started","port":65347,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:65347","screen_dir":"/Users/vamshidhar/Desktop/docsile-hms/docsile-hms/.superpowers/brainstorm/96607-1779808226/content","state_dir":"/Users/vamshidhar/Desktop/docsile-hms/docsile-hms/.superpowers/brainstorm/96607-1779808226/state"}
+{"type":"screen-added","file":"/Users/vamshidhar/Desktop/docsile-hms/docsile-hms/.superpowers/brainstorm/96607-1779808226/content/revenue-tab-design.html"}
+{"type":"screen-added","file":"/Users/vamshidhar/Desktop/docsile-hms/docsile-hms/.superpowers/brainstorm/96607-1779808226/content/revenue-tab-v2.html"}
+{"type":"server-stopped","reason":"idle timeout"}

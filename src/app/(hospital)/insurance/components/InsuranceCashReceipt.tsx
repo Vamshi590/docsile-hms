@@ -206,7 +206,7 @@ export default function InsuranceCashReceipt({
                         <td className="border border-[#000000] p-2" colSpan={2}>
                           <div className="text-right font-bold">DISCOUNT %</div>
                         </td>
-                        <td className="border border-[#000000] p-2 text-right">{billingData.discountPercent}%</td>
+                        <td className="border border-[#000000] p-2 text-right">{billingData.discountPercent.toFixed(2)}%</td>
                       </tr>
                     )}
                     {billingData.discountAmount > 0 && (

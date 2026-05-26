@@ -230,6 +230,7 @@ export function LabRecordsTab({ patientId, patient }: { patientId: string; patie
             paymentMode: printBill.paymentMode,
             items: printBill.items.map((item: any) => ({ name: item.name, amount: item.amount })),
             createdAt: printBill.createdAt,
+            printHeaderKey: printBill.lab.printHeaderKey ?? undefined,
           }}
         />
       )}

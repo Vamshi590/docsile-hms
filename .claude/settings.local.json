@@ -17,7 +17,16 @@
       "Read(//Users/vamshidhar/Desktop/docsile-admin/src/lib/**)",
       "Read(//Users/vamshidhar/Desktop/docsile-admin/src/**)",
       "Read(//Users/vamshidhar/Desktop/docsile-admin/**)",
-      "Bash(mkdir -p \"src/app/\\(admin\\)/hospitals/[id]/invoices/components\")"
+      "Bash(mkdir -p \"src/app/\\(admin\\)/hospitals/[id]/invoices/components\")",
+      "Read(//Users/vamshidhar/Desktop/docsile-hms/**)",
+      "Read(//Users/vamshidhar/Desktop/**)",
+      "Read(//Users/vamshidhar/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/subagent-driven-development/**)",
+      "WebSearch",
+      "Bash(node *)",
+      "Bash(npx vitest *)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/login)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/login)"
     ]
   }
 }

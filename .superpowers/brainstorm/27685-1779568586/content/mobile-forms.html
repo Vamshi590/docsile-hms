@@ -1,0 +1,95 @@
+<h2>Forms &amp; Multi-Step Wizards on Mobile</h2>
+<p class="subtitle">Your app has large multi-step forms (patient registration, inpatient admission, prescription, billing). How should they behave on mobile?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Single Column, Full Width</h3>
+      <p>All form fields stack into one column on mobile. Labels above inputs. Each step takes up the full screen width. Clean, easy to type on phone keyboard.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Phone — Step 1 of 3: Patient Info</div>
+        <div class="mockup-body" style="padding:12px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;gap:6px;margin-bottom:4px">
+            <div style="flex:1;height:4px;background:#2563eb;border-radius:2px"></div>
+            <div style="flex:1;height:4px;background:#e2e8f0;border-radius:2px"></div>
+            <div style="flex:1;height:4px;background:#e2e8f0;border-radius:2px"></div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:#666;margin-bottom:3px">PATIENT NAME</div>
+            <div style="border:1px solid #d1d5db;border-radius:6px;padding:8px;font-size:12px;color:#374151;background:#fff">Ravi Kumar</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:#666;margin-bottom:3px">PHONE NUMBER</div>
+            <div style="border:1px solid #d1d5db;border-radius:6px;padding:8px;font-size:12px;color:#374151;background:#fff">98765-43210</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:#666;margin-bottom:3px">AGE</div>
+            <div style="border:1px solid #d1d5db;border-radius:6px;padding:8px;font-size:12px;color:#374151;background:#fff">45</div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button style="flex:1;background:#f3f4f6;color:#374151;border:none;border-radius:6px;padding:8px;font-size:12px">Back</button>
+            <button style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:6px;padding:8px;font-size:12px">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Two Columns on Tablet, One on Phone</h3>
+      <p>Tablet (768px+) keeps a 2-column layout for efficiency. Phone gets single column. Best of both worlds — tablet users see more at once, phone users get easy typing.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Tablet — 2 columns side by side</div>
+        <div class="mockup-body" style="padding:12px">
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <div style="flex:1;height:4px;background:#2563eb;border-radius:2px"></div>
+            <div style="flex:1;height:4px;background:#e2e8f0;border-radius:2px"></div>
+            <div style="flex:1;height:4px;background:#e2e8f0;border-radius:2px"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <div style="font-size:9px;color:#666;margin-bottom:2px">PATIENT NAME</div>
+              <div style="border:1px solid #d1d5db;border-radius:4px;padding:6px;font-size:11px;background:#fff">Ravi Kumar</div>
+            </div>
+            <div>
+              <div style="font-size:9px;color:#666;margin-bottom:2px">PHONE</div>
+              <div style="border:1px solid #d1d5db;border-radius:4px;padding:6px;font-size:11px;background:#fff">98765-43210</div>
+            </div>
+            <div>
+              <div style="font-size:9px;color:#666;margin-bottom:2px">AGE</div>
+              <div style="border:1px solid #d1d5db;border-radius:4px;padding:6px;font-size:11px;background:#fff">45</div>
+            </div>
+            <div>
+              <div style="font-size:9px;color:#666;margin-bottom:2px">GENDER</div>
+              <div style="border:1px solid #d1d5db;border-radius:4px;padding:6px;font-size:11px;background:#fff">Male</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button style="flex:1;background:#f3f4f6;color:#374151;border:none;border-radius:6px;padding:6px;font-size:11px">Back</button>
+            <button style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:6px;padding:6px;font-size:11px">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>One Question Per Screen (Wizard Style)</h3>
+      <p>Each field or small group gets its own screen on mobile. Very phone-friendly — big touch targets, no scrolling. But many more taps to complete the form. Better for simple forms, awkward for complex ones.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Phone — One field at a time</div>
+        <div class="mockup-body" style="padding:16px;display:flex;flex-direction:column;gap:12px;min-height:160px">
+          <div style="font-size:10px;color:#666;text-align:center">Step 1 of 12</div>
+          <div style="font-size:15px;font-weight:600;text-align:center;color:#111">What is the patient's name?</div>
+          <div style="border:2px solid #2563eb;border-radius:8px;padding:10px;font-size:14px;color:#374151;background:#fff;text-align:center">Ravi Kumar</div>
+          <button style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:600">Continue →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

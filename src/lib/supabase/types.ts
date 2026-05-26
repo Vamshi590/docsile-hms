@@ -767,6 +767,46 @@ export interface Database {
           updatedAt?: string
         }
       }
+      PredefinedDischarge: {
+        Row: {
+          id: string
+          name: string
+          dischargeDiagnosis: string | null
+          conditionAtDischarge: string | null
+          dischargeMedications: string | null
+          followUpInstructions: string | null
+          isActive: boolean
+          sortOrder: number
+          createdBy: string
+          createdAt: string
+          updatedAt: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          dischargeDiagnosis?: string | null
+          conditionAtDischarge?: string | null
+          dischargeMedications?: string | null
+          followUpInstructions?: string | null
+          isActive?: boolean
+          sortOrder?: number
+          createdBy: string
+          createdAt?: string
+          updatedAt?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          dischargeDiagnosis?: string | null
+          conditionAtDischarge?: string | null
+          dischargeMedications?: string | null
+          followUpInstructions?: string | null
+          isActive?: boolean
+          sortOrder?: number
+          createdBy?: string
+          updatedAt?: string
+        }
+      }
       InPatient: {
         Row: {
           id: string

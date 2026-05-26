@@ -25,7 +25,8 @@ export interface HospitalHeaderProps {
  *   1. Create a file in src/components/receipts/headers/YourHospital.tsx
  *   2. Register it in src/components/receipts/headers/registry.ts
  */
-export function ReceiptHeader({ hospital }: HospitalHeaderProps) {
-  const HeaderComponent = getHeaderComponent(hospital.name)
+export function ReceiptHeader({ hospital, headerOverrideKey }: HospitalHeaderProps & { headerOverrideKey?: string }) {
+  const key = (headerOverrideKey && headerOverrideKey !== "default") ? headerOverrideKey : hospital.name
+  const HeaderComponent = getHeaderComponent(key)
   return <HeaderComponent hospital={hospital} />
 }

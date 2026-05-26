@@ -100,7 +100,9 @@ export function InsuranceBillPreview({ claimId, billType, onBack }: Props) {
       setDeductions(c.deductions)
       setPatientPayable(c.patientPayableAmount)
       setEnhancementAmount(c.enhancementAmount)
-      setExcessAmount(Math.max(0, c.totalBillAmount - c.preauthAmount))
+      // "Amount to be paid by patient" on the enhancement bill — use the
+      // claim's actual patient liability, not the raw bill-vs-preauth gap.
+      setExcessAmount(c.patientPayableAmount)
       setAmountReceived(c.patientPaidAmount)
       setPatientBalance(c.patientBalance)
 
@@ -348,7 +350,7 @@ export function InsuranceBillPreview({ claimId, billType, onBack }: Props) {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">Excess Amount</Label>
+                      <Label className="text-[10px] text-muted-foreground">Amt. to be Paid by Patient</Label>
                       <Input type="number" value={excessAmount || ""} onChange={e => setExcessAmount(Number(e.target.value) || 0)} className="h-8 text-xs" />
                     </div>
                     <div className="space-y-1">

@@ -45,6 +45,7 @@ type PatientFormData = {
   referredBy: string
   doctorName: string
   department: string
+  patientCategory: string
   appointmentDate: string
   notes: string
 }
@@ -98,6 +99,7 @@ type EditPatientData = {
   referredBy?: string | null
   doctorName?: string | null
   department?: string | null
+  patientCategory?: string | null
   appointmentDate: Date | string
   notes?: string | null
 }
@@ -137,12 +139,14 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
     fullName: "", dateOfBirth: "", age: "",
     gender: "", phone: "", email: "", address: "",
     guardianName: "", referredBy: "",
-    doctorName: "", department: "", appointmentDate: todayISO(), notes: "",
+    doctorName: "", department: "", patientCategory: "Regular", appointmentDate: todayISO(), notes: "",
   })
 
   const [doctorOptions, setDoctorOptions] = useState<string[]>([])
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([])
   const [referredByOptions, setReferredByOptions] = useState<string[]>([])
+  const [addressOptions, setAddressOptions] = useState<string[]>([])
+  const [patientCategoryOptions, setPatientCategoryOptions] = useState<string[]>(["Regular"])
 
   const [fieldDefaults, setFieldDefaults] = useState({ doctorName: "", department: "", referredBy: "" })
 
@@ -270,6 +274,8 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
       setDoctorOptions(data.doctorOptions)
       setDepartmentOptions(data.departmentOptions)
       setReferredByOptions(data.referralOptions)
+      setAddressOptions(data.addressOptions)
+      setPatientCategoryOptions(["Regular", ...data.patientCategoryOptions.filter(o => o !== "Regular")])
 
       if (isEditMode) {
         const fullName = [editPatient.firstName, editPatient.lastName].filter(Boolean).join(" ")
@@ -296,6 +302,7 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
           referredBy: editPatient.referredBy ?? "",
           doctorName: editPatient.doctorName ?? "",
           department: editPatient.department ?? "",
+          patientCategory: editPatient.patientCategory ?? "Regular",
           appointmentDate: apptDate,
           notes: editPatient.notes ?? "",
         })
@@ -369,6 +376,7 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
       referredBy: patientData.referredBy.trim() || undefined,
       doctorName: patientData.doctorName.trim() || undefined,
       department: patientData.department.trim() || undefined,
+      patientCategory: patientData.patientCategory.trim() || "Regular",
       patientType,
       appointmentDate: patientData.appointmentDate,
       notes: patientData.notes.trim() || undefined,
@@ -697,14 +705,35 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
                         </div>
                       </div>
 
-                      <div className="space-y-1.5">
-                        <Label>Address</Label>
-                        <Input
-                          className="bg-white focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 focus:outline-none placeholder:text-gray-300"
-                          value={patientData.address}
-                          onChange={e => setPatientData(prev => ({ ...prev, address: e.target.value }))}
-                          placeholder="Patient address"
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="sm:col-span-2 space-y-1.5">
+                          <Label>Address</Label>
+                          <EditableComboboxWithAdd
+                            options={addressOptions}
+                            value={patientData.address}
+                            onValueChange={v => setPatientData(prev => ({ ...prev, address: v }))}
+                            placeholder="Patient address / region"
+                            onAddOption={async (val) => {
+                              const res = await addDropdownOption("address", val)
+                              if (res.success) setAddressOptions(prev => [...prev, val].sort())
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Patient Type</Label>
+                          <EditableComboboxWithAdd
+                            options={patientCategoryOptions}
+                            value={patientData.patientCategory}
+                            onValueChange={v => setPatientData(prev => ({ ...prev, patientCategory: v }))}
+                            placeholder="Regular"
+                            onAddOption={async (val) => {
+                              const res = await addDropdownOption("patientCategory", val)
+                              if (res.success) setPatientCategoryOptions(prev =>
+                                prev.includes(val) ? prev : [...prev, val].sort()
+                              )
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

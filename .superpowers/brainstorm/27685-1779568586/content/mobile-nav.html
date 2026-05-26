@@ -1,0 +1,73 @@
+<h2>Mobile Navigation Pattern</h2>
+<p class="subtitle">Your app currently has a sidebar and a top-tab-bar mode. Which mobile navigation pattern feels right for hospital staff using this on phones/tablets?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Bottom Tab Bar</h3>
+      <p>Fixed bar at the bottom with 5 main sections (Dashboard, Patients, Inpatients, Billing, More). Thumb-friendly, standard mobile pattern. Best for frequent switching between sections.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Phone — Bottom Tabs</div>
+        <div class="mockup-body" style="padding:0;overflow:hidden">
+          <div style="background:#f5f5f5;height:160px;display:flex;align-items:center;justify-content:center;color:#888;font-size:13px">Main content area</div>
+          <div style="background:#111;display:flex;justify-content:space-around;padding:10px 4px 6px;border-top:1px solid #333">
+            <div style="text-align:center;color:#4a90e2;font-size:10px"><div style="font-size:18px">🏥</div>Dash</div>
+            <div style="text-align:center;color:#888;font-size:10px"><div style="font-size:18px">👥</div>Patients</div>
+            <div style="text-align:center;color:#888;font-size:10px"><div style="font-size:18px">🛏</div>Inpatient</div>
+            <div style="text-align:center;color:#888;font-size:10px"><div style="font-size:18px">💊</div>Doctor</div>
+            <div style="text-align:center;color:#888;font-size:10px"><div style="font-size:18px">•••</div>More</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Hamburger + Drawer</h3>
+      <p>Hamburger icon in the top-left opens a full slide-in drawer with all navigation items. Familiar pattern, shows all options. Works well when there are many sections (your app has 15+).</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Phone — Drawer Nav</div>
+        <div class="mockup-body" style="padding:0;overflow:hidden;position:relative">
+          <div style="background:#111;display:flex;align-items:center;padding:8px 12px;gap:12px">
+            <div style="color:#fff;font-size:18px">☰</div>
+            <div style="color:#fff;font-size:13px;font-weight:600">Dashboard</div>
+          </div>
+          <div style="background:#f5f5f5;height:130px;display:flex;align-items:center;justify-content:center;color:#888;font-size:13px">Main content area</div>
+          <!-- Drawer overlay -->
+          <div style="position:absolute;top:0;left:0;width:70%;height:100%;background:#1a1a1a;padding:16px 0">
+            <div style="padding:8px 16px;color:#4a90e2;font-size:12px;font-weight:600">MENU</div>
+            <div style="padding:8px 16px;color:#fff;font-size:12px;border-left:3px solid #4a90e2">Dashboard</div>
+            <div style="padding:8px 16px;color:#888;font-size:12px">Patients</div>
+            <div style="padding:8px 16px;color:#888;font-size:12px">Inpatients</div>
+            <div style="padding:8px 16px;color:#888;font-size:12px">Doctor</div>
+            <div style="padding:8px 16px;color:#888;font-size:12px">Labs</div>
+            <div style="padding:8px 16px;color:#666;font-size:11px">+ 10 more…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Scrollable Top Tabs (Current — just fix for touch)</h3>
+      <p>Keep the existing top tab bar but make it horizontally scrollable on mobile. Minimal code change. Works best on tablet where there's more width. Least friction to implement.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Phone — Scrollable Tabs</div>
+        <div class="mockup-body" style="padding:0;overflow:hidden">
+          <div style="background:#111;display:flex;align-items:center;gap:0;overflow:hidden;padding:0 8px">
+            <div style="background:#222;color:#fff;font-size:11px;padding:8px 12px;white-space:nowrap;border-bottom:2px solid #4a90e2">Dashboard</div>
+            <div style="color:#888;font-size:11px;padding:8px 12px;white-space:nowrap">Patients</div>
+            <div style="color:#888;font-size:11px;padding:8px 12px;white-space:nowrap">Inpatients</div>
+            <div style="color:#555;font-size:11px;padding:8px 12px;white-space:nowrap">→</div>
+          </div>
+          <div style="background:#f5f5f5;height:140px;display:flex;align-items:center;justify-content:center;color:#888;font-size:13px">Main content area</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

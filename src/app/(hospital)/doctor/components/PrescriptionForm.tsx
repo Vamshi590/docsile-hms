@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, forwardRef, useImperativeHandle } from "react"
+import { useState, forwardRef, useImperativeHandle, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { Plus, X, Loader2, Search, ClipboardList } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,7 @@ import {
   savePrescription,
   addDropdownOption,
   updatePatientToWithDoctor,
+  getMedicineMaster,
 } from "../actions"
 import { formatDate } from "@/lib/utils"
 
@@ -63,6 +64,7 @@ export type PrescriptionReferenceData = {
   complaintOptions: string[]
   previousHistoryOptions: string[]
   diagnosisOptions: string[]
+  additionalNotesOptions: string[]
   templates: Template[]
 }
 
@@ -81,10 +83,14 @@ interface Props {
     temperature: number | null
     pulseRate: number | null
     spo2: number | null
+    heightCm?: number | null
+    weightKg?: number | null
   } | null
   referenceData: PrescriptionReferenceData
   onReferenceDataChange: (next: PrescriptionReferenceData) => void
   onSaved?: () => void
+  /** When true, show Height / Weight / BMI inputs in the vitals row. */
+  vitalsExtended?: boolean
 }
 
 export interface PrescriptionFormHandle {
@@ -92,11 +98,22 @@ export interface PrescriptionFormHandle {
 }
 
 export const PrescriptionForm = forwardRef<PrescriptionFormHandle, Props>(
-function PrescriptionForm({ patientId, patientName, existingPrescription, referenceData, onReferenceDataChange, onSaved }, ref) {
+function PrescriptionForm({ patientId, patientName, existingPrescription, referenceData, onReferenceDataChange, onSaved, vitalsExtended = false }, ref) {
   const [doctorName, setDoctorName] = useState(existingPrescription?.doctorName ?? "")
   const [temperature, setTemperature] = useState(existingPrescription?.temperature?.toString() ?? "")
   const [pulseRate, setPulseRate] = useState(existingPrescription?.pulseRate?.toString() ?? "")
   const [spo2, setSpo2] = useState(existingPrescription?.spo2?.toString() ?? "")
+  const [heightCm, setHeightCm] = useState(existingPrescription?.heightCm?.toString() ?? "")
+  const [weightKg, setWeightKg] = useState(existingPrescription?.weightKg?.toString() ?? "")
+
+  // BMI = weight(kg) / height(m)^2. Computed on the fly, not stored.
+  const bmi = (() => {
+    const h = parseFloat(heightCm)
+    const w = parseFloat(weightKg)
+    if (!h || !w || h <= 0 || w <= 0) return ""
+    const heightM = h / 100
+    return (w / (heightM * heightM)).toFixed(1)
+  })()
 
   const [presentComplaint, setPresentComplaint] = useState(existingPrescription?.presentComplaint ?? "")
   const [previousHistory, setPreviousHistory] = useState(existingPrescription?.previousHistory ?? "")
@@ -136,7 +153,20 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
   const [submitting, setSubmitting] = useState(false)
 
   // Reference data is provided by the parent (loaded once at page level).
-  const { medicines: medicineMasterFull, investigations: investigationOptions, complaintOptions, previousHistoryOptions, diagnosisOptions, templates } = referenceData
+  const { investigations: investigationOptions, complaintOptions, previousHistoryOptions, diagnosisOptions, additionalNotesOptions, templates } = referenceData
+
+  // Load medicines from DB on mount to ensure the dropdown always has data
+  // even if the server-side pre-load returned empty (e.g. query error).
+  const [medicineMasterFull, setMedicineMasterFull] = useState(referenceData.medicines)
+  const medicinesFetched = useRef(false)
+  useEffect(() => {
+    if (medicinesFetched.current) return
+    medicinesFetched.current = true
+    getMedicineMaster().then(data => {
+      if (data.length > 0) setMedicineMasterFull(data)
+    }).catch(() => {})
+  }, [])
+
   const medicineOptions = medicineMasterFull.map(x => x.name)
   const [templateSearch, setTemplateSearch] = useState("")
   const [showTemplateList, setShowTemplateList] = useState(false)
@@ -153,15 +183,19 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
     setMedicines(prev => prev.map(m => {
       if (m.id !== id) return m
       if (field === "name") {
-        // Auto-fill timing, days, note from medicine master (only if the field is currently empty)
         const master = medicineMasterFull.find(x => x.name === value)
-        return {
-          ...m,
-          name: value,
-          timing: m.timing || (master?.defaultTiming ?? ""),
-          days: m.days || (master?.defaultDays ?? ""),
-          note: m.note || (master?.note ?? ""),
+        if (master) {
+          // Exact match — always apply master defaults so selecting from dropdown always fills
+          return {
+            ...m,
+            name: value,
+            timing: master.defaultTiming ?? m.timing,
+            days: master.defaultDays ?? m.days,
+            note: master.note ?? m.note,
+          }
         }
+        // Partial / custom name — just update name, keep existing timing/days/note
+        return { ...m, name: value }
       }
       return { ...m, [field]: value }
     }))
@@ -218,6 +252,8 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
         temperature: temperature ? parseFloat(temperature) : null,
         pulseRate: pulseRate ? parseInt(pulseRate) : null,
         spo2: spo2 ? parseInt(spo2) : null,
+        heightCm: heightCm ? parseFloat(heightCm) : null,
+        weightKg: weightKg ? parseFloat(weightKg) : null,
         presentComplaint: presentComplaint.trim() || undefined,
         previousHistory: previousHistory.trim() || undefined,
         diagnosis: diagnosis.trim() || undefined,
@@ -252,7 +288,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
     : templates
 
   return (
-    <div className="space-y-4 [&_input:not(:placeholder-shown)]:text-foreground [&_input:not(:placeholder-shown)]:font-medium [&_textarea:not(:placeholder-shown)]:text-foreground [&_textarea:not(:placeholder-shown)]:font-medium">
+    <div className="space-y-4 [&_input]:text-gray-900 [&_input]:font-semibold [&_input]:placeholder:text-gray-300 [&_input]:placeholder:font-normal [&_textarea]:text-gray-900 [&_textarea]:font-semibold [&_textarea]:placeholder:text-gray-300 [&_textarea]:placeholder:font-normal [&_[role=combobox]]:text-gray-900 [&_[role=combobox]]:font-semibold">
 
       {/* Quick Fill from Template — compact single row */}
       <div className="rounded-xl border border-primary/15 bg-primary/[0.04] px-3 py-2.5">
@@ -321,7 +357,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
               value={temperature}
               onChange={e => setTemperature(e.target.value)}
               placeholder="98.6"
-              className="pr-14 h-9"
+              className="pr-14 h-9 bg-white"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground pointer-events-none">°F · Temp</span>
           </div>
@@ -331,7 +367,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
               value={pulseRate}
               onChange={e => setPulseRate(e.target.value)}
               placeholder="72"
-              className="pr-16 h-9"
+              className="pr-16 h-9 bg-white"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground pointer-events-none">bpm · Pulse</span>
           </div>
@@ -341,15 +377,49 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
               value={spo2}
               onChange={e => setSpo2(e.target.value)}
               placeholder="98"
-              className="pr-16 h-9"
+              className="pr-16 h-9 bg-white"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground pointer-events-none">% · SpO₂</span>
           </div>
         </div>
+        {vitalsExtended && (
+          <div className="grid grid-cols-3 gap-2 mt-2">
+            <div className="relative">
+              <Input
+                type="number"
+                value={heightCm}
+                onChange={e => setHeightCm(e.target.value)}
+                placeholder="170"
+                className="pr-16 h-9 bg-white"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground pointer-events-none">cm · Height</span>
+            </div>
+            <div className="relative">
+              <Input
+                type="number"
+                value={weightKg}
+                onChange={e => setWeightKg(e.target.value)}
+                placeholder="65"
+                className="pr-16 h-9 bg-white"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground pointer-events-none">kg · Weight</span>
+            </div>
+            <div className="relative">
+              <Input
+                type="text"
+                value={bmi}
+                readOnly
+                placeholder="—"
+                className="pr-16 h-9 bg-slate-50 cursor-default"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground pointer-events-none">BMI</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Clinical Notes — single white card */}
-      <div className="rounded-xl border border-border/60 bg-white overflow-hidden">
+      <div className="rounded-xl border border-border/60 bg-white">
         <div className="px-4 py-2.5 border-b border-border/40">
           <h3 className="text-sm font-semibold text-foreground">Clinical Notes</h3>
         </div>
@@ -403,9 +473,16 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
       </div>
 
       {/* Medicines */}
-      <div className="rounded-xl border border-border/60 bg-white overflow-hidden">
+      <div className="rounded-xl border border-border/60 bg-white">
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40">
-          <h3 className="text-sm font-semibold text-foreground">Medications</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-foreground">Medications</h3>
+            {medicineOptions.length === 0 && (
+              <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                No predefined medicines — add in Settings → Medicines
+              </span>
+            )}
+          </div>
           <Button
             size="sm"
             variant="ghost"
@@ -464,7 +541,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
       </div>
 
       {/* Investigations */}
-      <div className="rounded-xl border border-border/60 bg-white overflow-hidden">
+      <div className="rounded-xl border border-border/60 bg-white">
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/40">
           <h3 className="text-sm font-semibold text-foreground">Investigations / Advice</h3>
           <Button
@@ -541,9 +618,15 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
         </div>
         <div className="space-y-1.5">
           <Label className="text-[11px] font-medium text-muted-foreground">Additional Notes</Label>
-          <Input
+          <EditableComboboxWithAdd
+            options={additionalNotesOptions}
             value={notes}
-            onChange={e => setNotes(e.target.value)}
+            onValueChange={setNotes}
+            onAddOption={async (v) => {
+              await addDropdownOption("additionalNotes", v)
+              onReferenceDataChange({ ...referenceData, additionalNotesOptions: [...additionalNotesOptions, v] })
+              toast.success("Option added")
+            }}
             placeholder="Any additional instructions…"
           />
         </div>

@@ -10,8 +10,10 @@ import {
   IndianRupee,
   FileSearch,
   ClipboardList,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { AskSithaAI } from "../../doctor/components/AskSithaAI"
 import { PatientSearch } from "./PatientSearch"
 import { PatientSummaryCard } from "./PatientSummaryCard"
 import { VisitHistoryTab } from "./VisitHistoryTab"
@@ -44,6 +46,7 @@ export default function ReportsPage() {
   const [patient, setPatient] = useState<PatientSummary>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("visits")
+  const [chatOpen, setChatOpen] = useState(false)
 
   const handlePatientSelect = useCallback(async (selected: { patientId: string }) => {
     setLoading(true)
@@ -60,107 +63,135 @@ export default function ReportsPage() {
           <ClipboardList className="h-3.5 w-3.5" />
           <span>Complete Patient History</span>
         </div>
+        <button
+          onClick={() => setChatOpen(o => !o)}
+          title={chatOpen ? "Hide Sitha" : "Ask Sitha AI"}
+          className={cn(
+            "h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
+            chatOpen
+              ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+              : "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+          )}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          {chatOpen ? "Hide Sitha" : "Ask Sitha"}
+        </button>
       </PageHeader>
 
-      {/* Search Section */}
-      <div className="py-8 px-4">
-        <div className="text-center mb-5">
-          <h2 className="text-lg font-semibold text-foreground">Search Patient Records</h2>
-          <p className="text-sm text-muted-foreground mt-1">Look up any patient by ID, name, or phone number to view their complete history</p>
-        </div>
-        <PatientSearch
-          onSelect={handlePatientSelect}
-          selectedPatientId={patient?.patientId}
-        />
-      </div>
+      <div className={cn(chatOpen && "flex gap-5 items-start")}>
+        <div className={cn(chatOpen && "flex-1 min-w-0")}>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="space-y-4 px-1">
-          <div className="bg-white border border-gray-100 rounded-xl p-6">
-            <div className="flex items-center gap-4">
-              <Skeleton className="h-16 w-16 rounded-full" />
-              <div className="space-y-2 flex-1">
-                <Skeleton className="h-5 w-48" />
-                <Skeleton className="h-4 w-72" />
+          {/* Search Section */}
+          <div className="py-8 px-4">
+            <div className="text-center mb-5">
+              <h2 className="text-lg font-semibold text-foreground">Search Patient Records</h2>
+              <p className="text-sm text-muted-foreground mt-1">Look up any patient by ID, name, or phone number to view their complete history</p>
+            </div>
+            <PatientSearch
+              onSelect={handlePatientSelect}
+              selectedPatientId={patient?.patientId}
+            />
+          </div>
+
+          {/* Loading State */}
+          {loading && (
+            <div className="space-y-4 px-1">
+              <div className="bg-white border border-gray-100 rounded-xl p-6">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-16 w-16 rounded-full" />
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-5 w-48" />
+                    <Skeleton className="h-4 w-72" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-5 gap-4 mt-6">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-20 rounded-lg" />
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-5 gap-4 mt-6">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-20 rounded-lg" />
-              ))}
+          )}
+
+          {/* Patient Report */}
+          {!loading && patient && (
+            <div className="space-y-0 px-1">
+              {/* Summary Card */}
+              <PatientSummaryCard patient={patient} />
+
+              {/* Tab Navigation */}
+              <div className="sticky top-18 z-10 -mx-5 px-5 pt-5 pb-0 bg-gray-50">
+                <div className="bg-white border border-gray-200 rounded-2xl p-1.5 flex gap-1 overflow-x-auto">
+                  {TABS.map((tab) => {
+                    const isActive = activeTab === tab.id
+                    const styles = ACCENT_STYLES[tab.accent]
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={cn(
+                          "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 whitespace-nowrap",
+                          isActive
+                            ? styles.active
+                            : "border-transparent text-muted-foreground hover:text-foreground hover:bg-gray-50"
+                        )}
+                      >
+                        <tab.icon className={cn("h-4 w-4 shrink-0", isActive ? styles.icon : "text-current")} />
+                        <span>{tab.label}</span>
+                        {isActive && (
+                          <span className={cn("h-1.5 w-1.5 rounded-full", styles.dot)} />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Tab Content */}
+              <div className="pt-5">
+                {activeTab === "visits" && (
+                  <VisitHistoryTab patientId={patient.patientId} />
+                )}
+                {activeTab === "prescriptions" && (
+                  <PrescriptionsTab patientId={patient.patientId} patient={patient} />
+                )}
+                {activeTab === "inpatient" && (
+                  <InpatientRecordsTab patientInternalId={patient.id} patient={patient} />
+                )}
+                {activeTab === "labs" && (
+                  <LabRecordsTab patientId={patient.patientId} patient={patient} />
+                )}
+                {activeTab === "billing" && (
+                  <BillingTab patientId={patient.patientId} patientInternalId={patient.id} />
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Patient Report */}
-      {!loading && patient && (
-        <div className="space-y-0 px-1">
-          {/* Summary Card */}
-          <PatientSummaryCard patient={patient} />
-
-          {/* Tab Navigation */}
-          <div className="sticky top-18 z-10 -mx-5 px-5 pt-5 pb-0 bg-gray-50">
-            <div className="bg-white border border-gray-200 rounded-2xl p-1.5 flex gap-1 overflow-x-auto">
-              {TABS.map((tab) => {
-                const isActive = activeTab === tab.id
-                const styles = ACCENT_STYLES[tab.accent]
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 whitespace-nowrap",
-                      isActive
-                        ? styles.active
-                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-gray-50"
-                    )}
-                  >
-                    <tab.icon className={cn("h-4 w-4 shrink-0", isActive ? styles.icon : "text-current")} />
-                    <span>{tab.label}</span>
-                    {isActive && (
-                      <span className={cn("h-1.5 w-1.5 rounded-full", styles.dot)} />
-                    )}
-                  </button>
-                )
-              })}
+          {/* Empty State */}
+          {!loading && !patient && (
+            <div className="text-center py-16">
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-linear-to-br from-primary/10 to-primary/5 mx-auto mb-5">
+                <FileSearch className="h-9 w-9 text-primary/60" />
+              </div>
+              <h3 className="text-base font-semibold text-foreground">Search for a patient to get started</h3>
+              <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">
+                Enter a Patient ID, name, or phone number above to view their complete medical history, prescriptions, lab records, and billing details.
+              </p>
             </div>
-          </div>
+          )}
 
-          {/* Tab Content */}
-          <div className="pt-5">
-            {activeTab === "visits" && (
-              <VisitHistoryTab patientId={patient.patientId} />
-            )}
-            {activeTab === "prescriptions" && (
-              <PrescriptionsTab patientId={patient.patientId} patient={patient} />
-            )}
-            {activeTab === "inpatient" && (
-              <InpatientRecordsTab patientInternalId={patient.id} patient={patient} />
-            )}
-            {activeTab === "labs" && (
-              <LabRecordsTab patientId={patient.patientId} patient={patient} />
-            )}
-            {activeTab === "billing" && (
-              <BillingTab patientId={patient.patientId} patientInternalId={patient.id} />
-            )}
-          </div>
         </div>
-      )}
 
-      {/* Empty State */}
-      {!loading && !patient && (
-        <div className="text-center py-16">
-          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-linear-to-br from-primary/10 to-primary/5 mx-auto mb-5">
-            <FileSearch className="h-9 w-9 text-primary/60" />
+        {chatOpen && (
+          <div className="w-80 shrink-0 sticky top-[65px] self-start max-h-[calc(100vh-5rem)] overflow-y-auto pr-0.5 mt-8">
+            <AskSithaAI
+              patientId={patient?.patientId ?? null}
+              module="patients"
+            />
           </div>
-          <h3 className="text-base font-semibold text-foreground">Search for a patient to get started</h3>
-          <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">
-            Enter a Patient ID, name, or phone number above to view their complete medical history, prescriptions, lab records, and billing details.
-          </p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

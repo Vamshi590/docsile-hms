@@ -501,11 +501,12 @@ model InsuranceClaim {
 // ─── LABS MODULE ──────────────────────────────────────
 
 model Lab {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  location    String?
-  isActive    Boolean  @default(true)
+  id             String   @id @default(cuid())
+  name           String   @unique
+  description    String?
+  location       String?
+  printHeaderKey String?
+  isActive       Boolean  @default(true)
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -959,6 +960,24 @@ model PredefinedSurgery {
   createdBy          String
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+// ─── PREDEFINED DISCHARGE TEMPLATES ───────────────────
+model PredefinedDischarge {
+  id                   String   @id @default(cuid())
+  name                 String   @unique
+  dischargeDiagnosis   String?  @db.Text
+  conditionAtDischarge String?  @db.Text
+  dischargeMedications String?  @db.Text
+  followUpInstructions String?  @db.Text
+  isActive             Boolean  @default(true)
+  sortOrder            Int      @default(0)
+  createdBy            String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@index([isActive])
   @@index([sortOrder])

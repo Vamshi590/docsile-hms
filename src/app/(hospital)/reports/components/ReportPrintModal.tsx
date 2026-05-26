@@ -48,6 +48,7 @@ interface ReportPrintModalProps {
     paymentMode?: string | null
     items: { name: string; amount: number }[]
     createdAt: string
+    printHeaderKey?: string
   }
   /** For inpatient mode: inpatient record data */
   inpatientRecord?: any
@@ -427,7 +428,7 @@ export function ReportPrintModal({ open, onClose, patient, mode, prescriptionId,
                   <TabsContent value="lab-bill" className="mt-0">
                     <ReceiptLayout footer={<ReceiptFooter hospitalName={hospitalName} />}>
                       <div className="receipt-header-section">
-                        <ReceiptHeader hospital={hospitalInfo} />
+                        <ReceiptHeader hospital={hospitalInfo} headerOverrideKey={labBill.printHeaderKey} />
                       </div>
                       <h2 className="text-sm text-center font-bold py-1 mb-2">LAB BILL</h2>
                       <PatientInfoSection data={{

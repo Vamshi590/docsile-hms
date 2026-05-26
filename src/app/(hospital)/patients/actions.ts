@@ -24,6 +24,7 @@ const PatientSchema = z.object({
   doctorName: z.string().optional(),
   department: z.string().optional(),
   patientType: z.enum(["OPD", "IPD"]).default("OPD"),
+  patientCategory: z.string().optional(),
   appointmentDate: z.string(),
   notes: z.string().optional(),
 })
@@ -312,6 +313,7 @@ export async function createPatient(data: z.infer<typeof PatientSchema>) {
         doctorName: pd.doctorName ?? null,
         department: pd.department ?? null,
         patientType: pd.patientType,
+        patientCategory: pd.patientCategory ?? "Regular",
         status: "REGISTERED",
         appointmentDate: new Date(pd.appointmentDate + "T00:00:00+05:30").toISOString(),
         notes: pd.notes ?? null,
@@ -358,6 +360,7 @@ export async function updatePatientInfo(patientId: string, data: z.infer<typeof 
         referredBy: pd.referredBy ?? null,
         doctorName: pd.doctorName ?? null,
         department: pd.department ?? null,
+        patientCategory: pd.patientCategory ?? "Regular",
         appointmentDate: new Date(pd.appointmentDate + "T00:00:00+05:30").toISOString(),
         notes: pd.notes ?? null,
         updatedBy: user.id,
@@ -1095,18 +1098,19 @@ export async function getPatientRegistrationFormData() {
     supabase
       .from("DropdownOption")
       .select("fieldName, value")
-      .in("fieldName", ["doctorName", "department", "referredBy", "address"])
+      .in("fieldName", ["doctorName", "department", "referredBy", "address", "patientCategory"])
       .order("value", { ascending: true }),
   ])
 
-  const grouped: { doctorName: string[]; department: string[]; referredBy: string[]; address: string[] } = {
-    doctorName: [], department: [], referredBy: [], address: [],
+  const grouped: { doctorName: string[]; department: string[]; referredBy: string[]; address: string[]; patientCategory: string[] } = {
+    doctorName: [], department: [], referredBy: [], address: [], patientCategory: [],
   }
   for (const row of dropdownRes.data ?? []) {
     if (row.fieldName === "doctorName") grouped.doctorName.push(row.value)
     else if (row.fieldName === "department") grouped.department.push(row.value)
     else if (row.fieldName === "referredBy") grouped.referredBy.push(row.value)
     else if (row.fieldName === "address") grouped.address.push(row.value)
+    else if (row.fieldName === "patientCategory") grouped.patientCategory.push(row.value)
   }
 
   return {
@@ -1117,6 +1121,7 @@ export async function getPatientRegistrationFormData() {
     departmentOptions: grouped.department,
     referralOptions: grouped.referredBy,
     addressOptions: grouped.address,
+    patientCategoryOptions: grouped.patientCategory,
   }
 }
 

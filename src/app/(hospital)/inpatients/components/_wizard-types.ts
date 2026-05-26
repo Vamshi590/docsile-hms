@@ -8,6 +8,7 @@ export type WizardState = {
   opPatientId: string         // empty if not linked to an existing OPD patient
   ipNumber: string
   admissionDate: string       // datetime-local string
+  dischargeDate: string       // date string (expected discharge), empty when not set
   name: string
   age: string
   gender: string

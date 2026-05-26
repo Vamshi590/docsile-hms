@@ -122,7 +122,7 @@ export default function InsuranceEnhancementBill({
               <div className="font-semibold pt-1">{enhancementData.totalBillAmount.toFixed(2)}</div>
             </div>
             <div>
-              <div className="font-bold">EXCESS AMOUNT</div>
+              <div className="font-bold">AMOUNT TO BE PAID BY PATIENT</div>
               <div className="font-semibold pt-1">{enhancementData.excessAmount.toFixed(2)}</div>
             </div>
           </div>

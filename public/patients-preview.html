@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Patients Tab — Design Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','system-ui','sans-serif'] } } } }</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  body { font-family:'Inter',system-ui,sans-serif; background:#f1f5f9; }
+  .tab-active   { border-bottom:2px solid #6366f1; color:#6366f1; }
+  .tab-inactive { border-bottom:2px solid transparent; color:#64748b; }
+  .filter-active   { background:#6366f1; color:white; }
+  .filter-inactive { color:#64748b; background:transparent; }
+</style>
+</head>
+<body class="min-h-screen">
+<div class="flex h-screen overflow-hidden">
+
+  <!-- Sidebar -->
+  <div class="w-16 bg-slate-900 flex-shrink-0 flex flex-col items-center pt-4 gap-4">
+    <div class="w-8 h-8 bg-indigo-500 rounded-lg"></div>
+    <div class="w-6 h-6 bg-slate-700 rounded mt-4"></div>
+    <div class="w-6 h-6 bg-slate-700 rounded"></div>
+    <div class="w-6 h-6 bg-slate-700 rounded"></div>
+    <div class="w-6 h-6 bg-indigo-500 rounded"></div>
+    <div class="w-6 h-6 bg-slate-700 rounded"></div>
+  </div>
+
+  <div class="flex-1 flex flex-col overflow-hidden">
+
+    <!-- Top bar -->
+    <div class="bg-white border-b border-slate-200 px-6 flex items-center justify-between flex-shrink-0" style="height:52px">
+      <div class="flex items-center h-full gap-0">
+        <button class="tab-inactive px-4 h-full text-sm font-medium">Overview</button>
+        <button class="tab-active   px-4 h-full text-sm font-semibold">Patients</button>
+        <button class="tab-inactive px-4 h-full text-sm font-medium">Revenue & Finance</button>
+        <button class="tab-inactive px-4 h-full text-sm font-medium">Performance</button>
+        <button class="tab-inactive px-4 h-full text-sm font-medium">Calls</button>
+      </div>
+      <div class="flex items-center gap-1 bg-slate-100 rounded-full p-0.5">
+        <button class="filter-inactive text-xs font-medium px-3 py-1.5 rounded-full">Today</button>
+        <button class="filter-inactive text-xs font-medium px-3 py-1.5 rounded-full">Week</button>
+        <button class="filter-active  text-xs font-medium px-3 py-1.5 rounded-full">Month</button>
+        <button class="filter-inactive text-xs font-medium px-3 py-1.5 rounded-full">Year</button>
+        <button class="filter-inactive text-xs font-medium px-3 py-1.5 rounded-full">Custom</button>
+      </div>
+    </div>
+
+    <!-- Scrollable content -->
+    <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+      <!-- ROW 1: 5 KPI cards -->
+      <div class="grid grid-cols-5 gap-4">
+
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Total Patients</p>
+              <p class="text-3xl font-black text-slate-800 mt-1.5 tabular-nums">1,248</p>
+              <div class="flex items-center gap-1 mt-1.5 text-emerald-600">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                <span class="text-xs font-semibold">12%</span>
+                <span class="text-xs text-slate-400">vs last month</span>
+              </div>
+            </div>
+            <div class="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+              <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">New Today</p>
+              <p class="text-3xl font-black text-slate-800 mt-1.5 tabular-nums">6</p>
+              <p class="text-xs text-slate-400 mt-1.5">Registered today</p>
+            </div>
+            <div class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+              <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Active Inpatients</p>
+              <p class="text-3xl font-black text-slate-800 mt-1.5 tabular-nums">8</p>
+              <p class="text-xs text-slate-400 mt-1.5">Currently admitted</p>
+            </div>
+            <div class="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+              <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Avg / Day</p>
+              <p class="text-3xl font-black text-slate-800 mt-1.5 tabular-nums">42</p>
+              <p class="text-xs text-slate-400 mt-1.5">Patients per day</p>
+            </div>
+            <div class="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center">
+              <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Surgeries</p>
+              <p class="text-3xl font-black text-rose-600 mt-1.5 tabular-nums">12</p>
+              <p class="text-xs text-slate-400 mt-1.5">This month</p>
+            </div>
+            <div class="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center">
+              <svg class="w-5 h-5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 2: Daily Patient Volume (full width area chart) -->
+      <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+        <div class="flex items-center justify-between mb-5">
+          <div>
+            <p class="text-sm font-semibold text-slate-700">Daily Patient Volume</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Number of patients registered per day this month</p>
+          </div>
+          <div class="flex items-center gap-2 text-[11px] text-slate-500">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-indigo-500"></span> Patients
+          </div>
+        </div>
+        <!-- SVG area chart -->
+        <div style="height:160px; position:relative;">
+          <svg width="100%" height="160" viewBox="0 0 900 160" preserveAspectRatio="none">
+            <!-- Grid lines -->
+            <line x1="0" y1="40"  x2="900" y2="40"  stroke="#f1f5f9" stroke-width="1"/>
+            <line x1="0" y1="80"  x2="900" y2="80"  stroke="#f1f5f9" stroke-width="1"/>
+            <line x1="0" y1="120" x2="900" y2="120" stroke="#f1f5f9" stroke-width="1"/>
+            <!-- Area fill -->
+            <defs>
+              <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stop-color="#6366f1" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#6366f1" stop-opacity="0.01"/>
+              </linearGradient>
+            </defs>
+            <path d="M0,120 L30,100 L60,95 L90,110 L120,85 L150,75 L180,90 L210,70 L240,65 L270,80 L300,60 L330,55 L360,70 L390,50 L420,45 L450,60 L480,40 L510,35 L540,50 L570,30 L600,45 L630,55 L660,40 L690,35 L720,50 L750,30 L780,40 L810,45 L840,30 L870,35 L900,40 L900,160 L0,160 Z"
+              fill="url(#areaGrad)"/>
+            <path d="M0,120 L30,100 L60,95 L90,110 L120,85 L150,75 L180,90 L210,70 L240,65 L270,80 L300,60 L330,55 L360,70 L390,50 L420,45 L450,60 L480,40 L510,35 L540,50 L570,30 L600,45 L630,55 L660,40 L690,35 L720,50 L750,30 L780,40 L810,45 L840,30 L870,35 L900,40"
+              fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+            <!-- Active dot -->
+            <circle cx="870" cy="35" r="4" fill="#6366f1"/>
+            <circle cx="870" cy="35" r="7" fill="#6366f1" opacity="0.2"/>
+          </svg>
+          <!-- Y-axis labels -->
+          <div class="absolute left-0 top-0 h-full flex flex-col justify-between text-[10px] text-slate-300 pointer-events-none pb-1" style="width:28px">
+            <span>80</span><span>60</span><span>40</span><span>20</span>
+          </div>
+          <!-- X-axis date labels -->
+          <div class="flex justify-between text-[10px] text-slate-300 mt-1 px-1">
+            <span>May 1</span><span>May 8</span><span>May 15</span><span>May 22</span><span>May 26</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 3: Referral Sources + Gender Distribution -->
+      <div class="grid grid-cols-2 gap-4">
+
+        <!-- Top Referral Sources -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <p class="text-sm font-semibold text-slate-700">Top Referral Sources</p>
+          <p class="text-[11px] text-slate-400 mt-0.5 mb-5">Where patients come from · this month</p>
+          <div class="space-y-3.5">
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="font-medium text-slate-700">Direct / Walk-in</span>
+                <span class="font-semibold text-slate-700 tabular-nums">384</span>
+              </div>
+              <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full bg-indigo-500 rounded-full" style="width:84%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="font-medium text-slate-700">Dr. Suresh Kumar</span>
+                <span class="font-semibold text-slate-700 tabular-nums">218</span>
+              </div>
+              <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full bg-indigo-400 rounded-full" style="width:48%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="font-medium text-slate-700">City Hospital</span>
+                <span class="font-semibold text-slate-700 tabular-nums">142</span>
+              </div>
+              <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full bg-indigo-300 rounded-full" style="width:31%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="font-medium text-slate-700">Dr. Anita Rao</span>
+                <span class="font-semibold text-slate-700 tabular-nums">98</span>
+              </div>
+              <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full bg-slate-300 rounded-full" style="width:21%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="font-medium text-slate-700">Online / App</span>
+                <span class="font-semibold text-slate-700 tabular-nums">74</span>
+              </div>
+              <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full bg-slate-200 rounded-full" style="width:16%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gender Distribution -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <p class="text-sm font-semibold text-slate-700">Gender Distribution</p>
+          <p class="text-[11px] text-slate-400 mt-0.5 mb-4">Patient demographics · this month</p>
+
+          <!-- Donut SVG -->
+          <div class="flex items-center gap-8">
+            <div class="relative flex-shrink-0" style="width:130px;height:130px">
+              <svg viewBox="0 0 100 100" class="w-full h-full">
+                <!-- Male: 58% = 209deg -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#e2e8f0" stroke-width="14"/>
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#6366f1" stroke-width="14"
+                  stroke-dasharray="138 100" stroke-dashoffset="0" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Female: 40% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#a5b4fc" stroke-width="14"
+                  stroke-dasharray="95 143" stroke-dashoffset="-138" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Other: 2% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#e0e7ff" stroke-width="14"
+                  stroke-dasharray="5 233" stroke-dashoffset="-233" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <text x="50" y="47" text-anchor="middle" font-size="11" font-weight="800" fill="#1e293b">58%</text>
+                <text x="50" y="57" text-anchor="middle" font-size="6.5" fill="#94a3b8">Male</text>
+              </svg>
+            </div>
+            <div class="flex-1 space-y-4">
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-indigo-500 flex-shrink-0"></span>
+                    <span class="text-xs font-medium text-slate-700">Male</span>
+                  </div>
+                  <span class="text-xs font-bold text-slate-800 tabular-nums">724 <span class="text-slate-400 font-normal">58%</span></span>
+                </div>
+                <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-indigo-500 rounded-full" style="width:58%"></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-indigo-300 flex-shrink-0"></span>
+                    <span class="text-xs font-medium text-slate-700">Female</span>
+                  </div>
+                  <span class="text-xs font-bold text-slate-800 tabular-nums">499 <span class="text-slate-400 font-normal">40%</span></span>
+                </div>
+                <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-indigo-300 rounded-full" style="width:40%"></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-indigo-100 flex-shrink-0"></span>
+                    <span class="text-xs font-medium text-slate-700">Other</span>
+                  </div>
+                  <span class="text-xs font-bold text-slate-800 tabular-nums">25 <span class="text-slate-400 font-normal">2%</span></span>
+                </div>
+                <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-indigo-100 rounded-full" style="width:2%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 4: Eye Conditions pie + Most Common Medicines pie -->
+      <div class="grid grid-cols-2 gap-4">
+
+        <!-- Most Common Eye Conditions — donut pie -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <p class="text-sm font-semibold text-slate-700">Most Common Eye Conditions</p>
+          <p class="text-[11px] text-slate-400 mt-0.5 mb-4">From doctor's diagnosis in prescriptions</p>
+          <div class="flex items-center gap-5">
+            <!-- Donut -->
+            <div class="flex-shrink-0" style="width:140px;height:140px">
+              <svg viewBox="0 0 100 100" class="w-full h-full">
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#e2e8f0" stroke-width="14"/>
+                <!-- Cataract 25% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#4f46e5" stroke-width="14"
+                  stroke-dasharray="60 179" stroke-dashoffset="0" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Glaucoma 16% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#6366f1" stroke-width="14"
+                  stroke-dasharray="38 201" stroke-dashoffset="-60" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Diabetic Retino 14% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#818cf8" stroke-width="14"
+                  stroke-dasharray="34 205" stroke-dashoffset="-98" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Refractive 13% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#a5b4fc" stroke-width="14"
+                  stroke-dasharray="31 208" stroke-dashoffset="-132" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Conjunctivitis 10% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#c7d2fe" stroke-width="14"
+                  stroke-dasharray="24 215" stroke-dashoffset="-163" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Others 22% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#e0e7ff" stroke-width="14"
+                  stroke-dasharray="53 186" stroke-dashoffset="-187" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <text x="50" y="47" text-anchor="middle" font-size="9" font-weight="800" fill="#1e293b">1,192</text>
+                <text x="50" y="57" text-anchor="middle" font-size="6" fill="#94a3b8">diagnoses</text>
+              </svg>
+            </div>
+            <!-- Legend -->
+            <div class="flex-1 space-y-2.5">
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#4f46e5"></span><span class="text-slate-600">Cataract</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">312 <span class="text-slate-400 font-normal text-[10px]">25%</span></span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#6366f1"></span><span class="text-slate-600">Glaucoma</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">198 <span class="text-slate-400 font-normal text-[10px]">16%</span></span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#818cf8"></span><span class="text-slate-600 truncate">Diabetic Retinopathy</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">174 <span class="text-slate-400 font-normal text-[10px]">14%</span></span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#a5b4fc"></span><span class="text-slate-600">Refractive Error</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">156 <span class="text-slate-400 font-normal text-[10px]">13%</span></span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#c7d2fe"></span><span class="text-slate-600">Conjunctivitis</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">124 <span class="text-slate-400 font-normal text-[10px]">10%</span></span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#e0e7ff"></span><span class="text-slate-600">Others</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">228 <span class="text-slate-400 font-normal text-[10px]">22%</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Most Common Medicines Prescribed — donut pie -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <p class="text-sm font-semibold text-slate-700">Most Common Medicines Prescribed</p>
+          <p class="text-[11px] text-slate-400 mt-0.5 mb-4">From invoice items in prescriptions</p>
+          <div class="flex items-center gap-5">
+            <!-- Donut -->
+            <div class="flex-shrink-0" style="width:140px;height:140px">
+              <svg viewBox="0 0 100 100" class="w-full h-full">
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#e2e8f0" stroke-width="14"/>
+                <!-- Timolol 22% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#4f46e5" stroke-width="14"
+                  stroke-dasharray="53 186" stroke-dashoffset="0" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Latanoprost 18% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#6366f1" stroke-width="14"
+                  stroke-dasharray="43 196" stroke-dashoffset="-53" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Moxifloxacin 15% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#818cf8" stroke-width="14"
+                  stroke-dasharray="36 203" stroke-dashoffset="-96" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Prednisolone 12% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#a5b4fc" stroke-width="14"
+                  stroke-dasharray="29 210" stroke-dashoffset="-132" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Lubricant drops 10% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#c7d2fe" stroke-width="14"
+                  stroke-dasharray="24 215" stroke-dashoffset="-161" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <!-- Others 23% -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#e0e7ff" stroke-width="14"
+                  stroke-dasharray="55 184" stroke-dashoffset="-185" transform="rotate(-90 50 50)" stroke-linecap="butt"/>
+                <text x="50" y="47" text-anchor="middle" font-size="9" font-weight="800" fill="#1e293b">2,840</text>
+                <text x="50" y="57" text-anchor="middle" font-size="6" fill="#94a3b8">prescribed</text>
+              </svg>
+            </div>
+            <!-- Legend -->
+            <div class="flex-1 space-y-2.5">
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#4f46e5"></span><span class="text-slate-600">Timolol Eye Drops</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">624 <span class="text-slate-400 font-normal text-[10px]">22%</span></span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#6366f1"></span><span class="text-slate-600">Latanoprost</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">511 <span class="text-slate-400 font-normal text-[10px]">18%</span></span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#818cf8"></span><span class="text-slate-600">Moxifloxacin</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">426 <span class="text-slate-400 font-normal text-[10px]">15%</span></span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#a5b4fc"></span><span class="text-slate-600">Prednisolone</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">341 <span class="text-slate-400 font-normal text-[10px]">12%</span></span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#c7d2fe"></span><span class="text-slate-600">Lubricant Drops</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">284 <span class="text-slate-400 font-normal text-[10px]">10%</span></span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#e0e7ff"></span><span class="text-slate-600">Others</span></div>
+                <span class="font-semibold text-slate-700 tabular-nums">654 <span class="text-slate-400 font-normal text-[10px]">23%</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react"
 import { Search, User, Phone, Calendar, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
 import { searchExistingPatients } from "../actions"
 
 type SearchResult = Awaited<ReturnType<typeof searchExistingPatients>>[0]
@@ -84,48 +83,55 @@ export function ExistingPatientSearch({ onSelect }: Props) {
       </div>
 
       {showDropdown && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg z-50 overflow-hidden max-h-80 overflow-y-auto">
-          {results.map(patient => (
-            <button
-              key={patient.id}
-              onClick={() => handleSelect(patient)}
-              className="w-full px-3 py-2.5 text-left hover:bg-surface transition-colors border-b border-border last:border-b-0"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                      {patient.patientId}
-                    </span>
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {patient.fullName}
-                    </span>
+        <div className="absolute top-full left-0 mt-1.5 w-[28rem] max-w-[calc(100vw-2rem)] bg-white border border-border rounded-xl shadow-xl z-50 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-muted/40 border-b border-border/60">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Existing patients</span>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{results.length} found</span>
+          </div>
+          <div className="max-h-80 overflow-y-auto divide-y divide-border/60">
+            {results.map(patient => (
+              <button
+                key={patient.id}
+                onClick={() => handleSelect(patient)}
+                className="group w-full px-3 py-2.5 text-left hover:bg-primary/[0.04] transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="shrink-0 text-[10px] font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded tabular-nums">
+                        {patient.patientId}
+                      </span>
+                      <span className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                        {patient.fullName}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 tabular-nums">
+                        <Phone className="h-3 w-3" />
+                        {patient.phone}
+                      </span>
+                      {(patient.age != null || patient.gender) && (
+                        <span className="tabular-nums">
+                          {patient.age != null ? `${patient.age}y` : ""}
+                          {patient.age != null && patient.gender ? " · " : ""}
+                          {patient.gender}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Phone className="h-3 w-3" />
-                      {patient.phone}
-                    </span>
-                    <span>{patient.age ? `${patient.age}Y` : ""} {patient.gender}</span>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <div className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
                     <Calendar className="h-3 w-3" />
-                    <span>Last visit</span>
-                  </div>
-                  <p className="text-xs font-medium text-foreground mt-0.5">
                     {getDaysSinceVisit(patient.lastVisitDate)}
-                  </p>
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {showDropdown && query.length >= 2 && results.length === 0 && !loading && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg z-50 p-4 text-center">
+        <div className="absolute top-full left-0 mt-1.5 w-[28rem] max-w-[calc(100vw-2rem)] bg-white border border-border rounded-xl shadow-xl z-50 p-5 text-center">
           <User className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
           <p className="text-sm text-muted-foreground">No patients found</p>
           <p className="text-xs text-muted-foreground mt-0.5">Try a different ID or phone number</p>

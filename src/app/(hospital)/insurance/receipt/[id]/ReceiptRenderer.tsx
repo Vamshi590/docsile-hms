@@ -98,7 +98,9 @@ export default function ReceiptRenderer({ data }: { data: ReceiptData }) {
           companyName: claim.insuranceCompanyName,
           preauthAmount: claim.preauthAmount,
           totalBillAmount: claim.totalBillAmount,
-          excessAmount: Math.max(0, claim.totalBillAmount - claim.preauthAmount),
+          // "Amount to be paid by patient" — the patient's actual liability
+          // (after approvals/discounts), not just the gap between bill and preauth.
+          excessAmount: claim.patientPayableAmount,
           enhancementRequested: claim.enhancementAmount,
         }}
       />

@@ -1,0 +1,125 @@
+<h2>License Tracker — Layout Options</h2>
+<p class="subtitle">Pick the card style that feels right for the improved license list</p>
+
+<div class="cards">
+
+  <!-- Option A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f8fafc;padding:16px;border-radius:8px;font-family:sans-serif;">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">MEDICAL REGISTRATION</span>
+        <span style="font-size:11px;font-weight:600;color:#16a34a;background:#dcfce7;padding:2px 8px;border-radius:9999px;">Active</span>
+      </div>
+      <!-- Title row -->
+      <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:2px;">MCI Registration Certificate</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">MCI-2023-0041 · Karnataka Medical Council</div>
+      <!-- Expiry bar -->
+      <div style="background:#e5e7eb;border-radius:4px;height:5px;margin-bottom:6px;">
+        <div style="background:#16a34a;width:72%;height:5px;border-radius:4px;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#6b7280;margin-bottom:10px;">
+        <span>Issued 12 Jan 2023</span><span style="color:#16a34a;font-weight:600;">142 days left</span>
+      </div>
+      <!-- Actions row -->
+      <div style="display:flex;gap:6px;">
+        <div style="flex:1;text-align:center;font-size:11px;font-weight:600;color:#2563eb;background:#eff6ff;padding:5px;border-radius:6px;cursor:pointer;">⬆ Upload</div>
+        <div style="flex:1;text-align:center;font-size:11px;font-weight:600;color:#7c3aed;background:#f5f3ff;padding:5px;border-radius:6px;cursor:pointer;">👁 View</div>
+        <div style="flex:1;text-align:center;font-size:11px;font-weight:600;color:#0891b2;background:#ecfeff;padding:5px;border-radius:6px;cursor:pointer;">↓ Download</div>
+        <div style="flex:1;text-align:center;font-size:11px;font-weight:600;color:#6b7280;background:#f3f4f6;padding:5px;border-radius:6px;cursor:pointer;">⋯ More</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Card with progress bar</h3>
+      <p>Compact card showing a visual progress bar for expiry timeline. Category label, status badge, and separate action buttons for Upload / View / Download.</p>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f8fafc;padding:16px;border-radius:8px;font-family:sans-serif;">
+      <!-- Left accent bar + content -->
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <div style="width:4px;border-radius:2px;background:#f59e0b;align-self:stretch;min-height:80px;"></div>
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div style="font-size:14px;font-weight:700;color:#111827;">Drug License (Retail)</div>
+            <span style="font-size:11px;font-weight:600;color:#d97706;background:#fef3c7;padding:2px 8px;border-radius:9999px;">Expiring Soon</span>
+          </div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">DL-KA-2021-8824 · Drug Controller</div>
+          <div style="display:flex;gap:16px;font-size:12px;color:#374151;margin-bottom:10px;">
+            <div><span style="color:#9ca3af;">Issued</span><br/><strong>14 Mar 2021</strong></div>
+            <div><span style="color:#9ca3af;">Expires</span><br/><strong style="color:#d97706;">18 Jun 2025</strong></div>
+            <div><span style="color:#9ca3af;">Remind</span><br/><strong>30 days</strong></div>
+          </div>
+          <!-- Doc indicator + actions -->
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#6b7280;">
+              <span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:9999px;font-weight:600;">No document</span>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <div style="font-size:11px;font-weight:600;color:#2563eb;background:#eff6ff;padding:4px 10px;border-radius:6px;">Upload PDF</div>
+              <div style="font-size:11px;font-weight:600;color:#6b7280;background:#f3f4f6;padding:4px 10px;border-radius:6px;">Edit</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Row card with colour accent</h3>
+      <p>Horizontal card with a coloured left border matching the status. Shows key date fields side by side. Document status badge shows whether a file is attached. Upload button is contextual — changes to View/Download once a file exists.</p>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f8fafc;padding:16px;border-radius:8px;font-family:sans-serif;">
+      <!-- Table-style row -->
+      <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+        <div style="background:#f9fafb;padding:8px 14px;display:flex;gap:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;">
+          <div style="flex:3;">License</div>
+          <div style="flex:2;">Category</div>
+          <div style="flex:1.5;text-align:center;">Expires</div>
+          <div style="flex:1;text-align:center;">Status</div>
+          <div style="flex:2;text-align:center;">Document</div>
+          <div style="flex:1.5;text-align:center;">Actions</div>
+        </div>
+        <div style="padding:10px 14px;display:flex;align-items:center;border-top:1px solid #f3f4f6;">
+          <div style="flex:3;">
+            <div style="font-size:13px;font-weight:600;color:#111827;">Fire Safety NOC</div>
+            <div style="font-size:11px;color:#9ca3af;">FS-BLR-2024-112</div>
+          </div>
+          <div style="flex:2;font-size:12px;color:#374151;">Fire Safety</div>
+          <div style="flex:1.5;text-align:center;font-size:12px;font-weight:600;color:#dc2626;">Expired<br/><span style="font-weight:400;font-size:11px;color:#9ca3af;">12 days ago</span></div>
+          <div style="flex:1;text-align:center;"><span style="font-size:11px;font-weight:600;color:#dc2626;background:#fee2e2;padding:2px 8px;border-radius:9999px;">Expired</span></div>
+          <div style="flex:2;text-align:center;">
+            <div style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#2563eb;font-weight:600;cursor:pointer;">📄 fire_noc.pdf &nbsp;↓</div>
+          </div>
+          <div style="flex:1.5;text-align:center;display:flex;gap:6px;justify-content:center;">
+            <div style="font-size:11px;color:#6b7280;background:#f3f4f6;padding:4px 8px;border-radius:6px;cursor:pointer;">Edit</div>
+            <div style="font-size:11px;color:#dc2626;background:#fee2e2;padding:4px 8px;border-radius:6px;cursor:pointer;">Del</div>
+          </div>
+        </div>
+        <div style="padding:10px 14px;display:flex;align-items:center;border-top:1px solid #f3f4f6;background:#fffbeb;">
+          <div style="flex:3;">
+            <div style="font-size:13px;font-weight:600;color:#111827;">NABH Accreditation</div>
+            <div style="font-size:11px;color:#9ca3af;">NABH-2022-4410</div>
+          </div>
+          <div style="flex:2;font-size:12px;color:#374151;">NABH</div>
+          <div style="flex:1.5;text-align:center;font-size:12px;font-weight:600;color:#d97706;">24 days<br/><span style="font-weight:400;font-size:11px;color:#9ca3af;">left</span></div>
+          <div style="flex:1;text-align:center;"><span style="font-size:11px;font-weight:600;color:#d97706;background:#fef3c7;padding:2px 8px;border-radius:9999px;">Soon</span></div>
+          <div style="flex:2;text-align:center;font-size:11px;color:#9ca3af;">No file</div>
+          <div style="flex:1.5;text-align:center;display:flex;gap:6px;justify-content:center;">
+            <div style="font-size:11px;color:#2563eb;background:#eff6ff;padding:4px 8px;border-radius:6px;cursor:pointer;">Upload</div>
+            <div style="font-size:11px;color:#6b7280;background:#f3f4f6;padding:4px 8px;border-radius:6px;cursor:pointer;">Edit</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Table / list view</h3>
+      <p>Dense table layout that shows many licenses at once. Document column shows file name with a download link when attached, or "No file" otherwise. Best when there are many licenses to scan quickly.</p>
+    </div>
+  </div>
+
+</div>

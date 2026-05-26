@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
-import { Loader2, Printer, Settings2, Settings, RefreshCw, Zap } from "lucide-react"
+import { Loader2, Printer, Settings2, Settings, RefreshCw, Zap, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { updateUserPreferences } from "@/lib/user-preferences"
 import { BreadcrumbHeader, FilterBar, DateNavigator, SearchInput, StatBadge } from "@/components/layout/header"
@@ -97,6 +97,8 @@ export function DoctorPage({
   initialReferenceData,
   initialColumns,
   initialDefaultPrint,
+  workupEnabled,
+  vitalsExtended,
 }: {
   initialQueue: QueueItem[]
   initialDate: string
@@ -104,6 +106,10 @@ export function DoctorPage({
   /** User's saved column preference from DB. null when the user has never customized. */
   initialColumns: string[] | null
   initialDefaultPrint: DefaultPrintConfig
+  /** When false, hide the Workup tab — general hospitals don't do refraction. */
+  workupEnabled: boolean
+  /** When true, show Height/Weight/BMI inputs in the prescription's vitals row. */
+  vitalsExtended: boolean
 }) {
   const [date, setDate] = useState(initialDate)
   const [search, setSearch] = useState("")
@@ -111,6 +117,10 @@ export function DoctorPage({
   const [loading, setLoading] = useState(false)
   const [selectedRow, setSelectedRow] = useState<QueueItem | null>(null)
   const [selectedPatient, setSelectedPatient] = useState<PatientDetail | null>(null)
+  // When true, the queue table renders with Ask Sitha AI as a sticky right
+  // column instead of opening a slide-out sheet. Only relevant when no patient
+  // is selected — once a patient is open the chat is already visible inline.
+  const [chatOpen, setChatOpen] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [savingAll, setSavingAll] = useState(false)
   const [referenceData, setReferenceData] = useState<PrescriptionReferenceData>(initialReferenceData)
@@ -188,7 +198,7 @@ export function DoctorPage({
     setSelectedRow(row)
     setSelectedPatient(null)
     setLoadingDetail(true)
-    const p = await getPatientForConsultation(row.patientId)
+    const p = await getPatientForConsultation(row.patientId, date)
     setSelectedPatient(p)
     setLoadingDetail(false)
   }
@@ -279,15 +289,23 @@ export function DoctorPage({
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             </button>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <StatBadge value={queue.length} label="in queue" variant="info" />
             <button
-              onClick={() => router.push("/settings?tab=print-defaults")}
-              className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-              title="Print settings"
+              onClick={() => setChatOpen(o => !o)}
+              title={chatOpen ? "Hide Sitha" : "Ask Sitha AI"}
+              className={cn(
+                "h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
+                chatOpen
+                  ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                  : "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+              )}
             >
-              <Settings className="h-3.5 w-3.5" />
+              <Sparkles className="h-3.5 w-3.5" />
+              {chatOpen ? "Hide Sitha" : "Ask Sitha"}
             </button>
           </div>
-          <StatBadge value={queue.length} label="in queue" variant="info" />
         </div>
       )}
 
@@ -311,7 +329,8 @@ export function DoctorPage({
               className="w-64"
             />
           </div>
-          {/* Column customizer */}
+          {/* Column customizer + settings */}
+          <div className="flex items-center gap-1">
           <Popover>
             <PopoverTrigger asChild>
               <button className="h-8 px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
@@ -358,6 +377,14 @@ export function DoctorPage({
               ))}
             </PopoverContent>
           </Popover>
+          <button
+            onClick={() => router.push("/settings?tab=print-defaults")}
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            title="Print settings"
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </button>
+          </div>
         </FilterBar>
       )}
 
@@ -392,17 +419,24 @@ export function DoctorPage({
                 todayEyeReading?.glassesReading ||
                 todayEyeReading?.previousPrescription
               )
-              const defaultTab: "workup" | "prescription" = workupStarted ? "prescription" : "workup"
+              // General hospitals don't do refraction — always default to prescription.
+              const defaultTab: "workup" | "prescription" = !workupEnabled
+                ? "prescription"
+                : workupStarted
+                  ? "prescription"
+                  : "workup"
 
               return (
             <div className="flex gap-4">
               {/* ── Left: Prescription Form Card ── */}
-              <div className="flex-1 min-w-0 bg-white rounded-2xl border border-border overflow-hidden">
+              <div className="flex-1 min-w-0 bg-white rounded-2xl border border-border">
                 <Tabs defaultValue={defaultTab}>
                   {/* Tab header */}
                   <div className="px-6 pt-4 pb-0 border-b border-border flex justify-between items-center">
                     <TabsList className="bg-transparent h-auto p-0 rounded-none gap-1 -mb-px">
-                      <TabsTrigger value="workup" className={TAB_CLASS}>Workup Data</TabsTrigger>
+                      {workupEnabled && (
+                        <TabsTrigger value="workup" className={TAB_CLASS}>Workup Data</TabsTrigger>
+                      )}
                       <TabsTrigger value="prescription" className={TAB_CLASS}>Prescription</TabsTrigger>
                     </TabsList>
 
@@ -419,7 +453,8 @@ export function DoctorPage({
                     </div>
                   </div>
 
-                  {/* ── Workup tab ── */}
+                  {/* ── Workup tab (eye-specialty only) ── */}
+                  {workupEnabled && (
                   <TabsContent value="workup" className="mt-0">
                     <EyeReadingForm
                       ref={eyeReadingRef}
@@ -444,6 +479,7 @@ export function DoctorPage({
                       onSaved={() => loadQueue()}
                     />
                   </TabsContent>
+                  )}
 
                   {/* ── Prescription tab ── */}
                   <TabsContent value="prescription" className="px-6 py-5 mt-0">
@@ -454,6 +490,7 @@ export function DoctorPage({
                       existingPrescription={existingForForm}
                       referenceData={referenceData}
                       onReferenceDataChange={setReferenceData}
+                      vitalsExtended={vitalsExtended}
                       onSaved={() => { closeDetail(); loadQueue() }}
                     />
                   </TabsContent>
@@ -489,7 +526,7 @@ export function DoctorPage({
                 </div>
 
                 {/* Ask Sitha AI */}
-                <AskSithaAI patientId={selectedPatient.patientId} />
+                <AskSithaAI patientId={selectedPatient.patientId} module="doctor" />
               </div>
             </div>
               )
@@ -497,8 +534,10 @@ export function DoctorPage({
           ) : null}
         </div>
       ) : (
-        /* ── Queue table ── */
-        loading ? (
+        /* ── Queue table (with optional Ask Sitha column) ── */
+        <div className={cn(chatOpen && "flex gap-4 items-start")}>
+        <div className={cn(chatOpen && "flex-1 min-w-0")}>
+        {loading ? (
           <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
             <Table>
@@ -730,21 +769,30 @@ export function DoctorPage({
                           </span>
                         )
                       case "labAmount":
-                        return labBills.length > 0 ? (
-                          <div className="space-y-0.5">
-                            {labBills.map((lb: { id: string; lab: { name: string }; total: number }) => (
-                              <p key={lb.id} className="text-xs">
-                                <span className="text-muted-foreground">{lb.lab.name}: </span>
-                                <span className="font-medium tabular-nums">{formatCurrency(lb.total)}</span>
-                              </p>
-                            ))}
-                            {labBills.length > 1 && (
-                              <p className="text-xs font-semibold border-t border-border/40 pt-0.5 tabular-nums">
+                        return labBills.length === 0 ? dash : labBills.length === 1 ? (
+                          <span className="text-sm font-medium tabular-nums text-foreground">{formatCurrency(labBills[0].total)}</span>
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-sm font-medium tabular-nums text-foreground cursor-default underline decoration-dashed underline-offset-2 decoration-muted-foreground/40">
                                 {formatCurrency(labTotal)}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" align="end" className="px-3 py-2">
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                                Lab breakdown
                               </p>
-                            )}
-                          </div>
-                        ) : <span className="text-xs text-muted-foreground/50">—</span>
+                              <ul className="space-y-1 text-xs">
+                                {labBills.map((lb: { id: string; lab: { name: string }; total: number }) => (
+                                  <li key={lb.id} className="flex items-center justify-between gap-4">
+                                    <span className="text-muted-foreground">{lb.lab.name}</span>
+                                    <span className="font-medium tabular-nums">{formatCurrency(lb.total)}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
+                        )
                       case "status":
                         return (
                           <span className={cn(
@@ -828,7 +876,14 @@ export function DoctorPage({
             </div>
           </div>
           </TooltipProvider>
-        )
+        )}
+        </div>
+        {chatOpen && (
+          <div className="w-80 shrink-0 sticky top-4 self-start max-h-[calc(100vh-6rem)] overflow-y-auto pr-0.5">
+            <AskSithaAI patientId={null} module="doctor" />
+          </div>
+        )}
+        </div>
       )}
 
       {/* Print Receipts Modal */}

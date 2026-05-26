@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { toast } from "sonner"
 import {
   Search, Download, FileSpreadsheet, FileText,
@@ -367,23 +367,14 @@ export function DataExportPage() {
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set())
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
+    () => new Set(TAB_CONFIG["patients"].columns.map((c) => c.key))
+  )
   const [exporting, setExporting] = useState(false)
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null)
 
   const config = TAB_CONFIG[activeTab]
-  const allColumnKeys = config.columns.map((c) => c.key)
+  const allColumnKeys = useMemo(() => config.columns.map((c) => c.key), [config])
 
-  // Init visible columns when tab changes
-  useEffect(() => {
-    setVisibleColumns(new Set(allColumnKeys))
-    setSelectedIds(new Set())
-    setSearch("")
-    setDateFrom("")
-    setDateTo("")
-  }, [activeTab])
-
-  // Fetch data
   const fetchData = useCallback(async () => {
     setLoading(true)
     setSelectedIds(new Set())
@@ -431,21 +422,21 @@ export function DataExportPage() {
     }
   }, [activeTab, search, dateFrom, dateTo])
 
-  // Load data on tab/filter change
-  useEffect(() => {
-    fetchData()
-  }, [activeTab, dateFrom, dateTo])
+  // Tracks whether the last change was search-only so we can debounce it.
+  // Tab/date changes get delay=0; search-only changes get delay=400ms.
+  const prevNonSearch = useRef<{ activeTab: DataTab; dateFrom: string; dateTo: string } | null>(null)
 
-  // Debounced search
   useEffect(() => {
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
-    searchTimeoutRef.current = setTimeout(() => {
-      fetchData()
-    }, 400)
-    return () => {
-      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
-    }
-  }, [search])
+    const nonSearchChanged =
+      prevNonSearch.current === null ||
+      prevNonSearch.current.activeTab !== activeTab ||
+      prevNonSearch.current.dateFrom !== dateFrom ||
+      prevNonSearch.current.dateTo !== dateTo
+    prevNonSearch.current = { activeTab, dateFrom, dateTo }
+
+    const timer = setTimeout(fetchData, nonSearchChanged ? 0 : 400)
+    return () => clearTimeout(timer)
+  }, [activeTab, search, dateFrom, dateTo, fetchData])
 
   // ─── Selection ──────────────────────────────────────────────
 
@@ -624,7 +615,15 @@ export function DataExportPage() {
       {/* Tabs */}
       <Tabs
         value={activeTab}
-        onValueChange={(v) => setActiveTab(v as DataTab)}
+        onValueChange={(v) => {
+          const tab = v as DataTab
+          setActiveTab(tab)
+          setVisibleColumns(new Set(TAB_CONFIG[tab].columns.map((c) => c.key)))
+          setSelectedIds(new Set())
+          setSearch("")
+          setDateFrom("")
+          setDateTo("")
+        }}
       >
         <div className="overflow-x-auto pb-1">
           <TabsList className="h-auto flex-wrap gap-1">

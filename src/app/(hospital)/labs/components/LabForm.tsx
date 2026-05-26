@@ -11,12 +11,17 @@ import {
 import { createLab, updateLab } from "../actions"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
+import { HEADER_OPTIONS } from "@/components/receipts/headers/registry"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
 
 type Lab = {
   id: string
   name: string
   description: string | null
   location: string | null
+  printHeaderKey: string | null
   isActive: boolean
 }
 
@@ -31,6 +36,7 @@ export function LabForm({ open, lab, onClose, onSuccess }: LabFormProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [location, setLocation] = useState("")
+  const [printHeaderKey, setPrintHeaderKey] = useState("")
   const [isActive, setIsActive] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -39,6 +45,7 @@ export function LabForm({ open, lab, onClose, onSuccess }: LabFormProps) {
       setName(lab?.name ?? "")
       setDescription(lab?.description ?? "")
       setLocation(lab?.location ?? "")
+      setPrintHeaderKey(lab?.printHeaderKey ?? "")
       setIsActive(lab?.isActive ?? true)
     }
   }, [open, lab])
@@ -52,10 +59,11 @@ export function LabForm({ open, lab, onClose, onSuccess }: LabFormProps) {
       name: name.trim(),
       description: description.trim() || undefined,
       location: location.trim() || undefined,
+      printHeaderKey: printHeaderKey || undefined,
     }
 
     const result = lab
-      ? await updateLab(lab.id, { ...data, isActive })
+      ? await updateLab(lab.id, { ...data, isActive, printHeaderKey: printHeaderKey || null })
       : await createLab(data)
 
     if (result.success) {
@@ -104,6 +112,20 @@ export function LabForm({ open, lab, onClose, onSuccess }: LabFormProps) {
               placeholder="e.g., Ground Floor, Room 5"
               className="mt-1.5 bg-white"
             />
+          </div>
+          <div>
+            <Label htmlFor="lab-header">Receipt Header</Label>
+            <Select value={printHeaderKey || "default"} onValueChange={(v) => setPrintHeaderKey(v === "default" ? "" : v)}>
+              <SelectTrigger id="lab-header" className="mt-1.5 bg-white">
+                <SelectValue placeholder="Default" />
+              </SelectTrigger>
+              <SelectContent>
+                {HEADER_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.key} value={opt.key}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">Choose which header appears on this lab&apos;s printed receipt</p>
           </div>
           {lab && (
             <div className="flex items-center justify-between rounded-lg border border-border p-3">

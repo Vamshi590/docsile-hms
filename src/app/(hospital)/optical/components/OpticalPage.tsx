@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { PageHeader, StatBadge } from "@/components/layout/header"
 import { BillingTab } from "./BillingTab"
 import { InventoryTab } from "./InventoryTab"
+import { OpticalConfigTab } from "./OpticalConfigTab"
 import { getStockSummary } from "../actions"
 
 type StockSummary = Awaited<ReturnType<typeof getStockSummary>>
@@ -35,6 +36,9 @@ export default function OpticalPage({ initialSummary }: { initialSummary: StockS
             <TabsTrigger value="inventory" className={TAB_CLASS}>
               Inventory
             </TabsTrigger>
+            <TabsTrigger value="configuration" className={TAB_CLASS}>
+              Configuration
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -43,6 +47,9 @@ export default function OpticalPage({ initialSummary }: { initialSummary: StockS
         </TabsContent>
         <TabsContent value="inventory" className="mt-0 pt-5 space-y-5">
           <InventoryTab onStockChanged={() => getStockSummary().then(setSummary)} />
+        </TabsContent>
+        <TabsContent value="configuration" className="mt-0 pt-5">
+          <OpticalConfigTab />
         </TabsContent>
       </Tabs>
     </div>
