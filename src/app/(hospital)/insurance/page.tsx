@@ -1,3 +1,4 @@
+import { requireServerPermission } from "@/lib/auth"
 import InsurancePage from "./components/InsurancePage"
 import { getInsuranceClaims, getInsuranceCompanies } from "./actions"
 import { INSURANCE_STATUS_MAP } from "./_status-map"
@@ -8,6 +9,7 @@ export default async function InsuranceRoute({
 }: {
   searchParams: Promise<{ search?: string; status?: string }>
 }) {
+  await requireServerPermission("insurance:view")
   const params = await searchParams
   const search = params.search ?? ""
   const statusFilter = params.status ?? ""

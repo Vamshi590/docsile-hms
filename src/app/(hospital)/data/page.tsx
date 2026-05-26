@@ -1,3 +1,4 @@
+import { requireServerPermission } from "@/lib/auth"
 import dynamic from "next/dynamic"
 import { PageSkeleton } from "@/components/layout/PageSkeleton"
 
@@ -6,6 +7,7 @@ const DataExportPage = dynamic(
   { loading: () => <PageSkeleton /> }
 )
 
-export default function Page() {
+export default async function Page() {
+  await requireServerPermission("data:export")
   return <DataExportPage />
 }
