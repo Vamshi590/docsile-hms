@@ -18,6 +18,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { usePermissions } from "@/hooks/usePermissions"
 import { getLicenses, deleteLicense, saveLicenseDocumentUrl, removeLicenseDocument } from "../actions"
 import { LicenseForm } from "./LicenseForm"
 import { createClient } from "@/lib/supabase/client"
@@ -52,6 +53,8 @@ function getLicenseStatus(expiryDate: Date | string, reminderDays: number) {
 }
 
 export default function LicenseTrackerPage({ initialLicenses }: { initialLicenses: License[] }) {
+  const { can } = usePermissions()
+
   const [licenses, setLicenses] = useState<License[]>(initialLicenses)
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -64,6 +67,7 @@ export default function LicenseTrackerPage({ initialLicenses }: { initialLicense
   const [removeDocLicense, setRemoveDocLicense] = useState<License | null>(null)
   const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set())
   const [uploadingForId, setUploadingForId] = useState<string | null>(null)
+  const [docLoadingId, setDocLoadingId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchLicenses = useCallback(async () => {
@@ -138,6 +142,41 @@ export default function LicenseTrackerPage({ initialLicenses }: { initialLicense
     fileInputRef.current?.click()
   }
 
+  const handleView = async (licenseId: string, documentUrl: string) => {
+    setDocLoadingId(licenseId)
+    try {
+      const res = await fetch(documentUrl)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      window.open(blobUrl, "_blank")
+    } catch {
+      toast.error("Failed to open document")
+    } finally {
+      setDocLoadingId(null)
+    }
+  }
+
+  const handleDownload = async (licenseId: string, documentUrl: string) => {
+    setDocLoadingId(licenseId)
+    try {
+      const res = await fetch(documentUrl)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const segments = documentUrl.split("/")
+      const raw = segments[segments.length - 1] ?? "document"
+      const filename = raw.replace(/^\d+-/, "") || "document"
+      const a = document.createElement("a")
+      a.href = blobUrl
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      toast.error("Failed to download document")
+    } finally {
+      setDocLoadingId(null)
+    }
+  }
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !uploadingForId) return
@@ -198,10 +237,12 @@ export default function LicenseTrackerPage({ initialLicenses }: { initialLicense
   return (
     <div className="space-y-4">
       <PageHeader title="License Tracker" onRefresh={fetchLicenses}>
-        <Button size="sm" onClick={() => setShowAddModal(true)}>
-          <Plus className="h-4 w-4 mr-1.5" />
-          Add License
-        </Button>
+        {can("licenses:create") && (
+          <Button size="sm" onClick={() => setShowAddModal(true)}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Add License
+          </Button>
+        )}
       </PageHeader>
 
       {/* Hidden file input — shared across all cards */}
@@ -370,20 +411,24 @@ export default function LicenseTrackerPage({ initialLicenses }: { initialLicense
                           ? "Today"
                           : `${status.daysLeft}d left`}
                       </span>
-                      <button
-                        onClick={() => handleEdit(lic)}
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                        title="Edit"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteId(lic.id)}
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {can("licenses:create") && (
+                        <button
+                          onClick={() => handleEdit(lic)}
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {can("licenses:delete") && (
+                        <button
+                          onClick={() => setDeleteId(lic.id)}
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
 
                     {/* Bottom row: document actions */}
@@ -395,39 +440,47 @@ export default function LicenseTrackerPage({ initialLicenses }: { initialLicense
                         </span>
                       ) : lic.documentUrl ? (
                         <>
-                          <a
-                            href={lic.documentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 transition-colors"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                            View
-                          </a>
-                          <a
-                            href={lic.documentUrl}
-                            download
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-cyan-600 bg-cyan-50 hover:bg-cyan-100 transition-colors"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            Download
-                          </a>
-                          <button
-                            onClick={() => setRemoveDocLicense(lic)}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
-                            title="Remove document"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
+                          {docLoadingId === lic.id ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground px-2 py-1">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              Loading...
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleView(lic.id, lic.documentUrl!)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 transition-colors"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                View
+                              </button>
+                              <button
+                                onClick={() => handleDownload(lic.id, lic.documentUrl!)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-cyan-600 bg-cyan-50 hover:bg-cyan-100 transition-colors"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                Download
+                              </button>
+                              <button
+                                onClick={() => setRemoveDocLicense(lic)}
+                                className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                                title="Remove document"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
                         </>
                       ) : (
-                        <button
-                          onClick={() => handleUploadClick(lic.id)}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
-                        >
-                          <Upload className="h-3.5 w-3.5" />
-                          Upload
-                        </button>
+                        can("licenses:create") && (
+                          <button
+                            onClick={() => handleUploadClick(lic.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                            Upload
+                          </button>
+                        )
                       )}
                     </div>
                   </div>
