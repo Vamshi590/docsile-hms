@@ -117,7 +117,7 @@ Every `page.tsx` under `src/app/(hospital)/` calls `requirePermission()` before 
 | `data/page.tsx` | `data:export` |
 | `license-tracker/page.tsx` | `licenses:view` |
 | `settings/page.tsx` | `settings:view` |
-| `staff/page.tsx` | `staff:view` |
+| `staff/page.tsx` | `requireAdmin()` + `staff:view` (both required) |
 
 ---
 
@@ -140,7 +140,7 @@ Every server action calls `requirePermission()` before touching the database.
 | `reports/actions.ts` | all → `reports:view` |
 | `analytics/actions.ts` | all → `reports:view` |
 | `license-tracker/actions.ts` | read → `licenses:view`, create/update → `licenses:create`, delete → `licenses:delete` |
-| `staff/actions.ts` | view/create/update → `staff:view`/`staff:create`/`staff:edit`, roles → `staff:manage_roles` (replaces `requireAdmin()`) |
+| `staff/actions.ts` | `requireAdmin()` kept AND per-action permission: view → `staff:view`, create → `staff:create`, update → `staff:edit`, roles → `staff:manage_roles` |
 
 ---
 
