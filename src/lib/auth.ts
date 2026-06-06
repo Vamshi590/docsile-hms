@@ -24,6 +24,26 @@ export const getSession = cache(async function getSession(): Promise<SessionUser
     const payload = await verifyToken(token)
     if (!payload) return null
 
+    // Invalidate the session if the role's permissions were updated after
+    // this token was issued. Forces a re-login so the new JWT carries the
+    // fresh permission list.
+    const iat = (payload as unknown as { iat?: number }).iat
+    if (iat) {
+      const { createClient } = await import("./supabase/server")
+      const supabase = await createClient()
+      const { data: role } = await supabase
+        .from("Role")
+        .select("updatedAt")
+        .eq("name", payload.role)
+        .single()
+      if (role?.updatedAt) {
+        const roleUpdatedMs = new Date(role.updatedAt).getTime()
+        if (roleUpdatedMs > iat * 1000) {
+          return null
+        }
+      }
+    }
+
     return {
       id: payload.sub,
       email: payload.email,

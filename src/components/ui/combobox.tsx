@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import * as PopoverPrimitive from "@radix-ui/react-popover"
 import { Check, ChevronsUpDown, Loader2, Plus, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -389,19 +390,34 @@ export function EditableComboboxWithAdd({
   const showDropdown = open && (filtered.length > 0 || isNewValue)
 
   return (
-    <div className={cn("relative", className)}>
-      <Input
-        value={inputValue}
-        onChange={(e) => handleInputChange(e.target.value)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 200)}
-        placeholder={placeholder}
-        disabled={disabled}
-        className="w-full bg-white focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 focus:outline-none placeholder:text-gray-300"
-      />
-      {showDropdown && (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md">
-          <div className="p-1 max-h-48 overflow-y-auto">
+    <PopoverPrimitive.Root open={showDropdown} onOpenChange={setOpen}>
+      <PopoverPrimitive.Anchor asChild>
+        <div className={cn("relative w-full", className)}>
+          <Input
+            value={inputValue}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 200)}
+            placeholder={placeholder}
+            disabled={disabled}
+            className="w-full bg-white focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 focus:outline-none placeholder:text-gray-300"
+          />
+        </div>
+      </PopoverPrimitive.Anchor>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          align="start"
+          sideOffset={4}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => {
+            const target = e.target as HTMLElement
+            if (target.closest("input")) e.preventDefault()
+          }}
+          style={{ width: "var(--radix-popover-trigger-width)" }}
+          className="z-[200] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+        >
+            <div className="p-1 max-h-48 overflow-y-auto">
             {filtered.map((option) => (
               <div
                 key={option}
@@ -458,8 +474,8 @@ export function EditableComboboxWithAdd({
               </div>
             )}
           </div>
-        </div>
-      )}
-    </div>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   )
 }

@@ -91,6 +91,9 @@ export async function getDoctorQueue(date?: string) {
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 1)
 
+    const todayLabBills = (p.labBills ?? [])
+      .filter((lb: any) => isInDay(lb.createdAt))
+
     const hasWorkup = todayEyeReadings.length > 0
     const hasDoctorPrescription = todayPrescriptions.some(
       (rx: any) => rx.status !== "BILLING_ONLY" && rx.doctorName !== null
@@ -100,6 +103,7 @@ export async function getDoctorQueue(date?: string) {
       ...p,
       eyeReadings: todayEyeReadings,
       prescriptions: todayPrescriptions,
+      labBills: todayLabBills,
       status: computePatientStatus(hasWorkup, hasDoctorPrescription, p.status),
     }
   })
@@ -454,7 +458,7 @@ export async function updatePatientToWithDoctor(patientId: string) {
  * visit may have happened on an earlier day.
  */
 export async function getReceiptData(patientId: string, opts?: { latest?: boolean }) {
-  await requireServerPermission("doctor:view")
+  await requireServerPermission("patients:view")
   const supabase = await createClient()
   const useLatest = opts?.latest === true
   const { start, end } = getISTDayBounds()

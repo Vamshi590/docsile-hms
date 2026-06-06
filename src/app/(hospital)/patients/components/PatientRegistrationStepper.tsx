@@ -20,6 +20,7 @@ import {
   addDropdownOption,
 } from "../actions"
 import { CashReceipt } from "@/components/receipts/CashReceipt"
+import { getUserPreferences, updateUserPreferences } from "@/lib/user-preferences"
 
 type BundledFormData = Awaited<ReturnType<typeof getPatientRegistrationFormData>>
 
@@ -150,25 +151,67 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
 
   const [fieldDefaults, setFieldDefaults] = useState({ doctorName: "", department: "", referredBy: "" })
 
-  // Load persisted defaults on mount
+  // Load persisted defaults on mount. localStorage is the warm-path cache;
+  // if any value is missing we hydrate from the server and write it back.
   useEffect(() => {
-    setFieldDefaults({
+    const cached = {
       doctorName: localStorage.getItem("docsile_default_doctorName") ?? "",
       department: localStorage.getItem("docsile_default_department") ?? "",
       referredBy: localStorage.getItem("docsile_default_referredBy") ?? "",
-    })
+    }
+    setFieldDefaults(cached)
+
+    const allCached =
+      localStorage.getItem("docsile_default_doctorName") !== null &&
+      localStorage.getItem("docsile_default_department") !== null &&
+      localStorage.getItem("docsile_default_referredBy") !== null
+    if (allCached) return
+
+    let cancelled = false
+    ;(async () => {
+      const prefs = await getUserPreferences()
+      if (cancelled) return
+      const remote = prefs.patientRegistrationDefaults ?? {}
+      const next = {
+        doctorName: cached.doctorName || (remote.doctorName ?? ""),
+        department: cached.department || (remote.department ?? ""),
+        referredBy: cached.referredBy || (remote.referredBy ?? ""),
+      }
+      localStorage.setItem("docsile_default_doctorName", next.doctorName)
+      localStorage.setItem("docsile_default_department", next.department)
+      localStorage.setItem("docsile_default_referredBy", next.referredBy)
+      setFieldDefaults(next)
+      // Apply to the form if the user hasn't started editing those fields yet.
+      setPatientData(prev => ({
+        ...prev,
+        doctorName: prev.doctorName || next.doctorName,
+        department: prev.department || next.department,
+        referredBy: prev.referredBy || next.referredBy,
+      }))
+    })()
+    return () => { cancelled = true }
   }, [])
 
   function toggleDefault(field: "doctorName" | "department" | "referredBy", value: string) {
-    if (fieldDefaults[field] === value) {
+    const isClearing = fieldDefaults[field] === value
+    const nextValue = isClearing ? "" : value
+
+    if (isClearing) {
       localStorage.removeItem(`docsile_default_${field}`)
-      setFieldDefaults(prev => ({ ...prev, [field]: "" }))
-      toast.success("Default cleared")
     } else {
       localStorage.setItem(`docsile_default_${field}`, value)
-      setFieldDefaults(prev => ({ ...prev, [field]: value }))
-      toast.success(`"${value}" set as default`)
     }
+    setFieldDefaults(prev => ({ ...prev, [field]: nextValue }))
+    toast.success(isClearing ? "Default cleared" : `"${value}" set as default`)
+
+    const nextDefaults = { ...fieldDefaults, [field]: nextValue }
+    void updateUserPreferences({
+      patientRegistrationDefaults: {
+        doctorName: nextDefaults.doctorName || undefined,
+        department: nextDefaults.department || undefined,
+        referredBy: nextDefaults.referredBy || undefined,
+      },
+    })
   }
 
   const [serviceTemplates, setServiceTemplates] = useState<ServiceTemplate[]>([])
@@ -307,9 +350,19 @@ export function PatientRegistrationStepper({ open, onClose, patientType, onSucce
           notes: editPatient.notes ?? "",
         })
       } else {
-        const savedDoctorDefault = localStorage.getItem("docsile_default_doctorName") ?? ""
-        const savedDeptDefault = localStorage.getItem("docsile_default_department") ?? ""
-        const savedRefDefault = localStorage.getItem("docsile_default_referredBy") ?? ""
+        const cachedDoctor = localStorage.getItem("docsile_default_doctorName")
+        const cachedDept = localStorage.getItem("docsile_default_department")
+        const cachedRef = localStorage.getItem("docsile_default_referredBy")
+        const allCached = cachedDoctor !== null && cachedDept !== null && cachedRef !== null
+        const remote = allCached ? null : (await getUserPreferences()).patientRegistrationDefaults ?? {}
+        const savedDoctorDefault = cachedDoctor ?? remote?.doctorName ?? ""
+        const savedDeptDefault = cachedDept ?? remote?.department ?? ""
+        const savedRefDefault = cachedRef ?? remote?.referredBy ?? ""
+        if (!allCached) {
+          localStorage.setItem("docsile_default_doctorName", savedDoctorDefault)
+          localStorage.setItem("docsile_default_department", savedDeptDefault)
+          localStorage.setItem("docsile_default_referredBy", savedRefDefault)
+        }
         setFieldDefaults({ doctorName: savedDoctorDefault, department: savedDeptDefault, referredBy: savedRefDefault })
         setPatientData(prev => ({
           ...prev,

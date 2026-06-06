@@ -23,7 +23,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "",
     items: [
-      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true, permission: "dashboard:view" },
+      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
     ],
   },
   {

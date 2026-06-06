@@ -536,7 +536,7 @@ CREATE TABLE "LabBill" (
   "billNumber"     TEXT        NOT NULL,
   "labId"          TEXT        NOT NULL,
   "patientId"      TEXT        NOT NULL,
-  "prescriptionId" TEXT        NOT NULL,
+  "prescriptionId" TEXT,
   "subtotal"       DOUBLE PRECISION NOT NULL DEFAULT 0,
   "discount"       DOUBLE PRECISION NOT NULL DEFAULT 0,
   "discountReason" TEXT,
@@ -999,6 +999,26 @@ CREATE TABLE "PredefinedDischarge" (
 CREATE UNIQUE INDEX "PredefinedDischarge_name_key" ON "PredefinedDischarge"("name");
 CREATE INDEX "PredefinedDischarge_isActive_idx"    ON "PredefinedDischarge"("isActive");
 CREATE INDEX "PredefinedDischarge_sortOrder_idx"   ON "PredefinedDischarge"("sortOrder");
+
+-- ─── STAFF ATTENDANCE ────────────────────────────────
+
+CREATE TABLE "StaffAttendance" (
+  "id"        TEXT        NOT NULL,
+  "userId"    TEXT        NOT NULL,
+  "date"      DATE        NOT NULL,
+  "inTime"    TIME,
+  "outTime"   TIME,
+  "status"    TEXT,
+  "notes"     TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+
+  CONSTRAINT "StaffAttendance_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "StaffAttendance_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+CREATE UNIQUE INDEX "StaffAttendance_userId_date_key" ON "StaffAttendance"("userId", "date");
+CREATE INDEX "StaffAttendance_userId_idx" ON "StaffAttendance"("userId");
+CREATE INDEX "StaffAttendance_date_idx"   ON "StaffAttendance"("date");
 
 -- ─── PRISMA MIGRATIONS TABLE ─────────────────────────
 -- Required by Prisma to track migration state.

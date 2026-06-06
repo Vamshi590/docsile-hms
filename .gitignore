@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# migration logs (contain row-level data)
+scripts/migrate-from-legacy/logs/

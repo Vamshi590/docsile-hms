@@ -207,7 +207,7 @@ export function PatientTable({
                       Edit
                     </button>
                   )}
-                  {onDelete && userRole === "ADMIN" && (
+                  {onDelete && (
                     <button
                       onClick={() => onDelete(patient)}
                       className="text-xs px-2 py-1 rounded-md border border-destructive/30 text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
@@ -416,9 +416,9 @@ export function PatientTable({
                       <DropdownMenuItem onClick={() => onEdit?.(patient)}>
                         <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
                       </DropdownMenuItem>
-                      {userRole === "ADMIN" && (
+                      {onDelete && (
                         <DropdownMenuItem
-                          onClick={() => onDelete?.(patient)}
+                          onClick={() => onDelete(patient)}
                           className="text-destructive focus:text-destructive"
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete

@@ -5,6 +5,11 @@ import { requireAuth } from "@/lib/auth"
 
 export type UserPreferences = {
   doctorColumns?: string[]
+  patientRegistrationDefaults?: {
+    doctorName?: string
+    department?: string
+    referredBy?: string
+  }
   // Extend here as more per-user UI prefs are needed.
 }
 

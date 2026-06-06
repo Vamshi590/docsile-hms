@@ -157,6 +157,7 @@ export default function StaffPage({
   const [showStaffDetail, setShowStaffDetail] = useState<StaffMember | null>(null)
 
   const [roles, setRoles] = useState<RoleType[]>(initialRoles)
+  const [permSearch, setPermSearch] = useState("")
   const [showRoleDialog, setShowRoleDialog] = useState(false)
   const [editingRole, setEditingRole] = useState<RoleType | null>(null)
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(
@@ -475,7 +476,18 @@ export default function StaffPage({
           </TabsContent>
 
           {/* ═══ ROLES & PERMISSIONS TAB ═══ */}
-          <TabsContent value="roles" className="mt-4">
+          <TabsContent value="roles" className="mt-4 space-y-4">
+            {roles.length > 0 && (
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={permSearch}
+                  onChange={(e) => setPermSearch(e.target.value)}
+                  placeholder="Search permissions..."
+                  className="pl-9 h-10"
+                />
+              </div>
+            )}
             {roles.length === 0 ? (
               <div className="rounded-2xl border bg-card p-12 text-center shadow-xs">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-4">
@@ -585,6 +597,14 @@ export default function StaffPage({
                         {Object.entries(ALL_PERMISSIONS).map(([moduleKey, module]) => {
                           const ModuleIcon = MODULE_ICONS[moduleKey] || Shield
                           const moduleColor = MODULE_COLORS[moduleKey] || "#6b7280"
+                          const query = permSearch.trim().toLowerCase()
+                          const moduleMatches = query === "" || module.label.toLowerCase().includes(query)
+                          const visiblePerms = query === ""
+                            ? module.permissions
+                            : moduleMatches
+                              ? module.permissions
+                              : module.permissions.filter((p) => p.label.toLowerCase().includes(query) || p.key.toLowerCase().includes(query))
+                          if (visiblePerms.length === 0) return null
                           const modulePermKeys = module.permissions.map((p) => p.key)
                           const enabledCount = modulePermKeys.filter((k) => selectedRolePerms.includes(k)).length
                           const allEnabled = enabledCount === modulePermKeys.length
@@ -608,7 +628,7 @@ export default function StaffPage({
 
                               {/* Individual Permission Toggles */}
                               <div className="px-4 py-2.5 space-y-0.5">
-                                {module.permissions.map((perm) => {
+                                {visiblePerms.map((perm) => {
                                   const isEnabled = selectedRolePerms.includes(perm.key)
                                   return (
                                     <label key={perm.key} className={`flex items-center justify-between py-1.5 px-2 -mx-2 rounded-lg cursor-pointer transition-colors ${isEnabled ? "hover:bg-accent/50" : "hover:bg-muted/60"}`}>

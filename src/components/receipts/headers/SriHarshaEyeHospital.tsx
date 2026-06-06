@@ -1,27 +1,42 @@
-"use client"
+"use client";
 
-import type { HospitalHeaderProps } from "../ReceiptHeader"
+import type { HospitalHeaderProps } from "../ReceiptHeader";
 
-export default function SriHarshaEyeHospitalHeader({ hospital }: HospitalHeaderProps) {
+export default function SriHarshaEyeHospitalHeader({
+  hospital,
+}: HospitalHeaderProps) {
   return (
     <div className="pb-2 mb-2 border-b-2 border-black">
       <div className="flex justify-end">
-        <p className="text-[10px] font-semibold">Ph: 08782955955, Cell: 9885029367</p>
+        <p className="text-[10px] font-semibold">
+          Ph: 08782955955, Cell: 9885029367
+        </p>
       </div>
 
       {/* Hospital Name Row */}
       <div className="flex justify-between items-center mb-2">
         <div className="w-12 h-12 flex items-center justify-center">
-          {hospital.logoUrl && <img src={hospital.logoUrl} alt="" className="max-w-full max-h-full object-contain" />}
+          <img
+            src="./logo.jpeg"
+            alt="logo"
+            className="max-w-full max-h-full object-contain"
+          />
         </div>
         <div className="text-center flex-1 mx-2">
-          <h1 className="text-lg font-bold leading-tight">SRI HARSHA EYE HOSPITAL</h1>
+          <h1 className="text-lg font-bold leading-tight">
+            SRI HARSHA EYE HOSPITAL
+          </h1>
           <p className="text-[10px] leading-tight mt-0.5">
-            Near Mancherial Chowrasta, Ambedkarnagar, Choppadandi Road, KARIMNAGAR-505001
+            Near Mancherial Chowrasta, Ambedkarnagar, Choppadandi Road,
+            KARIMNAGAR-505001
           </p>
         </div>
         <div className="w-12 h-12 flex items-center justify-center">
-          {hospital.logoUrl && <img src={hospital.logoUrl} alt="" className="max-w-full max-h-full object-contain" />}
+          <img
+            src="./logo.jpeg"
+            alt="logo"
+            className="max-w-full max-h-full object-contain"
+          />
         </div>
       </div>
 
@@ -43,7 +58,7 @@ export default function SriHarshaEyeHospitalHeader({ hospital }: HospitalHeaderP
         {/* Center NABH */}
         <div className="w-[20%] flex justify-center">
           <div className="w-24 h-24 flex items-center justify-center bg-white">
-            {/* NABH logo — place in public/hospital-assets/ if needed */}
+            <img src="./nabh.jpeg" alt="nabh image" />
           </div>
         </div>
 
@@ -63,8 +78,10 @@ export default function SriHarshaEyeHospitalHeader({ hospital }: HospitalHeaderP
 
       {/* Timing */}
       <div className="text-center text-[9px] mt-1">
-        <p className="font-semibold">Daily Timings: 9:00 am to 2:30 pm & 5:30 pm to 7:30 pm</p>
+        <p className="font-semibold">
+          Daily Timings: 9:00 am to 2:30 pm & 5:30 pm to 7:30 pm
+        </p>
       </div>
     </div>
-  )
+  );
 }
