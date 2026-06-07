@@ -18,6 +18,8 @@ import VennalaLabHeader from "./VennalaLab";
 const headerRegistry: Record<string, ComponentType<HospitalHeaderProps>> = {
   "sri harsha eye hospital": SriHarshaEyeHospitalHeader,
   "vennela lab": VennalaLabHeader,
+  "vennala lab": VennalaLabHeader,
+  "vennela ocular diagnostics": VennalaLabHeader,
 };
 
 /**
@@ -25,7 +27,7 @@ const headerRegistry: Record<string, ComponentType<HospitalHeaderProps>> = {
  * Returns DefaultHeader if no custom header is registered.
  */
 export function getHeaderComponent(
-  hospitalName: string
+  hospitalName: string,
 ): ComponentType<HospitalHeaderProps> {
   const key = hospitalName.trim().toLowerCase();
   return headerRegistry[key] ?? DefaultHeader;
@@ -36,8 +38,11 @@ export { DefaultHeader };
 /** All available header options for the header picker UI */
 export const HEADER_OPTIONS: { key: string; label: string }[] = [
   { key: "default", label: "Default (hospital name)" },
-  ...Object.keys(headerRegistry).map(key => ({
+  ...Object.keys(headerRegistry).map((key) => ({
     key,
-    label: key.split(" ").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+    label: key
+      .split(" ")
+      .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" "),
   })),
-]
+];

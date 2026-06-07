@@ -174,7 +174,7 @@ export default function InPatientAdmissionForm({ open, onClose, onSuccess, editI
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-full h-[100dvh] rounded-none p-0 sm:max-w-3xl sm:h-auto sm:rounded-xl overflow-hidden flex flex-col">
-        <DialogHeader>
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
           <DialogTitle>
             {isEditMode ? `Edit In-Patient: ${editInpatient?.name ?? ""}` : "Admit In-Patient"}
           </DialogTitle>
@@ -227,7 +227,7 @@ export default function InPatientAdmissionForm({ open, onClose, onSuccess, editI
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-5 bg-white">
           {loading || !data ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

@@ -241,6 +241,7 @@ export async function createInsuranceClaim(data: z.infer<typeof InsuranceClaimSc
     const { data: claim, error: createError } = await supabase
       .from("InsuranceClaim")
       .insert({
+        id: crypto.randomUUID(),
         claimNumber,
         inPatientId: ip.id,
         insuranceCompanyId: pd.insuranceCompanyId ?? null,

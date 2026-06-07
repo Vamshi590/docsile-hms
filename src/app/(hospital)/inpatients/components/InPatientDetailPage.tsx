@@ -137,6 +137,8 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
   const [conditionAtDischarge, setConditionAtDischarge] = useState("")
   const [dischargeMedications, setDischargeMedications] = useState("")
   const [followUpInstructions, setFollowUpInstructions] = useState("")
+  const [operationProcedure, setOperationProcedure] = useState(inpatient.operationProcedure ?? "")
+  const [provisionDiagnosis, setProvisionDiagnosis] = useState(inpatient.provisionDiagnosis ?? "")
 
   // Discharge template picker state.
   const [dischargeTemplates, setDischargeTemplates] = useState<DischargeTemplate[]>([])
@@ -171,7 +173,16 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
   })()
 
   const ipPrescriptions: Array<{ medicine: string; days: string; timing: string; note?: string }> = (() => {
-    try { return JSON.parse(inpatient.prescriptions ?? "[]") } catch { return [] }
+    try {
+      const raw = JSON.parse(inpatient.prescriptions ?? "[]")
+      if (!Array.isArray(raw)) return []
+      return raw.map((m: { medicine?: string; name?: string; days?: string; timing?: string; note?: string }) => ({
+        medicine: m.medicine ?? m.name ?? "",
+        days: m.days ?? "",
+        timing: m.timing ?? "",
+        note: m.note ?? "",
+      }))
+    } catch { return [] }
   })()
 
   const dischargeSummary = (() => {
@@ -211,6 +222,8 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
     }
     setMedicalValues(storedMedicalValues)
     setFollowUpDate(inpatient.followUpDate ? new Date(inpatient.followUpDate).toISOString().split("T")[0] : "")
+    setOperationProcedure(inpatient.operationProcedure ?? "")
+    setProvisionDiagnosis(inpatient.provisionDiagnosis ?? "")
 
     if (dischargeSummary && typeof dischargeSummary === "object" && dischargeSummary.diagnosis) {
       setDischargeDiagnosis(dischargeSummary.diagnosis ?? "")
@@ -368,6 +381,8 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
         prescriptions: rxData,
         medicalValues,
         followUpDate: followUpDate || undefined,
+        operationProcedure,
+        provisionDiagnosis,
       })
       // Then discharge
       const result = await dischargeInPatient({
@@ -1074,6 +1089,28 @@ export function InPatientDetailPage({ inpatient, onBack, onUpdate, variant = "fo
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Provisional Diagnosis</Label>
+                  <Input
+                    value={provisionDiagnosis}
+                    onChange={e => setProvisionDiagnosis(e.target.value)}
+                    placeholder="Provisional diagnosis at admission..."
+                    className="bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Surgery Procedure</Label>
+                  <Input
+                    value={operationProcedure}
+                    onChange={e => setOperationProcedure(e.target.value)}
+                    placeholder="Operative procedure performed..."
+                    className="bg-white"
+                  />
                 </div>
               </div>
 

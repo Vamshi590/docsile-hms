@@ -148,7 +148,7 @@ export function PatientsPage({
     if (tab === "IPD") {
       const result = await getInPatients({
         search: search.trim() || undefined,
-        showDischarged: true,
+        recentDischargesOnly: true,
       })
       setInpatients(result.data as InPatient[])
     } else {

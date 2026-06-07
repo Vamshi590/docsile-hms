@@ -58,7 +58,7 @@ export default function AnalyticsPage({
   initialStatusDist: StatusDistribution[]
 }) {
   const [tab, setTab]       = useState<Tab>("overview")
-  const [filter, setFilter] = useState<TimeFilter>("month")
+  const [filter, setFilter] = useState<TimeFilter>("today")
   const [customRange, setCustomRange] = useState({ start: "", end: "" })
   const [loading, setLoading] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)

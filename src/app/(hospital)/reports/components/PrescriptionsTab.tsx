@@ -110,9 +110,18 @@ export function PrescriptionsTab({ patientId, patient }: { patientId: string; pa
             key={rx.id}
             className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:border-gray-200 transition-colors"
           >
-            <button
+            <div
+              role="button"
+              tabIndex={hasDetails ? 0 : -1}
               onClick={() => hasDetails && setExpandedId(expanded ? null : rx.id)}
-              className="w-full px-5 py-4 text-left"
+              onKeyDown={(e) => {
+                if (!hasDetails) return
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  setExpandedId(expanded ? null : rx.id)
+                }
+              }}
+              className="w-full px-5 py-4 text-left cursor-pointer"
             >
               <div className="flex items-center gap-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
@@ -173,7 +182,7 @@ export function PrescriptionsTab({ patientId, patient }: { patientId: string; pa
                   )
                 )}
               </div>
-            </button>
+            </div>
 
             {expanded && (
               <div className="border-t border-gray-100 bg-gray-50/50">

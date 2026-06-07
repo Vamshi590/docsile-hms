@@ -10,6 +10,7 @@ import { PrescriptionReceipt } from "@/components/receipts/PrescriptionReceipt"
 import { ReadingsReceipt } from "@/components/receipts/ReadingsReceipt"
 import { ClinicalFindingsReceipt } from "@/components/receipts/ClinicalFindingsReceipt"
 import { ReadingsAndFindings } from "@/components/receipts/ReadingsAndFindings"
+import { toGlassShape } from "@/lib/glass-prescription"
 import { getReceiptData } from "../actions"
 import { printReceiptsHtml } from "@/lib/print-receipts"
 import { formatDate, calculateAge } from "@/lib/utils"
@@ -118,34 +119,10 @@ export function PrintReceiptsModal({ open, onClose, patientId, patientName }: Pr
       } catch { /* empty */ }
     }
     if (eyeReading.previousPrescription) {
-      try {
-        const pg = JSON.parse(eyeReading.previousPrescription)
-        previousGlass = {
-          dist: {
-            rightEye: { sph: pg.re?.sph || "", cyl: pg.re?.cyl || "", axis: pg.re?.axis || "", va: pg.re?.va || "" },
-            leftEye: { sph: pg.le?.sph || "", cyl: pg.le?.cyl || "", axis: pg.le?.axis || "", va: pg.le?.va || "" },
-          },
-          near: {
-            rightEye: { sph: pg.reNear?.sph || "", cyl: pg.reNear?.cyl || "", axis: pg.reNear?.axis || "", va: pg.reNear?.va || "" },
-            leftEye: { sph: pg.leNear?.sph || "", cyl: pg.leNear?.cyl || "", axis: pg.leNear?.axis || "", va: pg.leNear?.va || "" },
-          },
-        }
-      } catch { /* empty */ }
+      try { previousGlass = toGlassShape(JSON.parse(eyeReading.previousPrescription)) } catch { /* empty */ }
     }
     if (eyeReading.presentPrescription) {
-      try {
-        const pp = JSON.parse(eyeReading.presentPrescription)
-        presentGlass = {
-          dist: {
-            rightEye: { sph: pp.re?.sph || "", cyl: pp.re?.cyl || "", axis: pp.re?.axis || "", va: pp.re?.va || "" },
-            leftEye: { sph: pp.le?.sph || "", cyl: pp.le?.cyl || "", axis: pp.le?.axis || "", va: pp.le?.va || "" },
-          },
-          near: {
-            rightEye: { sph: pp.reNear?.sph || "", cyl: pp.reNear?.cyl || "", axis: pp.reNear?.axis || "", va: pp.reNear?.va || "" },
-            leftEye: { sph: pp.leNear?.sph || "", cyl: pp.leNear?.cyl || "", axis: pp.leNear?.axis || "", va: pp.leNear?.va || "" },
-          },
-        }
-      } catch { /* empty */ }
+      try { presentGlass = toGlassShape(JSON.parse(eyeReading.presentPrescription)) } catch { /* empty */ }
     }
     if (eyeReading.clinicalFindings) {
       try {

@@ -240,10 +240,13 @@ export default function SettingsPage({
   const [tab, setTab] = useState(initialTab)
 
   // Sync local state when the URL changes externally (back/forward, deep links).
+  // Intentionally excludes `tab` — including it causes a snap-back when local
+  // state updates before router.replace propagates the new searchParams.
   useEffect(() => {
     const urlTab = searchParams.get("tab") || "services"
-    if (urlTab !== tab) setTab(urlTab)
-  }, [searchParams, tab])
+    setTab(urlTab)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   function handleTabChange(next: string) {
     setTab(next)
@@ -994,9 +997,16 @@ function PrescriptionsTab() {
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true)
-    const data = await getPrescriptionTemplates(showInactive)
-    setTemplates(data as PrescriptionTemplateRow[])
-    setLoading(false)
+    try {
+      const data = await getPrescriptionTemplates(showInactive)
+      setTemplates(data as PrescriptionTemplateRow[])
+    } catch (err) {
+      console.error("Failed to load prescription templates:", err)
+      toast.error("Failed to load prescription templates")
+      setTemplates([])
+    } finally {
+      setLoading(false)
+    }
   }, [showInactive])
 
   useEffect(() => { fetchTemplates() }, [fetchTemplates])
@@ -1604,9 +1614,16 @@ function InpatientTemplatesTab() {
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true)
-    const data = await getInpatientTemplates(showInactive)
-    setTemplates(data as InpatientTemplateRow[])
-    setLoading(false)
+    try {
+      const data = await getInpatientTemplates(showInactive)
+      setTemplates(data as InpatientTemplateRow[])
+    } catch (err) {
+      console.error("Failed to load inpatient templates:", err)
+      toast.error("Failed to load inpatient templates")
+      setTemplates([])
+    } finally {
+      setLoading(false)
+    }
   }, [showInactive])
 
   useEffect(() => { fetchTemplates() }, [fetchTemplates])

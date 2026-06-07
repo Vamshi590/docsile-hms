@@ -99,7 +99,16 @@ export function InPatientDetailDrawer({ inpatient, open, onClose, onUpdate }: Pr
   })()
 
   const ipPrescriptions: Array<{ medicine: string; days: string; timing: string; note?: string }> = (() => {
-    try { return JSON.parse(inpatient.prescriptions ?? "[]") } catch { return [] }
+    try {
+      const raw = JSON.parse(inpatient.prescriptions ?? "[]")
+      if (!Array.isArray(raw)) return []
+      return raw.map((m: { medicine?: string; name?: string; days?: string; timing?: string; note?: string }) => ({
+        medicine: m.medicine ?? m.name ?? "",
+        days: m.days ?? "",
+        timing: m.timing ?? "",
+        note: m.note ?? "",
+      }))
+    } catch { return [] }
   })()
 
   const daysAdmitted = Math.floor(

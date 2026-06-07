@@ -204,6 +204,13 @@ function EyeReadingForm({
     setter(p => ({ ...p, [eye]: { ...p[eye], [dn]: { ...p[eye][dn], [f]: v } } }))
   }
 
+  function setDNRow(
+    setter: Dispatch<SetStateAction<DNSection>>,
+    eye: "re" | "le", dn: "d" | "n", next: EyeRow
+  ) {
+    setter(p => ({ ...p, [eye]: { ...p[eye], [dn]: next } }))
+  }
+
   function setCFRow(eye: "re" | "le", f: keyof CFEye, v: string) {
     setCf(p => ({ ...p, [eye]: { ...p[eye], [f]: v } }))
   }
@@ -327,12 +334,26 @@ function EyeReadingForm({
     return formatted
   }
 
-  function NearEyeRow({ row, onChange, distanceSph, showLabels = false }: { row: EyeRow; onChange: (f: keyof EyeRow, v: string) => void; distanceSph: string; showLabels?: boolean }) {
+  function NearEyeRow({ row, onChange, onChangeAll, distanceRow, showLabels = false }: { row: EyeRow; onChange: (f: keyof EyeRow, v: string) => void; onChangeAll: (next: EyeRow) => void; distanceRow: EyeRow; showLabels?: boolean }) {
     const NEAR_FIELDS = [
       { key: "cyl" as const, label: "CYL", options: CYL_OPTIONS },
       { key: "axis" as const, label: "AXIS", options: AXIS_OPTIONS },
       { key: "va" as const, label: "VA", options: VA_OPTIONS },
     ]
+    function handleSphChange(v: string) {
+      const isAdd = /^add\s+/i.test(v)
+      const nextSph = computeNearSph(distanceRow.sph, v)
+      if (isAdd) {
+        onChangeAll({
+          sph: nextSph,
+          cyl: distanceRow.cyl,
+          axis: distanceRow.axis,
+          va: distanceRow.va,
+        })
+      } else {
+        onChange("sph", nextSph)
+      }
+    }
     return (
       <div className="grid grid-cols-4 gap-2">
         <div>
@@ -340,7 +361,7 @@ function EyeReadingForm({
           <GridCombobox
             options={NEAR_SPH_OPTIONS}
             value={row.sph}
-            onValueChange={v => onChange("sph", computeNearSph(distanceSph, v))}
+            onValueChange={handleSphChange}
           />
         </div>
         {NEAR_FIELDS.map(({ key, label, options }) => (
@@ -364,7 +385,12 @@ function EyeReadingForm({
         </div>
         <div className="mb-5">
           <h4 className="text-sm font-medium text-foreground mb-2">Near :</h4>
-          <NearEyeRow row={sr.re.n} onChange={s("re", "n")} distanceSph={sr.re.d.sph} />
+          <NearEyeRow
+            row={sr.re.n}
+            onChange={s("re", "n")}
+            onChangeAll={next => setDNRow(setSr, "re", "n", next)}
+            distanceRow={sr.re.d}
+          />
         </div>
         <div className="mb-4 pt-4 border-t border-border">
           <h4 className="text-sm font-medium text-foreground mb-2">Left Eye - Distance :</h4>
@@ -372,7 +398,12 @@ function EyeReadingForm({
         </div>
         <div className="mb-5">
           <h4 className="text-sm font-medium text-foreground mb-2">Near :</h4>
-          <NearEyeRow row={sr.le.n} onChange={s("le", "n")} distanceSph={sr.le.d.sph} />
+          <NearEyeRow
+            row={sr.le.n}
+            onChange={s("le", "n")}
+            onChangeAll={next => setDNRow(setSr, "le", "n", next)}
+            distanceRow={sr.le.d}
+          />
         </div>
 
         {/* Sight Type (omitted when the parent lifts it into its own panel) */}

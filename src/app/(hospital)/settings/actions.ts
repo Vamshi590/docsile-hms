@@ -397,6 +397,7 @@ export async function createInpatientTemplate(data: {
     const { data: tmpl, error } = await supabase
       .from("InpatientTemplate")
       .insert({
+        id: crypto.randomUUID(),
         code,
         name: data.name.trim(),
         operationName: data.operationName?.trim() || null,

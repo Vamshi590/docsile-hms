@@ -8,7 +8,13 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "tsx prisma/seed.ts",
-    "migrate:legacy": "tsx --env-file=.env scripts/migrate-from-legacy/index.ts"
+    "migrate:legacy": "tsx --env-file=.env scripts/migrate-from-legacy/index.ts",
+    "migrate:fix-gender": "tsx --env-file=.env scripts/migrate-from-legacy/fix-gender.ts",
+    "migrate:consolidate": "tsx --env-file=.env scripts/migrate-from-legacy/consolidate-placeholders.ts",
+    "migrate:fix-walkin": "tsx --env-file=.env scripts/migrate-from-legacy/fix-walkin-data.ts",
+    "migrate:fix-inpatient-rx": "tsx --env-file=.env scripts/migrate-from-legacy/fix-inpatient-prescriptions.ts",
+    "migrate:fix-inpatient-med-vals": "tsx --env-file=.env scripts/migrate-from-legacy/fix-inpatient-medical-values.ts",
+    "migrate:fix-template-meds": "tsx --env-file=.env scripts/migrate-from-legacy/fix-template-medicines.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

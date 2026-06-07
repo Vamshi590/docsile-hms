@@ -10,6 +10,7 @@ import { PrescriptionReceipt } from "@/components/receipts/PrescriptionReceipt"
 import { ReadingsReceipt } from "@/components/receipts/ReadingsReceipt"
 import { ClinicalFindingsReceipt } from "@/components/receipts/ClinicalFindingsReceipt"
 import { ReadingsAndFindings } from "@/components/receipts/ReadingsAndFindings"
+import { VennelaLabReceipt } from "@/components/receipts/VennelaLabReceipt"
 import { ReceiptHeader } from "@/components/receipts/ReceiptHeader"
 import { ReceiptLayout, ReceiptFooter } from "@/components/receipts/ReceiptLayout"
 import { PatientInfoSection } from "@/components/receipts/PatientInfoSection"
@@ -424,7 +425,33 @@ export function ReportPrintModal({ open, onClose, patient, mode, prescriptionId,
                 )}
 
                 {/* ═══ LAB MODE ═══ */}
-                {mode === "lab" && labBill && (
+                {mode === "lab" && labBill && (() => {
+                  const headerKey = labBill.printHeaderKey?.toLowerCase().trim() ?? ""
+                  const labKey    = labBill.labName?.toLowerCase().trim() ?? ""
+                  return headerKey.includes("vennela") || labKey.includes("vennela") || headerKey.includes("vennala") || labKey.includes("vennala")
+                })() && (
+                  <TabsContent value="lab-bill" className="mt-0">
+                    <VennelaLabReceipt
+                      bill={{
+                        billNumber: labBill.billNumber,
+                        total: labBill.total,
+                        amountPaid: labBill.amountPaid,
+                        balanceDue: labBill.balanceDue,
+                        discount: labBill.discount,
+                        subtotal: labBill.subtotal,
+                        items: labBill.items,
+                        createdAt: labBill.createdAt,
+                      }}
+                      patient={{ fullName: patient.fullName }}
+                    />
+                  </TabsContent>
+                )}
+
+                {mode === "lab" && labBill && (() => {
+                  const headerKey = labBill.printHeaderKey?.toLowerCase().trim() ?? ""
+                  const labKey    = labBill.labName?.toLowerCase().trim() ?? ""
+                  return !headerKey.includes("vennela") && !labKey.includes("vennela") && !headerKey.includes("vennala") && !labKey.includes("vennala")
+                })() && (
                   <TabsContent value="lab-bill" className="mt-0">
                     <ReceiptLayout footer={<ReceiptFooter hospitalName={hospitalName} />}>
                       <div className="receipt-header-section">

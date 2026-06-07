@@ -213,6 +213,25 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
     setInvestigations(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i))
   }
 
+  const investigationPresets: { label: string; items: string[] }[] = [
+    {
+      label: "Cataract Surgery Investigations",
+      items: ["OFI", "BSCAN", "IOP", "2%XST", "ASCAN", "BE SYRINGING", "CBP", "RBS", "HIV", "HBsAg"],
+    },
+    {
+      label: "Pterygium Surgery Investigations",
+      items: ["CBP", "RBS", "HIV", "HBsAg"],
+    },
+    {
+      label: "DCR Surgery Investigations",
+      items: ["CBP", "RBS", "HIV", "HBsAg", "S.BILIRUBIN", "S.CREATININE", "BLOOD UREA", "CT", "BT"],
+    },
+  ]
+
+  function applyInvestigationPreset(items: string[]) {
+    setInvestigations(items.map(name => ({ id: Math.random().toString(), name, note: "" })))
+  }
+
   function applyTemplate(t: Template) {
     if (t.presentComplaint) setPresentComplaint(t.presentComplaint)
     if (t.previousHistory) setPreviousHistory(t.previousHistory)
@@ -566,6 +585,8 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
                   onValueChange={v => updateInvestigation(inv.id, "name", v)}
                   placeholder="Investigation name"
                   className="flex-1"
+                  presets={investigationPresets}
+                  onPresetSelect={applyInvestigationPreset}
                 />
                 <Button
                   variant="ghost"

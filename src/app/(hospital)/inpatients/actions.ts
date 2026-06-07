@@ -79,6 +79,7 @@ export async function getInPatients(filters: {
   search?: string
   statuses?: string[]
   showDischarged?: boolean
+  recentDischargesOnly?: boolean
   dateFrom?: string
   dateTo?: string
   doctor?: string
@@ -86,11 +87,21 @@ export async function getInPatients(filters: {
 }) {
   await requireServerPermission("inpatients:view")
   const supabase = await createClient()
-  const { search, statuses, showDischarged, dateFrom, dateTo, doctor, department } = filters
+  const { search, statuses, showDischarged, recentDischargesOnly, dateFrom, dateTo, doctor, department } = filters
 
   let query = supabase.from("InPatient").select("*").order("admissionDate", { ascending: false })
 
-  if (!showDischarged) {
+  if (recentDischargesOnly) {
+    // Show currently admitted (non-DISCHARGED) plus anyone discharged today or yesterday (IST).
+    const { getISTDayBounds } = await import("@/lib/utils")
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yyyy = yesterday.getFullYear()
+    const mm = String(yesterday.getMonth() + 1).padStart(2, "0")
+    const dd = String(yesterday.getDate()).padStart(2, "0")
+    const { start: yStart } = getISTDayBounds(`${yyyy}-${mm}-${dd}`)
+    query = query.or(`status.neq.DISCHARGED,and(status.eq.DISCHARGED,dischargeDate.gte.${yStart.toISOString()})`)
+  } else if (!showDischarged) {
     query = query.neq("status", "DISCHARGED")
   }
 
@@ -294,6 +305,7 @@ export async function createInPatient(data: z.infer<typeof InPatientSchema>) {
         }]
         const claimNow = new Date().toISOString()
         await supabase.from("InsuranceClaim").insert({
+          id: crypto.randomUUID(),
           claimNumber: insClaimNumber,
           inPatientId: ip.id,
           patientName: pd.name,
@@ -446,6 +458,7 @@ export async function addInPatientPayment(data: {
           }]
           const claimNow = new Date().toISOString()
           await supabase.from("InsuranceClaim").insert({
+            id: crypto.randomUUID(),
             claimNumber: insClaimNumber,
             inPatientId: ip.id,
             patientName: ip.name,

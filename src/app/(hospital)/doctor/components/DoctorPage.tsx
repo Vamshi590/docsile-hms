@@ -701,9 +701,9 @@ export function DoctorPage({
                       case "appointmentDate":
                         return patient.appointmentDate ? text(formatDate(patient.appointmentDate), true) : dash
                       case "doctor":
-                        return text(rx?.doctorName ?? null)
+                        return text(rx?.doctorName ?? patient.doctorName ?? null)
                       case "department":
-                        return text(rx?.department ?? null)
+                        return text(rx?.department ?? patient.department ?? null)
                       case "vitals":
                         return text(vitals || null, true)
                       case "complaint":

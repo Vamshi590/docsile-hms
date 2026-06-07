@@ -278,6 +278,29 @@ CREATE UNIQUE INDEX "PredefinedTemplate_code_key" ON "PredefinedTemplate"("code"
 CREATE INDEX "PredefinedTemplate_code_idx"        ON "PredefinedTemplate"("code");
 CREATE INDEX "PredefinedTemplate_isActive_idx"    ON "PredefinedTemplate"("isActive");
 
+-- ─── INPATIENT TEMPLATES ─────────────────────────────
+
+CREATE TABLE "InpatientTemplate" (
+  "id"                 TEXT        NOT NULL DEFAULT gen_random_uuid()::text,
+  "code"               TEXT        NOT NULL,
+  "name"               TEXT        NOT NULL,
+  "operationName"      TEXT,
+  "provisionDiagnosis" TEXT,
+  "medicines"          TEXT        NOT NULL DEFAULT '[]',
+  "followUpDays"       INTEGER,
+  "additionalNotes"    TEXT,
+  "isActive"           BOOLEAN     NOT NULL DEFAULT TRUE,
+  "createdBy"          TEXT        NOT NULL,
+  "createdAt"          TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt"          TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "InpatientTemplate_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "InpatientTemplate_code_key" ON "InpatientTemplate"("code");
+CREATE INDEX "InpatientTemplate_code_idx"        ON "InpatientTemplate"("code");
+CREATE INDEX "InpatientTemplate_isActive_idx"    ON "InpatientTemplate"("isActive");
+
 -- ─── MEDICINE MASTER ─────────────────────────────────
 
 CREATE TABLE "MedicineMaster" (

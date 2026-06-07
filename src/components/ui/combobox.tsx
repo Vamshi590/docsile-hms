@@ -127,6 +127,11 @@ export function Combobox({
 }
 
 // Editable combobox - type in and select from dropdown
+export interface ComboboxPreset {
+  label: string
+  items: string[]
+}
+
 interface EditableComboboxProps {
   options: string[]
   value?: string
@@ -134,6 +139,8 @@ interface EditableComboboxProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  presets?: ComboboxPreset[]
+  onPresetSelect?: (items: string[]) => void
 }
 
 export function EditableCombobox({
@@ -143,9 +150,13 @@ export function EditableCombobox({
   placeholder = "Type or select...",
   className,
   disabled = false,
+  presets,
+  onPresetSelect,
 }: EditableComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState(value ?? "")
+  const [activeIndex, setActiveIndex] = React.useState(0)
+  const listRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
     setInputValue(value ?? "")
@@ -156,6 +167,14 @@ export function EditableCombobox({
     const q = inputValue.toLowerCase()
     return options.filter((o) => o.toLowerCase().includes(q)).slice(0, 50)
   }, [options, inputValue])
+
+  React.useEffect(() => { setActiveIndex(0) }, [inputValue, open])
+
+  React.useEffect(() => {
+    if (!open) return
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${activeIndex}"]`)
+    el?.scrollIntoView({ block: "nearest" })
+  }, [activeIndex, open])
 
   function handleInputChange(v: string) {
     setInputValue(v)
@@ -169,6 +188,16 @@ export function EditableCombobox({
     setOpen(false)
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      setOpen(true); e.preventDefault(); return
+    }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, filtered.length - 1)) }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)) }
+    else if (e.key === "Enter" && open && filtered[activeIndex]) { e.preventDefault(); handleSelect(filtered[activeIndex]) }
+    else if (e.key === "Escape") { setOpen(false) }
+  }
+
   return (
     <div className={cn("relative", className)}>
       <Input
@@ -176,20 +205,41 @@ export function EditableCombobox({
         onChange={(e) => handleInputChange(e.target.value)}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
         className="w-full bg-white"
       />
-      {open && filtered.length > 0 && (
+      {open && (filtered.length > 0 || (presets && presets.length > 0)) && (
         <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md">
-          <div className="p-1 max-h-48 overflow-y-auto">
-            {filtered.map((option) => (
+          <div ref={listRef} className="p-1 max-h-64 overflow-y-auto">
+            {presets && presets.length > 0 && onPresetSelect && (
+              <div className="mb-1 pb-1 border-b border-border">
+                {presets.map((preset) => (
+                  <div
+                    key={preset.label}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      onPresetSelect(preset.items)
+                      setOpen(false)
+                    }}
+                    className="cursor-pointer select-none rounded-sm px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-primary hover:bg-primary/10"
+                  >
+                    {preset.label}
+                  </div>
+                ))}
+              </div>
+            )}
+            {filtered.map((option, idx) => (
               <div
                 key={option}
+                data-idx={idx}
                 onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setActiveIndex(idx)}
                 onClick={() => handleSelect(option)}
                 className={cn(
                   "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                  idx === activeIndex && "bg-accent text-accent-foreground",
                   inputValue === option && "bg-accent text-accent-foreground"
                 )}
               >
@@ -214,6 +264,8 @@ export function GridCombobox({
 }: EditableComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState(value ?? "")
+  const [activeIndex, setActiveIndex] = React.useState(0)
+  const listRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
     setInputValue(value ?? "")
@@ -224,6 +276,14 @@ export function GridCombobox({
     const q = inputValue.toLowerCase()
     return options.filter((o) => o.toLowerCase().includes(q))
   }, [options, inputValue])
+
+  React.useEffect(() => { setActiveIndex(0) }, [inputValue, open])
+
+  React.useEffect(() => {
+    if (!open) return
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${activeIndex}"]`)
+    el?.scrollIntoView({ block: "nearest" })
+  }, [activeIndex, open])
 
   function handleInputChange(v: string) {
     setInputValue(v)
@@ -237,6 +297,16 @@ export function GridCombobox({
     setOpen(false)
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      setOpen(true); e.preventDefault(); return
+    }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, filtered.length - 1)) }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)) }
+    else if (e.key === "Enter" && open && filtered[activeIndex]) { e.preventDefault(); handleSelect(filtered[activeIndex]) }
+    else if (e.key === "Escape") { setOpen(false) }
+  }
+
   return (
     <div className={cn("relative", className)}>
       <input
@@ -244,21 +314,25 @@ export function GridCombobox({
         onChange={(e) => handleInputChange(e.target.value)}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
         className="w-full h-9 px-3 text-sm font-semibold border border-input rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 placeholder:font-normal placeholder:text-muted-foreground disabled:opacity-50"
       />
       {open && filtered.length > 0 && (
         <div className="absolute z-50 mt-1 w-full min-w-40 rounded-md border border-border bg-white shadow-lg">
-          <div className="p-2 max-h-64 overflow-y-auto">
+          <div ref={listRef} className="p-2 max-h-64 overflow-y-auto">
             <div className="grid grid-cols-3 gap-1">
-              {filtered.map((option) => (
+              {filtered.map((option, idx) => (
                 <div
                   key={option}
+                  data-idx={idx}
                   onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setActiveIndex(idx)}
                   onClick={() => handleSelect(option)}
                   className={cn(
                     "px-2 py-2 cursor-pointer text-sm font-semibold text-center border border-border rounded-none hover:bg-accent hover:text-accent-foreground transition-colors whitespace-nowrap",
+                    idx === activeIndex && "bg-accent text-accent-foreground",
                     inputValue === option && "bg-primary/10 border-primary text-primary"
                   )}
                 >
@@ -346,6 +420,8 @@ export function EditableComboboxWithAdd({
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState(value ?? "")
   const [adding, setAdding] = React.useState(false)
+  const [activeIndex, setActiveIndex] = React.useState(0)
+  const listRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
     setInputValue(value ?? "")
@@ -388,6 +464,37 @@ export function EditableComboboxWithAdd({
   }
 
   const showDropdown = open && (filtered.length > 0 || isNewValue)
+  const totalItems = filtered.length + (isNewValue && onAddOption ? 1 : 0)
+  const addRowIndex = isNewValue && onAddOption ? filtered.length : -1
+
+  React.useEffect(() => { setActiveIndex(0) }, [inputValue, open])
+
+  React.useEffect(() => {
+    if (!showDropdown) return
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${activeIndex}"]`)
+    el?.scrollIntoView({ block: "nearest" })
+  }, [activeIndex, showDropdown])
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      setOpen(true); e.preventDefault(); return
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setActiveIndex(i => Math.min(i + 1, Math.max(totalItems - 1, 0)))
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setActiveIndex(i => Math.max(i - 1, 0))
+    } else if (e.key === "Enter" && showDropdown) {
+      if (activeIndex === addRowIndex) {
+        e.preventDefault(); handleAdd()
+      } else if (filtered[activeIndex]) {
+        e.preventDefault(); handleSelect(filtered[activeIndex])
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false)
+    }
+  }
 
   return (
     <PopoverPrimitive.Root open={showDropdown} onOpenChange={setOpen}>
@@ -398,6 +505,7 @@ export function EditableComboboxWithAdd({
             onChange={(e) => handleInputChange(e.target.value)}
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 200)}
+            onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}
             className="w-full bg-white focus-visible:ring-1 focus-visible:ring-gray-200 focus-visible:ring-offset-0 focus:outline-none placeholder:text-gray-300"
@@ -417,12 +525,17 @@ export function EditableComboboxWithAdd({
           style={{ width: "var(--radix-popover-trigger-width)" }}
           className="z-[200] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
         >
-            <div className="p-1 max-h-48 overflow-y-auto">
-            {filtered.map((option) => (
+            <div ref={listRef} className="p-1 max-h-48 overflow-y-auto">
+            {filtered.map((option, idx) => (
               <div
                 key={option}
+                data-idx={idx}
                 onMouseDown={(e) => e.preventDefault()}
-                className="group flex items-center rounded-sm"
+                onMouseEnter={() => setActiveIndex(idx)}
+                className={cn(
+                  "group flex items-center rounded-sm",
+                  idx === activeIndex && "bg-accent text-accent-foreground"
+                )}
               >
                 <div
                   onClick={() => handleSelect(option)}
@@ -458,11 +571,14 @@ export function EditableComboboxWithAdd({
             ))}
             {isNewValue && onAddOption && (
               <div
+                data-idx={addRowIndex}
                 onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setActiveIndex(addRowIndex)}
                 onClick={handleAdd}
                 className={cn(
                   "flex cursor-pointer items-center gap-1.5 rounded-sm px-2 py-1.5 text-sm text-primary hover:bg-primary/10",
-                  filtered.length > 0 && "mt-1 border-t border-border"
+                  filtered.length > 0 && "mt-1 border-t border-border",
+                  activeIndex === addRowIndex && "bg-primary/10"
                 )}
               >
                 {adding ? (

@@ -13,12 +13,12 @@ export default async function AnalyticsRoute() {
   await requireServerPermission("reports:view")
   const [overview, gender, ageGroups, revenueByCategory, expenseBreakdown, statusDist] =
     await Promise.all([
-      getAnalyticsOverview("month"),
-      getGenderDistribution("month"),
-      getAgeDistribution("month"),
-      getRevenueByCategory("month"),
-      getExpenseBreakdown("month"),
-      getStatusDistribution("month"),
+      getAnalyticsOverview("today"),
+      getGenderDistribution("today"),
+      getAgeDistribution("today"),
+      getRevenueByCategory("today"),
+      getExpenseBreakdown("today"),
+      getStatusDistribution("today"),
     ])
 
   return (
