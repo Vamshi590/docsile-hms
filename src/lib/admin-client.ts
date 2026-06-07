@@ -25,6 +25,60 @@ export type AdminConfig = {
   cacheMaxAgeSec: number;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin server dependency temporarily disabled — getAdminConfig() returns a
+// static fallback so the app runs without reaching the admin server. Restore
+// the commented block below to re-enable the live fetch.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ALL_MODULES = [
+  "patients",
+  "doctor",
+  "workup",
+  "pharmacy",
+  "optical",
+  "labs",
+  "inpatients",
+  "insurance",
+  "expenses",
+  "license-tracker",
+  "call-logs",
+  "analytics",
+  "reports",
+  "vitals-extended",
+];
+
+const STATIC_CONFIG: AdminConfig = {
+  hospital: {
+    id: "local",
+    code: "local",
+    name: "Hospital",
+    timezone: "Asia/Kolkata",
+    type: "EYE",
+  },
+  subscription: null,
+  enabledModules: ALL_MODULES,
+  billing: {
+    status: "current",
+    overdueInvoiceCount: 0,
+    oldestOverdueDate: null,
+    bannerMessage: null,
+  },
+  fetchedAt: new Date(0).toISOString(),
+  cacheMaxAgeSec: 60 * 60 * 24,
+};
+
+export async function getAdminConfig(): Promise<AdminConfig> {
+  return STATIC_CONFIG;
+}
+
+export async function sendHeartbeat(_appVersion?: string): Promise<void> {
+  void _appVersion;
+}
+
+/*
+// ─── Original admin-server-backed implementation (kept for future re-enable) ──
+
 type CacheEntry = {
   config: AdminConfig;
   fetchedAt: number; // epoch ms
@@ -81,13 +135,10 @@ function scheduleNextRefresh(seconds: number) {
   refreshTimer.unref?.();
 }
 
-/**
- * Returns the current admin config.
- *
- *   - Cold boot: synchronous fetch; throws if it fails.
- *   - Warm cache: returns cached config; triggers background refetch if stale.
- *   - Cache older than 24h with no successful refresh: throws.
- */
+// Returns the current admin config.
+//   - Cold boot: synchronous fetch; throws if it fails.
+//   - Warm cache: returns cached config; triggers background refetch if stale.
+//   - Cache older than 24h with no successful refresh: throws.
 export async function getAdminConfig(): Promise<AdminConfig> {
   const now = Date.now();
 
@@ -124,7 +175,7 @@ export async function getAdminConfig(): Promise<AdminConfig> {
   return inflight;
 }
 
-/** Best-effort heartbeat ping. Failures are ignored. */
+// Best-effort heartbeat ping. Failures are ignored.
 export async function sendHeartbeat(appVersion?: string): Promise<void> {
   try {
     const { url, key } = getEnv();
@@ -140,3 +191,4 @@ export async function sendHeartbeat(appVersion?: string): Promise<void> {
     // ignored
   }
 }
+*/

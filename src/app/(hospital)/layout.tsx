@@ -26,6 +26,12 @@ export default async function HospitalLayout({
   const pathname =
     h.get("x-pathname") ?? h.get("x-invoke-path") ?? h.get("x-matched-path") ?? "/"
 
+  // Admin server dependency temporarily disabled — getAdminConfig() returns a
+  // static fallback so this never throws. Restore the try/catch below when the
+  // admin server is brought back online.
+  const config: AdminConfig = await getAdminConfig()
+
+  /*
   let config: AdminConfig
   try {
     config = await getAdminConfig()
@@ -41,6 +47,7 @@ export default async function HospitalLayout({
       </div>
     )
   }
+  */
 
   const mod = routeModule(pathname)
   if (mod && !isModuleEnabled(pathname, config.enabledModules)) {

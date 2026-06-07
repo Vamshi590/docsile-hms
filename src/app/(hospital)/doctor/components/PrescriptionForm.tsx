@@ -401,6 +401,9 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-muted-foreground pointer-events-none">% · SpO₂</span>
           </div>
         </div>
+        {/* Extended vitals (Height / Weight / BMI) temporarily disabled.
+            Restore the block below to re-enable. */}
+        {/*
         {vitalsExtended && (
           <div className="grid grid-cols-3 gap-2 mt-2">
             <div className="relative">
@@ -435,6 +438,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
             </div>
           </div>
         )}
+        */}
       </div>
 
       {/* Clinical Notes — single white card */}
