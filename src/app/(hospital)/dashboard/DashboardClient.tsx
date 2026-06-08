@@ -23,6 +23,7 @@ import {
   Heart,
   Phone,
   UserCog,
+  Instagram,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ROUTE_MODULES } from "@/lib/module-gate"
@@ -40,7 +41,17 @@ const quotes = [
   { text: "A doctor who cannot take a good history and a patient who cannot give one are in danger of giving and receiving bad treatment.", author: "Paul Dudley White" },
 ]
 
-const modules = [
+type DashboardModule = {
+  href: string
+  icon: typeof Users
+  label: string
+  description: string
+  iconBg: string
+  iconColor: string
+  permission?: string
+}
+
+const modules: DashboardModule[] = [
   { href: "/patients", icon: Users, label: "Patients", description: "Register and manage OPD & IPD patient visits, appointments and billing", iconBg: "bg-blue-50", iconColor: "text-blue-500" },
   { href: "/workup", icon: Eye, label: "Refraction", description: "Pre-consultation eye assessment with refraction and clinical findings", iconBg: "bg-sky-50", iconColor: "text-sky-500" },
   { href: "/doctor", icon: Stethoscope, label: "Doctor Console", description: "Diagnosis, prescriptions, vitals recording and follow-up notes", iconBg: "bg-indigo-50", iconColor: "text-indigo-500" },
@@ -57,18 +68,23 @@ const modules = [
   { href: "/license-tracker", icon: ScrollText, label: "Licenses", description: "Track hospital licenses, registrations and renewal dates", iconBg: "bg-indigo-50", iconColor: "text-indigo-600" },
   { href: "/data", icon: DatabaseZap, label: "Data Export", description: "Select, filter and export hospital data in CSV or Excel", iconBg: "bg-cyan-50", iconColor: "text-cyan-700" },
   { href: "/staff", icon: UserCog, label: "Staff", description: "Manage staff members, roles and module-level permissions", iconBg: "bg-purple-50", iconColor: "text-purple-600" },
+  { href: "/social", icon: Instagram, label: "Social", description: "AI-generated Instagram posts: drafts, edits and publishing", iconBg: "bg-pink-50", iconColor: "text-pink-600", permission: "social:view" },
   { href: "/settings", icon: Settings, label: "Configurations", description: "Hospital profile, service templates and user management", iconBg: "bg-slate-100", iconColor: "text-slate-600" },
 ]
 
 interface DashboardClientProps {
   greeting: string
   enabledModules: string[]
+  // null = ADMIN (sees everything). Array = explicit user permissions to honor.
+  permissions: string[] | null
 }
 
-export function DashboardClient({ greeting, enabledModules }: DashboardClientProps) {
+export function DashboardClient({ greeting, enabledModules, permissions }: DashboardClientProps) {
   // Filter the modules grid: keep always-on routes (those not in ROUTE_MODULES like
-  // /dues-followups, /data, /staff, /settings) + gated routes that ARE enabled.
+  // /dues-followups, /data, /staff, /settings) + gated routes that ARE enabled,
+  // and drop any module whose declared permission isn't granted.
   const visibleModules = modules.filter((mod) => {
+    if (mod.permission && permissions !== null && !permissions.includes(mod.permission)) return false
     const moduleCode = ROUTE_MODULES[mod.href]
     if (!moduleCode) return true // always-on
     return enabledModules.includes(moduleCode)

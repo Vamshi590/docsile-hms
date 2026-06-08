@@ -9,8 +9,9 @@ function getGreeting(hour: number) {
 }
 
 export default async function DashboardPage() {
-  await requireAuth()
+  const session = await requireAuth()
   const config = await getAdminConfig()
   const greeting = getGreeting(new Date().getHours())
-  return <DashboardClient greeting={greeting} enabledModules={config.enabledModules} />
+  const permissions = session.role === "ADMIN" ? null : session.permissions
+  return <DashboardClient greeting={greeting} enabledModules={config.enabledModules} permissions={permissions} />
 }
