@@ -10,10 +10,9 @@
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
-export type GeminiMessage = {
-  role: "user" | "model"
-  text: string
-}
+export type GeminiMessage =
+  | { role: "user" | "model"; text: string }
+  | { role: "user"; image: { mimeType: string; data: string /* base64 */ } }
 
 export type GeminiCallOpts = {
   system: string
@@ -37,10 +36,12 @@ export async function callGemini(opts: GeminiCallOpts): Promise<GeminiResult> {
 
   const body = {
     system_instruction: { parts: [{ text: opts.system }] },
-    contents: opts.messages.map(m => ({
-      role: m.role,
-      parts: [{ text: m.text }],
-    })),
+    contents: opts.messages.map(m => {
+      if ("image" in m) {
+        return { role: m.role, parts: [{ inlineData: { mimeType: m.image.mimeType, data: m.image.data } }] }
+      }
+      return { role: m.role, parts: [{ text: m.text }] }
+    }),
     generationConfig: {
       maxOutputTokens: opts.maxOutputTokens ?? 1024,
       temperature: opts.temperature ?? 0.4,
