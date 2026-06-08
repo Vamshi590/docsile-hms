@@ -20,13 +20,13 @@ export function TrustSlide(props: TrustSlideProps): ReactElement {
       fontFamily: "Inter", padding: 64, background: "white", color: p.dark,
     }}>
       <div style={{ fontSize: 24, fontWeight: 700, color: p.primary, display: "flex" }}>
-        {LABELS.trust} · {props.index + 1}/{props.total}
+        {`${LABELS.trust} · ${props.index + 1}/${props.total}`}
       </div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 24 }}>
-        <div style={{ fontSize: 120, fontWeight: 800, color: p.light, lineHeight: 0.8 }}>"</div>
-        <div style={{ fontSize: 44, lineHeight: 1.4, fontWeight: 500 }}>{props.slide.body}</div>
+        <div style={{ fontSize: 120, fontWeight: 800, color: p.light, lineHeight: 0.8, display: "flex" }}>{'"'}</div>
+        <div style={{ fontSize: 44, lineHeight: 1.4, fontWeight: 500, display: "flex", flexWrap: "wrap", width: "100%" }}>{props.slide.body}</div>
         {props.slide.heading && (
-          <div style={{ fontSize: 26, fontWeight: 600, color: p.primary, marginTop: 12 }}>— {props.slide.heading}</div>
+          <div style={{ fontSize: 26, fontWeight: 600, color: p.primary, marginTop: 12, display: "flex" }}>{`— ${props.slide.heading}`}</div>
         )}
       </div>
       <div style={{
