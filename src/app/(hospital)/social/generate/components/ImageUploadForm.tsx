@@ -7,11 +7,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { generateFromImages } from "../actions"
 
+const LANGUAGE_OPTIONS = [
+  "English", "Hindi", "Telugu", "Tamil", "Kannada", "Malayalam",
+  "Marathi", "Gujarati", "Bengali", "Punjabi", "Odia", "Urdu",
+] as const
+
+const LANGUAGE_DEFAULT = "English"
+
 export function ImageUploadForm() {
   const [uploadType, setUploadType] = useState("patient")
   const [files, setFiles] = useState<FileList | null>(null)
   const [text, setText] = useState("")
-  const [language, setLanguage] = useState("")
+  const [language, setLanguage] = useState<string>(LANGUAGE_DEFAULT)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
@@ -50,8 +57,15 @@ export function ImageUploadForm() {
                   placeholder='e.g. "Patient said: the team made me feel at home."' />
       </div>
       <div className="space-y-2">
-        <Label>Language (optional)</Label>
-        <Input value={language} onChange={(e) => setLanguage(e.target.value)} placeholder="English, Telugu, Hindi…" />
+        <Label>Language</Label>
+        <Select value={language} onValueChange={setLanguage}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {LANGUAGE_OPTIONS.map((l) => (
+              <SelectItem key={l} value={l}>{l}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       {error && <div className="text-sm text-red-700">{error}</div>}
       <Button onClick={submit} disabled={pending}>
