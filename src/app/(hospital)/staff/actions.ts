@@ -25,6 +25,7 @@ const StaffSchema = z.object({
   bloodGroup: z.string().optional(),
   salary: z.number().min(0).optional(),
   salaryType: z.string().optional(),
+  avatarUrl: z.string().optional(),
 })
 
 export async function getStaffMembers() {
@@ -33,7 +34,7 @@ export async function getStaffMembers() {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("User")
-    .select("id, email, fullName, phone, role, department, designation, employeeId, qualifications, joiningDate, address, emergencyContact, bloodGroup, salary, salaryType, isActive, lastLogin, createdAt")
+    .select("id, email, fullName, phone, role, department, designation, employeeId, qualifications, joiningDate, address, emergencyContact, bloodGroup, salary, salaryType, avatarUrl, isActive, lastLogin, createdAt")
     .order("fullName", { ascending: true })
   if (error) throw error
   return data
@@ -45,7 +46,7 @@ export async function getStaffMember(id: string) {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("User")
-    .select("id, email, fullName, phone, role, department, designation, employeeId, qualifications, joiningDate, address, emergencyContact, bloodGroup, salary, salaryType, isActive, lastLogin, createdAt")
+    .select("id, email, fullName, phone, role, department, designation, employeeId, qualifications, joiningDate, address, emergencyContact, bloodGroup, salary, salaryType, avatarUrl, isActive, lastLogin, createdAt")
     .eq("id", id)
     .single()
   if (error) return null
@@ -102,6 +103,7 @@ export async function createStaffMember(data: z.infer<typeof StaffSchema>) {
       bloodGroup: validated.data.bloodGroup || null,
       salary: validated.data.salary ?? null,
       salaryType: validated.data.salaryType || null,
+      avatarUrl: validated.data.avatarUrl || null,
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -136,6 +138,7 @@ export async function updateStaffMember(
     if (data.bloodGroup !== undefined) updateData.bloodGroup = data.bloodGroup || null
     if (data.salary !== undefined) updateData.salary = data.salary ?? null
     if (data.salaryType !== undefined) updateData.salaryType = data.salaryType || null
+    if (data.avatarUrl !== undefined) updateData.avatarUrl = data.avatarUrl || null
 
     if (data.password) {
       const hashedPassword = await bcrypt.hash(data.password, 10)
@@ -353,5 +356,33 @@ export async function seedSystemRoles() {
     return { success: true }
   } catch {
     return { success: false, error: "Failed to seed system roles" }
+  }
+}
+
+// ─── Avatar Upload ────────────────────────────────────────────────────────────
+
+export async function uploadStaffAvatar(formData: FormData): Promise<{ success: boolean; url?: string; error?: string }> {
+  await requireAdmin()
+  await requireServerPermission("staff:edit")
+  const file = formData.get("file") as File | null
+  if (!file) return { success: false, error: "No file" }
+  const ALLOWED = ["image/jpeg", "image/png", "image/webp"]
+  if (!ALLOWED.includes(file.type)) return { success: false, error: "Use JPEG/PNG/WebP" }
+  if (file.size > 5 * 1024 * 1024) return { success: false, error: "Max 5MB" }
+
+  const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg"
+  const key = `staff-avatars/${crypto.randomUUID()}.${ext}`
+  const buffer = Buffer.from(await file.arrayBuffer())
+
+  try {
+    const supabase = await createServiceClient()
+    const { error } = await supabase.storage.from("social-posts").upload(key, buffer, {
+      contentType: file.type, upsert: false, cacheControl: "86400",
+    })
+    if (error) return { success: false, error: error.message }
+    const { data } = supabase.storage.from("social-posts").getPublicUrl(key)
+    return { success: true, url: data.publicUrl }
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : "Upload failed" }
   }
 }

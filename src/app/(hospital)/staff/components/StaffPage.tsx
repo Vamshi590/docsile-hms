@@ -42,6 +42,7 @@ import {
   updateRole,
   deleteRole,
   seedSystemRoles,
+  uploadStaffAvatar,
 } from "../actions"
 import { ALL_PERMISSIONS } from "@/lib/permissions"
 import { formatDate, formatCurrency } from "@/lib/utils"
@@ -58,6 +59,7 @@ type StaffMember = {
   designation: string | null
   employeeId: string | null
   qualifications: string | null
+  avatarUrl: string | null
   joiningDate: Date | null
   address: string | null
   emergencyContact: string | null
@@ -167,7 +169,7 @@ export default function StaffPage({
   const [form, setForm] = useState({
     email: "", password: "", fullName: "", phone: "", role: "RECEPTIONIST",
     department: "", designation: "", employeeId: "", qualifications: "",
-    joiningDate: "", address: "", emergencyContact: "", bloodGroup: "", salary: "", salaryType: "",
+    joiningDate: "", address: "", emergencyContact: "", bloodGroup: "", salary: "", salaryType: "", avatarUrl: "",
   })
 
   const [roleForm, setRoleForm] = useState({
@@ -228,7 +230,7 @@ export default function StaffPage({
     setForm({
       email: "", password: "", fullName: "", phone: "", role: "RECEPTIONIST",
       department: "", designation: "", employeeId: "", qualifications: "",
-      joiningDate: "", address: "", emergencyContact: "", bloodGroup: "", salary: "", salaryType: "",
+      joiningDate: "", address: "", emergencyContact: "", bloodGroup: "", salary: "", salaryType: "", avatarUrl: "",
     })
     setShowStaffDialog(true)
   }
@@ -241,7 +243,7 @@ export default function StaffPage({
       employeeId: s.employeeId ?? "", qualifications: s.qualifications ?? "",
       joiningDate: s.joiningDate ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(s.joiningDate)) : "",
       address: s.address ?? "", emergencyContact: s.emergencyContact ?? "", bloodGroup: s.bloodGroup ?? "",
-      salary: s.salary != null ? String(s.salary) : "", salaryType: s.salaryType ?? "",
+      salary: s.salary != null ? String(s.salary) : "", salaryType: s.salaryType ?? "", avatarUrl: s.avatarUrl ?? "",
     })
     setShowStaffDialog(true)
   }
@@ -713,6 +715,36 @@ export default function StaffPage({
             <div className="space-y-2">
               <Label>Employee ID</Label>
               <Input value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} placeholder="e.g. EMP-001" />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Doctor photo (for AI-generated social posts)</Label>
+              <div className="flex items-center gap-3">
+                {form.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.avatarUrl} alt="" className="w-16 h-16 rounded-full object-cover border" />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-zinc-100 border" />
+                )}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const fd = new FormData()
+                    fd.set("file", file)
+                    const r = await uploadStaffAvatar(fd)
+                    if (r.success && r.url) setForm({ ...form, avatarUrl: r.url })
+                    else alert(r.error ?? "Upload failed")
+                  }}
+                  className="text-sm"
+                />
+                {form.avatarUrl && (
+                  <Button type="button" size="sm" variant="ghost"
+                          onClick={() => setForm({ ...form, avatarUrl: "" })}>Remove</Button>
+                )}
+              </div>
+              <div className="text-xs text-zinc-500">Optional. Used for doctor-spotlight posts in the Social module. JPEG/PNG/WebP, max 5MB.</div>
             </div>
             <div className="space-y-2">
               <Label>Qualifications</Label>
