@@ -2,7 +2,7 @@ import type { ElementType } from "react"
 import {
   Users, Eye, Stethoscope, BedDouble, Shield, ClipboardList,
   FlaskConical, FileBarChart, Wallet, Pill, Glasses, ScrollText,
-  DatabaseZap, BarChart3, UserCog, LayoutDashboard, Phone,
+  DatabaseZap, BarChart3, UserCog, LayoutDashboard, Phone, Instagram,
 } from "lucide-react"
 
 export type NavItem = {
@@ -60,6 +60,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/data", icon: DatabaseZap, label: "Data Export", permission: "data:export" },
       { href: "/license-tracker", icon: ScrollText, label: "Licenses", moduleCode: "license-tracker", permission: "licenses:view" },
       { href: "/staff", icon: UserCog, label: "Staff", permission: "staff:view" },
+    ],
+  },
+  {
+    label: "Marketing",
+    items: [
+      { href: "/social", icon: Instagram, label: "Social", moduleCode: "social", permission: "social:view" },
     ],
   },
 ]
