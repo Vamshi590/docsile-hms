@@ -22,6 +22,7 @@ export function buildAiPrompt(
   hospital: HospitalInput,
   doctors: DoctorInput[],
   forcedType?: PostType,
+  userContext?: string,
 ): string {
   const tone = hospital.tone ?? "friendly"
   const depts = hospital.departments.length ? hospital.departments.join(", ") : "general medicine"
@@ -33,12 +34,18 @@ export function buildAiPrompt(
     ? `  "post_type": MUST be exactly "${forcedType}",`
     : `  "post_type": one of ${VALID_TYPES.map((t) => `"${t}"`).join(" | ")},`
 
+  const contextLine = userContext?.trim()
+    ? `Additional context from the user — base the post on this:\n"${userContext.trim()}"`
+    : ``
+
   return [
     `You are a social media manager for a ${tone} hospital named "${hospital.name}" located in ${hospital.address ?? "India"}.`,
     `Available departments: ${depts}.`,
     `Doctors on staff:`,
     doctorLines,
     ``,
+    contextLine,
+    contextLine ? `` : ``,
     `Generate exactly one Instagram post.`,
     forcedType
       ? `The post MUST be of type "${forcedType}". Do not choose a different type.`
@@ -101,6 +108,7 @@ export function parseAiResponse(raw: string): GeneratedContent {
 type Opts = {
   callGemini?: typeof defaultCallGemini
   forcedType?: PostType
+  userContext?: string
 }
 
 export async function generateAiContent(
@@ -109,7 +117,7 @@ export async function generateAiContent(
   opts: Opts = {},
 ): Promise<GeneratedContent> {
   const callGemini = opts.callGemini ?? defaultCallGemini
-  const system = buildAiPrompt(hospital, doctors, opts.forcedType)
+  const system = buildAiPrompt(hospital, doctors, opts.forcedType, opts.userContext)
   const result = await callGemini({
     system,
     messages: [{ role: "user", text: "Generate the post now." }],

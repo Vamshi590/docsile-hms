@@ -39,7 +39,7 @@ async function loadHospitalAndDoctors(supabase: Awaited<ReturnType<typeof create
 const VALID_FORCED_TYPES = ["doctor", "educational", "promo", "engagement", "trust"] as const
 type ForcedType = typeof VALID_FORCED_TYPES[number]
 
-export async function generateAi(input?: { postType?: string }): Promise<void> {
+export async function generateAi(input?: { postType?: string; context?: string }): Promise<void> {
   const user = await requireServerPermission("social:generate")
   const supabase = await createClient()
   const { hospital, doctors } = await loadHospitalAndDoctors(supabase)
@@ -53,10 +53,13 @@ export async function generateAi(input?: { postType?: string }): Promise<void> {
     throw new Error("Cannot generate a doctor post — no doctors with role=DOCTOR exist yet.")
   }
 
+  // Cap context to keep prompt size sane and protect against pasted-novel input.
+  const userContext = input?.context?.trim().slice(0, 600) || undefined
+
   const content = await generateAiContent(
     { name: hospital.name, address: hospital.address, tone: hospital.tone, departments: hospital.departments },
     doctors.map((d) => ({ id: d.id, fullName: d.fullName, qualifications: d.qualifications, department: d.department })),
-    { forcedType },
+    { forcedType, userContext },
   )
 
   let doctor = null
