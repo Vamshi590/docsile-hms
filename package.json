@@ -15,6 +15,7 @@
     "migrate:fix-inpatient-rx": "tsx --env-file=.env scripts/migrate-from-legacy/fix-inpatient-prescriptions.ts",
     "migrate:fix-inpatient-med-vals": "tsx --env-file=.env scripts/migrate-from-legacy/fix-inpatient-medical-values.ts",
     "migrate:fix-template-meds": "tsx --env-file=.env scripts/migrate-from-legacy/fix-template-medicines.ts",
+    "migrate:social-admin": "tsx --env-file=.env scripts/migrate-social-admin-perms.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui"
