@@ -522,8 +522,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
             {medicines.map((med, index) => (
               <div
                 key={med.id}
-                className="grid gap-2 items-center"
-                style={{ gridTemplateColumns: "20px 2fr 1fr 1fr 2fr 28px" }}
+                className="rounded-lg border border-border/40 p-2 sm:p-0 sm:border-0 sm:rounded-none grid gap-2 items-center grid-cols-[20px_1fr_28px] sm:grid-cols-[20px_2fr_1fr_1fr_2fr_28px]"
               >
                 <span className="text-[11px] font-mono text-muted-foreground/70 tabular-nums text-right">{index + 1}</span>
                 <EditableCombobox
@@ -532,31 +531,34 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
                   onValueChange={v => updateMedicine(med.id, "name", v)}
                   placeholder="Medicine name"
                 />
-                <EditableCombobox
-                  options={MEDICINE_DAYS}
-                  value={med.days}
-                  onValueChange={v => updateMedicine(med.id, "days", v)}
-                  placeholder="Days"
-                />
-                <EditableCombobox
-                  options={MEDICINE_TIMINGS}
-                  value={med.timing}
-                  onValueChange={v => updateMedicine(med.id, "timing", v)}
-                  placeholder="Timing"
-                />
-                <Input
-                  value={med.note}
-                  onChange={e => updateMedicine(med.id, "note", e.target.value)}
-                  placeholder="Note (optional)"
-                />
                 <Button
                   variant="ghost"
                   size="icon-sm"
                   onClick={() => removeMedicine(med.id)}
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 sm:col-start-6"
                 >
                   <X className="h-3.5 w-3.5" />
                 </Button>
+                <div className="col-span-3 grid grid-cols-2 gap-2 sm:contents">
+                  <EditableCombobox
+                    options={MEDICINE_DAYS}
+                    value={med.days}
+                    onValueChange={v => updateMedicine(med.id, "days", v)}
+                    placeholder="Days"
+                  />
+                  <EditableCombobox
+                    options={MEDICINE_TIMINGS}
+                    value={med.timing}
+                    onValueChange={v => updateMedicine(med.id, "timing", v)}
+                    placeholder="Timing"
+                  />
+                  <Input
+                    value={med.note}
+                    onChange={e => updateMedicine(med.id, "note", e.target.value)}
+                    placeholder="Note (optional)"
+                    className="col-span-2 sm:col-auto"
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -579,7 +581,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
         {investigations.length === 0 ? (
           <p className="px-4 py-4 text-xs text-muted-foreground italic">No investigations added.</p>
         ) : (
-          <div className="px-4 py-3 grid grid-cols-2 gap-2">
+          <div className="px-4 py-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
             {investigations.map((inv, index) => (
               <div key={inv.id} className="flex items-center gap-1.5">
                 <span className="text-[11px] font-mono text-muted-foreground/70 tabular-nums w-4 text-right">{index + 1}</span>
@@ -607,7 +609,7 @@ function PrescriptionForm({ patientId, patientName, existingPrescription, refere
       </div>
 
       {/* Follow-up & Notes — compact card */}
-      <div className="rounded-xl border border-border/60 bg-white p-4 grid grid-cols-2 gap-3">
+      <div className="rounded-xl border border-border/60 bg-white p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="text-[11px] font-medium text-muted-foreground">Follow-up</Label>
           <div className="flex items-center gap-2">

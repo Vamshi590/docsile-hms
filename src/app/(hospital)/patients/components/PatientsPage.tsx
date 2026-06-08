@@ -250,37 +250,82 @@ export function PatientsPage({
             </button>
           </BreadcrumbHeader>
         ) : (
-          <div className="grid grid-cols-3 items-center bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="min-w-0">
-                <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Patients</h1>
-                <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Registration & management</p>
+          <div className="flex flex-col md:grid md:grid-cols-3 md:items-center gap-2 md:gap-0 bg-white/80 backdrop-blur-md border-b border-border/60 pl-12 md:pl-6 pr-3 md:pr-6 py-2.5 md:py-4 -mx-3 md:-mx-6 -mt-3 md:-mt-6 sticky top-0 z-20">
+            {/* Title row */}
+            <div className="flex items-center justify-between md:justify-start gap-2.5 min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="min-w-0">
+                  <h1 className="text-base md:text-lg font-semibold text-foreground tracking-tight leading-tight md:leading-none truncate">Patients</h1>
+                  <p className="hidden md:block text-[13px] text-muted-foreground mt-1.5 leading-none">Registration & management</p>
+                </div>
+                <button
+                  onClick={loadPatients}
+                  className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                </button>
               </div>
-              <button
-                onClick={loadPatients}
-                className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                title="Refresh"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-              </button>
+              {/* Compact icon-only actions on mobile (3 buttons on the right) */}
+              <div className="flex items-center gap-1.5 md:hidden shrink-0">
+                <button
+                  onClick={() => setShowStats(true)}
+                  title="Stats"
+                  aria-label="Stats"
+                  className="h-9 w-9 flex items-center justify-center rounded-lg border border-border/60 bg-white hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <BarChart2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setChatOpen(o => !o)}
+                  title={chatOpen ? "Hide Sitha" : "Ask Sitha AI"}
+                  aria-label="Sitha AI"
+                  className={cn(
+                    "h-9 w-9 flex items-center justify-center rounded-lg border transition-colors",
+                    chatOpen
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+                  )}
+                >
+                  <Sparkles className="h-4 w-4" />
+                </button>
+                {can(tab === "IPD" ? "inpatients:create" : "patients:create") && (
+                  <Button
+                    onClick={handleAddPatientClick}
+                    disabled={addLoading || ipdAddLoading}
+                    size="icon-sm"
+                    className="h-9 w-9"
+                    aria-label="Add Patient"
+                    title="Add Patient"
+                  >
+                    {(addLoading || ipdAddLoading) ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
-            <div className="flex justify-center">
-              <TabsList className="bg-muted/50 border border-border/40">
+            {/* Tabs */}
+            <div className="flex md:justify-center">
+              <TabsList className="bg-muted/50 border border-border/40 w-full md:w-auto">
                 <TabsTrigger
                   value="OPD"
-                  className="text-sm px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
+                  className="flex-1 md:flex-none text-xs md:text-sm px-2 md:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
                 >
                   Out-Patients
                 </TabsTrigger>
                 <TabsTrigger
                   value="IPD"
-                  className="text-sm px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
+                  className="flex-1 md:flex-none text-xs md:text-sm px-2 md:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
                 >
                   In-Patients
                 </TabsTrigger>
               </TabsList>
             </div>
-            <div className="flex items-center justify-end gap-2.5">
+            {/* Desktop actions */}
+            <div className="hidden md:flex items-center justify-end gap-2.5">
               <button
                 onClick={() => setShowStats(true)}
                 className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-border/60 bg-white hover:bg-muted/40 transition-colors text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -323,33 +368,46 @@ export function PatientsPage({
         {/* Date nav + Search — only shown in OPD list view */}
         {!selectedPatient && !selectedInpatient && tab === "OPD" && (
           <FilterBar>
-            <div className="flex items-center gap-3">
-              <DateNavigator
-                date={selectedDate}
-                onDateChange={setSelectedDate}
-                onPrev={prevDay}
-                onNext={nextDay}
-                onToday={() => setSelectedDate(todayISO())}
-                isToday={selectedDate === todayISO()}
-              />
-              <div className="filter-divider" />
+            <div className="flex w-full md:w-auto md:flex-1 flex-col md:flex-row md:items-center gap-2 md:gap-3 min-w-0">
+              {/* Date + Settings on one row on mobile (settings always reachable) */}
+              <div className="flex items-center justify-between md:justify-start gap-2 md:gap-3">
+                <DateNavigator
+                  date={selectedDate}
+                  onDateChange={setSelectedDate}
+                  onPrev={prevDay}
+                  onNext={nextDay}
+                  onToday={() => setSelectedDate(todayISO())}
+                  isToday={selectedDate === todayISO()}
+                />
+                <div className="filter-divider hidden md:block" />
+                <button
+                  onClick={() => router.push("/settings")}
+                  title="Configurations"
+                  aria-label="Open configurations"
+                  className="md:hidden h-9 w-9 flex items-center justify-center rounded-lg border border-border/60 bg-white hover:bg-muted/40 hover:text-foreground transition-colors text-muted-foreground shrink-0"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              </div>
               <SearchInput
                 value={search}
                 onChange={setSearch}
                 onSubmit={loadPatients}
                 placeholder="Search by ID, name, phone..."
-                className="w-64"
+                className="w-full md:w-64"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <ExistingPatientSearch
-                onSelect={(patient: SearchResult) => setExistingPatientId(patient.patientId)}
-              />
+            <div className="flex items-center gap-2 w-full md:w-auto md:shrink-0">
+              <div className="flex-1 md:flex-none">
+                <ExistingPatientSearch
+                  onSelect={(patient: SearchResult) => setExistingPatientId(patient.patientId)}
+                />
+              </div>
               <button
                 onClick={() => router.push("/settings")}
                 title="Configurations"
                 aria-label="Open configurations"
-                className="h-9 w-9 flex items-center justify-center rounded-lg border border-border/60 bg-white hover:bg-muted/40 hover:text-foreground transition-colors text-muted-foreground"
+                className="hidden md:flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-white hover:bg-muted/40 hover:text-foreground transition-colors text-muted-foreground"
               >
                 <Settings className="h-4 w-4" />
               </button>

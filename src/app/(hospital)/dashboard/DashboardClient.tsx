@@ -102,16 +102,16 @@ export function DashboardClient({ greeting, enabledModules }: DashboardClientPro
       {/* Greeting + Quote Banner */}
       <div
         className={cn(
-          "relative overflow-hidden rounded-2xl bg-linear-to-br from-primary/5 via-primary/3 to-transparent border border-primary/10 px-8 py-7 mb-8 transition-all duration-700",
+          "relative overflow-hidden rounded-2xl bg-linear-to-br from-primary/5 via-primary/3 to-transparent border border-primary/10 px-4 sm:px-8 py-5 sm:py-7 mt-8 md:mt-0 mb-5 sm:mb-8 transition-all duration-700",
           mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
         )}
       >
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-8">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
               {greeting}
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
               Here&apos;s your hospital overview for today
             </p>
           </div>

@@ -320,9 +320,9 @@ export function GridCombobox({
         className="w-full h-9 px-3 text-sm font-semibold border border-input rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 placeholder:font-normal placeholder:text-muted-foreground disabled:opacity-50"
       />
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full min-w-40 rounded-md border border-border bg-white shadow-lg">
+        <div className="absolute z-50 mt-1 min-w-full w-max max-w-[calc(100vw-1.5rem)] rounded-md border border-border bg-white shadow-lg">
           <div ref={listRef} className="p-2 max-h-64 overflow-y-auto">
-            <div className="grid grid-cols-3 gap-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
               {filtered.map((option, idx) => (
                 <div
                   key={option}

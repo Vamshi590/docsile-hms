@@ -75,7 +75,7 @@ export function ExistingPatientSearch({ onSelect }: Props) {
           value={query}
           onChange={e => setQuery(e.target.value)}
           onFocus={() => results.length > 0 && setShowDropdown(true)}
-          className="pl-9 pr-8 text-sm bg-white w-64"
+          className="pl-9 pr-8 text-sm bg-white w-full sm:w-64"
         />
         {loading && (
           <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />

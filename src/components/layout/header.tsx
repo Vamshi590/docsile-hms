@@ -29,24 +29,24 @@ export function PageHeader({ title, description, children, className, onRefresh 
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4",
+        "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4",
         "bg-white/80 backdrop-blur-md border-b border-border/60",
-        "px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20",
+        "pl-12 md:pl-6 pr-3 sm:pr-6 py-2.5 sm:py-4 -mx-3 sm:-mx-6 -mt-3 sm:-mt-6 sticky top-0 z-20",
         className
       )}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">{title}</h1>
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-lg font-semibold text-foreground tracking-tight leading-tight sm:leading-none truncate">{title}</h1>
           {description && (
-            <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">{description}</p>
+            <p className="hidden sm:block text-[13px] text-muted-foreground mt-1.5 leading-none">{description}</p>
           )}
         </div>
         {onRefresh && (
           <button
             onClick={handleRefresh}
             disabled={spinning}
-            className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
+            className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50 shrink-0"
             title="Refresh"
           >
             <svg className={cn("h-3.5 w-3.5", spinning && "animate-spin")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -56,7 +56,7 @@ export function PageHeader({ title, description, children, className, onRefresh 
         )}
       </div>
       {children && (
-        <div className="flex items-center gap-2.5 shrink-0">{children}</div>
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap sm:flex-nowrap sm:shrink-0 [&>*]:min-w-0">{children}</div>
       )}
     </div>
   )
@@ -77,13 +77,13 @@ export function BreadcrumbHeader({ onBack, backLabel, currentLabel, subtitle, ch
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4",
+        "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4",
         "bg-white/80 backdrop-blur-md border-b border-border/60",
-        "px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20",
+        "pl-12 md:pl-6 pr-3 sm:pr-6 py-2.5 sm:py-4 -mx-3 sm:-mx-6 -mt-3 sm:-mt-6 sticky top-0 z-20",
         className
       )}
     >
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1 min-w-0 text-sm">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1 min-w-0 text-xs sm:text-sm overflow-x-auto">
         <button
           onClick={() => router.push("/dashboard")}
           className="flex items-center gap-1.5 px-1.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
@@ -109,7 +109,7 @@ export function BreadcrumbHeader({ onBack, backLabel, currentLabel, subtitle, ch
         </div>
       </nav>
       {children && (
-        <div className="flex items-center gap-2.5 shrink-0">{children}</div>
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap sm:flex-nowrap sm:shrink-0 [&>*]:min-w-0">{children}</div>
       )}
     </div>
   )
@@ -124,9 +124,9 @@ export function FilterBar({ children, className }: FilterBarProps) {
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3",
+        "flex items-center justify-between gap-2 sm:gap-3 flex-wrap sm:flex-nowrap",
         "bg-white/60 backdrop-blur-sm border-b border-border/40",
-        "px-6 py-2.5 -mx-6 mb-5 sticky top-16 z-10",
+        "px-3 sm:px-6 py-2 sm:py-2.5 -mx-3 sm:-mx-6 mb-3 sm:mb-5 sm:sticky sm:top-16 z-10",
         className
       )}
     >

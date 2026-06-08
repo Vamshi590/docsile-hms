@@ -276,34 +276,37 @@ export function DoctorPage({
           currentLabel={`${selectedRow.firstName} ${selectedRow.lastName ?? ""}`.trim()}
         />
       ) : (
-        <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
+        <div className="flex items-center justify-between gap-2 md:gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 pl-12 md:pl-6 pr-3 md:pr-6 py-2.5 md:py-4 -mx-3 md:-mx-6 -mt-3 md:-mt-6 sticky top-0 z-20">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Doctor Console</h1>
-              <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Patient queue & consultation</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-base md:text-lg font-semibold text-foreground tracking-tight leading-tight md:leading-none truncate">Doctor Console</h1>
+              <p className="hidden md:block text-[13px] text-muted-foreground mt-1.5 leading-none">Patient queue & consultation</p>
             </div>
             <button
               onClick={loadQueue}
-              className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
               title="Refresh"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             </button>
           </div>
-          <div className="flex items-center gap-2.5">
-            <StatBadge value={queue.length} label="in queue" variant="info" />
+          <div className="flex items-center gap-2 md:gap-2.5 shrink-0">
+            <div className="hidden md:block">
+              <StatBadge value={queue.length} label="in queue" variant="info" />
+            </div>
             <button
               onClick={() => setChatOpen(o => !o)}
               title={chatOpen ? "Hide Sitha" : "Ask Sitha AI"}
+              aria-label="Sitha AI"
               className={cn(
-                "h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium transition-colors",
+                "h-9 inline-flex items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition-colors w-9 md:w-auto md:px-3",
                 chatOpen
                   ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
                   : "bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
               )}
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              {chatOpen ? "Hide Sitha" : "Ask Sitha"}
+              <Sparkles className="h-4 w-4 md:h-3.5 md:w-3.5" />
+              <span className="hidden md:inline">{chatOpen ? "Hide Sitha" : "Ask Sitha"}</span>
             </button>
           </div>
         </div>
@@ -312,7 +315,7 @@ export function DoctorPage({
       {/* ── Date nav + Search — hidden when patient open ── */}
       {!selectedRow && (
         <FilterBar>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 w-full md:w-auto md:flex-1 min-w-0">
             <DateNavigator
               date={date}
               onDateChange={setDate}
@@ -321,16 +324,16 @@ export function DoctorPage({
               onToday={() => setDate(todayISO())}
               isToday={date === todayISO()}
             />
-            <div className="filter-divider" />
+            <div className="filter-divider hidden md:block" />
             <SearchInput
               value={search}
               onChange={setSearch}
               placeholder="Search by name, ID, phone..."
-              className="w-64"
+              className="w-full md:w-64"
             />
           </div>
           {/* Column customizer + settings */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0 self-end md:self-auto">
           <Popover>
             <PopoverTrigger asChild>
               <button className="h-8 px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
@@ -427,12 +430,12 @@ export function DoctorPage({
                   : "workup"
 
               return (
-            <div className="flex gap-4">
+            <div className="flex flex-col lg:flex-row gap-4">
               {/* ── Left: Prescription Form Card ── */}
               <div className="flex-1 min-w-0 bg-white rounded-2xl border border-border">
                 <Tabs defaultValue={defaultTab}>
                   {/* Tab header */}
-                  <div className="px-6 pt-4 pb-0 border-b border-border flex justify-between items-center">
+                  <div className="px-3 sm:px-6 pt-4 pb-0 border-b border-border flex flex-wrap gap-y-2 justify-between items-center">
                     <TabsList className="bg-transparent h-auto p-0 rounded-none gap-1 -mb-px">
                       {workupEnabled && (
                         <TabsTrigger value="workup" className={TAB_CLASS}>Workup Data</TabsTrigger>
@@ -482,7 +485,7 @@ export function DoctorPage({
                   )}
 
                   {/* ── Prescription tab ── */}
-                  <TabsContent value="prescription" className="px-6 py-5 mt-0">
+                  <TabsContent value="prescription" className="px-3 sm:px-6 py-4 sm:py-5 mt-0">
                     <PrescriptionForm
                       ref={prescriptionRef}
                       patientId={selectedPatient.patientId}
@@ -498,7 +501,7 @@ export function DoctorPage({
               </div>
 
               {/* ── Right: History + Ask Sitha AI ── */}
-              <div className="w-80 shrink-0 sticky top-4 self-start space-y-3 max-h-[calc(100vh-6rem)] overflow-y-auto pr-0.5">
+              <div className="w-full lg:w-80 lg:shrink-0 lg:sticky lg:top-4 lg:self-start space-y-3 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-0.5">
                 {/* History card */}
                 <div className="bg-white rounded-2xl border border-border overflow-hidden">
                   <div className="px-4 pt-4 pb-2 border-b border-border">
@@ -535,7 +538,7 @@ export function DoctorPage({
         </div>
       ) : (
         /* ── Queue table (with optional Ask Sitha column) ── */
-        <div className={cn(chatOpen && "flex gap-4 items-start")}>
+        <div className={cn(chatOpen && "flex flex-col lg:flex-row gap-4 lg:items-start")}>
         <div className={cn(chatOpen && "flex-1 min-w-0")}>
         {loading ? (
           <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
@@ -879,7 +882,7 @@ export function DoctorPage({
         )}
         </div>
         {chatOpen && (
-          <div className="w-80 shrink-0 sticky top-4 self-start max-h-[calc(100vh-6rem)] overflow-y-auto pr-0.5">
+          <div className="w-full lg:w-80 lg:shrink-0 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-0.5">
             <AskSithaAI patientId={null} module="doctor" />
           </div>
         )}

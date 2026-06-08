@@ -86,21 +86,21 @@ export function WorkupPage({
           currentLabel={`${selected.firstName} ${selected.lastName ?? ""}`.trim()}
         />
       ) : (
-        <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 px-6 py-4 -mx-6 -mt-6 sticky top-0 z-20">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4 bg-white/80 backdrop-blur-md border-b border-border/60 pl-12 md:pl-6 pr-3 md:pr-6 py-2.5 md:py-4 -mx-3 md:-mx-6 -mt-3 md:-mt-6 sticky top-0 z-20">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold text-foreground tracking-tight leading-none">Refraction</h1>
-              <p className="text-[13px] text-muted-foreground mt-1.5 leading-none">Pre-consultation assessment</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-base md:text-lg font-semibold text-foreground tracking-tight leading-tight md:leading-none truncate">Refraction</h1>
+              <p className="hidden md:block text-[13px] text-muted-foreground mt-1.5 leading-none">Pre-consultation assessment</p>
             </div>
             <button
               onClick={loadQueue}
-              className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
               title="Refresh"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2">
             <StatBadge value={queue.length} label="Total" />
             <StatBadge value={queue.filter(p => ["REGISTERED", "IN_WORKUP"].includes(p.status)).length} label="Optometrist" variant="destructive" />
             <StatBadge value={queue.filter(p => ["WORKUP_DONE", "WITH_DOCTOR"].includes(p.status)).length} label="Doctor" variant="warning" />
@@ -112,7 +112,7 @@ export function WorkupPage({
       {/* Date nav + Search — only shown in list view */}
       {!selected && (
         <FilterBar>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 w-full md:w-auto">
             <DateNavigator
               date={date}
               onDateChange={setDate}
@@ -121,12 +121,12 @@ export function WorkupPage({
               onToday={() => setDate(todayISO())}
               isToday={date === todayISO()}
             />
-            <div className="filter-divider" />
+            <div className="filter-divider hidden md:block" />
             <SearchInput
               value={search}
               onChange={setSearch}
               placeholder="Search by name, ID, phone..."
-              className="w-64"
+              className="w-full md:w-64"
             />
           </div>
         </FilterBar>
@@ -165,8 +165,8 @@ export function WorkupPage({
             />
           </div>
 
-          {/* Right column: Sight Type + Ask Sitha AI */}
-          <div className="w-80 shrink-0 sticky top-4 self-start space-y-3 max-h-[calc(100vh-6rem)] overflow-y-auto pr-0.5">
+          {/* Right column: Sight Type + Ask Sitha AI — hidden on mobile/tablet */}
+          <div className="hidden lg:flex w-80 shrink-0 sticky top-4 self-start flex-col space-y-3 max-h-[calc(100vh-6rem)] overflow-y-auto pr-0.5">
             <SightTypePicker value={sightType} onChange={setSightType} />
             <AskSithaAI patientId={selected.patientId} module="workup" />
           </div>
@@ -174,7 +174,20 @@ export function WorkupPage({
       ) : (
         /* Queue table */
         loading ? (
-          <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
+          <>
+          <div className="sm:hidden space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-border/60 bg-white p-3 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <Skeleton className="h-5 w-16 rounded" />
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-32 mb-2" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            ))}
+          </div>
+          <div className="hidden sm:block rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
@@ -202,6 +215,7 @@ export function WorkupPage({
               </TableBody>
             </Table>
           </div>
+          </>
         ) : filtered.length === 0 ? (
           <div className="rounded-xl border border-border/60 bg-white py-14 px-6 text-center shadow-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -217,7 +231,63 @@ export function WorkupPage({
             </p>
           </div>
         ) : (
-          <div className="rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
+          <>
+          {/* Mobile cards */}
+          <div className="sm:hidden space-y-2">
+            {filtered.map((patient, i) => {
+              const age = patient.age ?? calculateAge(patient.dateOfBirth)
+              const fullName = `${patient.firstName} ${patient.lastName ?? ""}`.trim()
+              const genderShort = patient.gender === "MALE" ? "M" : patient.gender === "FEMALE" ? "F" : "O"
+              const statusConfig: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+                REGISTERED:   { label: "Optometrist",  bg: "bg-red-50",    text: "text-red-700",    dot: "bg-red-500" },
+                IN_WORKUP:    { label: "Optometrist",  bg: "bg-red-50",    text: "text-red-700",    dot: "bg-red-500" },
+                WORKUP_DONE:  { label: "Doctor",       bg: "bg-amber-50",  text: "text-amber-700",  dot: "bg-amber-500" },
+                WITH_DOCTOR:  { label: "Doctor",       bg: "bg-amber-50",  text: "text-amber-700",  dot: "bg-amber-500" },
+                COMPLETED:    { label: "Completed",    bg: "bg-green-50",  text: "text-green-700",  dot: "bg-green-500" },
+                MEDICAL_ONLY: { label: "Medical Only", bg: "bg-blue-50",   text: "text-blue-700",   dot: "bg-blue-500" },
+              }
+              const sc = statusConfig[patient.status] ?? { label: patient.status, bg: "bg-slate-50", text: "text-slate-600", dot: "bg-slate-400" }
+              return (
+                <button
+                  key={patient.id}
+                  onClick={() => setSelected(patient)}
+                  className="w-full text-left rounded-xl border border-border/60 bg-white p-3 shadow-sm active:bg-primary/[0.03] transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="inline-flex items-center justify-center h-6 min-w-7 rounded bg-primary/10 border border-primary/20 border-dashed text-xs font-bold text-primary tabular-nums px-1.5 shrink-0">
+                        {i + 1}
+                      </span>
+                      <span className="font-mono text-xs font-semibold text-foreground bg-muted/60 px-1.5 py-0.5 rounded shrink-0">
+                        {patient.patientId}
+                      </span>
+                    </div>
+                    <span className={cn(
+                      "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0",
+                      sc.bg, sc.text,
+                    )}>
+                      <span className={cn("h-1.5 w-1.5 rounded-full", sc.dot)} />
+                      {sc.label}
+                    </span>
+                  </div>
+                  <div className="font-semibold text-sm text-foreground truncate">{fullName}</div>
+                  <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                    {age != null && (
+                      <span className="tabular-nums">{age}y · {genderShort}</span>
+                    )}
+                    {patient.phone && <span className="tabular-nums">{patient.phone}</span>}
+                    <span className="ml-auto whitespace-nowrap">{formatDate(patient.appointmentDate)}</span>
+                  </div>
+                </button>
+              )
+            })}
+            <div className="px-1 pt-1 text-xs text-muted-foreground">
+              {filtered.length} patient{filtered.length !== 1 ? "s" : ""} in queue
+            </div>
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden sm:block rounded-xl border border-border/60 bg-white overflow-hidden shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border/60">
@@ -301,6 +371,7 @@ export function WorkupPage({
               </span>
             </div>
           </div>
+          </>
         )
       )}
     </>

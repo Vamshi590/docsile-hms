@@ -98,7 +98,7 @@ function EyeRow4({
   showLabels?: boolean
 }) {
   return (
-    <div className="grid grid-cols-4 gap-2">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
       {EYE_ROW_FIELDS.map(({ key, label, options }) => (
         <div key={key}>
           {showLabels && <p className="text-xs font-medium text-muted-foreground mb-1">{label}</p>}
@@ -245,7 +245,7 @@ function EyeReadingForm({
       <SectionCard title="Auto Refractometer (AR)">
         <div className="mb-4">
           <h4 className="text-sm font-medium text-foreground mb-2">Right Eye :</h4>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {(["sph", "cyl", "axis", "va"] as const).map((f, i) => (
               <div key={f}>
                 <p className="text-xs font-medium text-muted-foreground mb-1">
@@ -267,7 +267,7 @@ function EyeReadingForm({
 
         <div className="mb-4">
           <h4 className="text-sm font-medium text-foreground mb-2">Left Eye :</h4>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {(["sph", "cyl", "axis", "va"] as const).map(f => (
               <GridCombobox
                 key={f}
@@ -355,7 +355,7 @@ function EyeReadingForm({
       }
     }
     return (
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <div>
           {showLabels && <p className="text-xs font-medium text-muted-foreground mb-1">SPH</p>}
           <GridCombobox
