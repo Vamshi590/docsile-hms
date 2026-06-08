@@ -14,7 +14,10 @@
     "migrate:fix-walkin": "tsx --env-file=.env scripts/migrate-from-legacy/fix-walkin-data.ts",
     "migrate:fix-inpatient-rx": "tsx --env-file=.env scripts/migrate-from-legacy/fix-inpatient-prescriptions.ts",
     "migrate:fix-inpatient-med-vals": "tsx --env-file=.env scripts/migrate-from-legacy/fix-inpatient-medical-values.ts",
-    "migrate:fix-template-meds": "tsx --env-file=.env scripts/migrate-from-legacy/fix-template-medicines.ts"
+    "migrate:fix-template-meds": "tsx --env-file=.env scripts/migrate-from-legacy/fix-template-medicines.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -35,6 +38,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.2.15",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@resvg/resvg-js": "^2.6.2",
     "@supabase/supabase-js": "^2.99.1",
     "@tanstack/react-table": "^8.21.3",
     "bcryptjs": "^3.0.3",
@@ -50,6 +54,8 @@
     "react-dom": "19.2.3",
     "react-hook-form": "^7.71.1",
     "recharts": "^3.7.0",
+    "satori": "^0.26.0",
+    "sharp": "^0.34.5",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.1",
     "zod": "^4.3.6",
@@ -61,11 +67,14 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/sharp": "^0.32.0",
+    "@vitest/ui": "^4.1.8",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "pg": "^8.20.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.8"
   }
 }
