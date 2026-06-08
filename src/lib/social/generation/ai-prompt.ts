@@ -56,6 +56,11 @@ export function buildAiPrompt(
     `where Slide = { "heading": string | null, "body": string }.`,
     `For educational: slide 1 = "Did You Know?" title; slides 2-N = numbered points.`,
     `For trust: each slide is a testimonial quote.`,
+    `For engagement: the FIRST LINE of caption MUST be an open-ended question ending in "?"`,
+    `  (e.g. "When was your last eye check-up?"). Keep the question under 90 characters.`,
+    `  After the question, optionally add 1-2 lines of context, then a CTA like "Tell us in the comments".`,
+    `For promo: the FIRST LINE of caption is a short bold headline (≤60 chars), then a blank line,`,
+    `  then 1-2 lines of supporting body copy.`,
   ].filter(Boolean).join("\n")
 }
 
