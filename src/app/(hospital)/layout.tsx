@@ -20,7 +20,9 @@ export default async function HospitalLayout({
     getHospitalProfile(),
   ])
 
-  if (!user) redirect("/login")
+  // Use /api/logout (not /login) so any stale-but-cryptographically-valid JWT
+  // gets cleared. Otherwise middleware sees the cookie and bounces back here.
+  if (!user) redirect("/api/logout")
 
   const h = await headers()
   const pathname =

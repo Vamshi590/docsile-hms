@@ -108,7 +108,11 @@ export async function getSessionFromDB(): Promise<SessionUser | null> {
 export async function requireAuth(): Promise<SessionUser> {
   const session = await getSession()
   if (!session) {
-    redirect("/login")
+    // /api/logout clears the JWT cookie before redirecting to /login. This is
+    // important when the session is null because a role's permissions were
+    // updated after the token was issued — the cookie is still cryptographically
+    // valid, so middleware would otherwise let the user back in and we'd loop.
+    redirect("/api/logout")
   }
   return session
 }
