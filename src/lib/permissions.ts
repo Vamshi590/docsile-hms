@@ -134,6 +134,18 @@ export const ALL_PERMISSIONS = {
       { key: "data:export", label: "Export Data" },
     ],
   },
+  social: {
+    label: "Social Media",
+    permissions: [
+      { key: "social:view",     label: "View Social Posts" },
+      { key: "social:generate", label: "Generate Posts" },
+      { key: "social:edit",     label: "Edit Drafts" },
+      { key: "social:publish",  label: "Publish to Instagram" },
+      { key: "social:delete",   label: "Delete Posts" },
+      { key: "social:connect",  label: "Connect/Disconnect Instagram" },
+      { key: "social:config",   label: "Edit Social Config" },
+    ],
+  },
 } as const
 
 // Flat list of all permission keys
@@ -220,4 +232,5 @@ export const MODULE_ROUTE_MAP: Record<string, string> = {
   data: "/data",
   settings: "/settings",
   staff: "/staff",
+  social: "/social",
 }
