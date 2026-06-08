@@ -18,12 +18,20 @@ type DoctorInput = {
 
 const VALID_TYPES: PostType[] = ["doctor", "educational", "promo", "engagement", "trust"]
 
-export function buildAiPrompt(hospital: HospitalInput, doctors: DoctorInput[]): string {
+export function buildAiPrompt(
+  hospital: HospitalInput,
+  doctors: DoctorInput[],
+  forcedType?: PostType,
+): string {
   const tone = hospital.tone ?? "friendly"
   const depts = hospital.departments.length ? hospital.departments.join(", ") : "general medicine"
   const doctorLines = doctors.length
     ? doctors.map((d) => `- ${d.fullName} (${d.department ?? "—"}, ${d.qualifications ?? "—"})`).join("\n")
     : "(no doctors available — do not generate a doctor post type)"
+
+  const postTypeLine = forcedType
+    ? `  "post_type": MUST be exactly "${forcedType}",`
+    : `  "post_type": one of ${VALID_TYPES.map((t) => `"${t}"`).join(" | ")},`
 
   return [
     `You are a social media manager for a ${tone} hospital named "${hospital.name}" located in ${hospital.address ?? "India"}.`,
@@ -32,10 +40,13 @@ export function buildAiPrompt(hospital: HospitalInput, doctors: DoctorInput[]): 
     doctorLines,
     ``,
     `Generate exactly one Instagram post.`,
+    forcedType
+      ? `The post MUST be of type "${forcedType}". Do not choose a different type.`
+      : ``,
     `Respond as STRICT JSON only (no prose, no markdown fences).`,
     `Schema:`,
     `{`,
-    `  "post_type": one of ${VALID_TYPES.map((t) => `"${t}"`).join(" | ")},`,
+    postTypeLine,
     `  "caption": string (max 2200 chars, the Instagram caption),`,
     `  "hashtags": string[] (5-15 items, no leading #),`,
     `  "image_idea": string (brief description of the visual concept),`,
@@ -45,7 +56,7 @@ export function buildAiPrompt(hospital: HospitalInput, doctors: DoctorInput[]): 
     `where Slide = { "heading": string | null, "body": string }.`,
     `For educational: slide 1 = "Did You Know?" title; slides 2-N = numbered points.`,
     `For trust: each slide is a testimonial quote.`,
-  ].join("\n")
+  ].filter(Boolean).join("\n")
 }
 
 export function parseAiResponse(raw: string): GeneratedContent {
@@ -82,20 +93,29 @@ export function parseAiResponse(raw: string): GeneratedContent {
   }
 }
 
-type Deps = { callGemini: typeof defaultCallGemini }
+type Opts = {
+  callGemini?: typeof defaultCallGemini
+  forcedType?: PostType
+}
 
 export async function generateAiContent(
   hospital: HospitalInput,
   doctors: DoctorInput[],
-  deps: Deps = { callGemini: defaultCallGemini },
+  opts: Opts = {},
 ): Promise<GeneratedContent> {
-  const system = buildAiPrompt(hospital, doctors)
-  const result = await deps.callGemini({
+  const callGemini = opts.callGemini ?? defaultCallGemini
+  const system = buildAiPrompt(hospital, doctors, opts.forcedType)
+  const result = await callGemini({
     system,
     messages: [{ role: "user", text: "Generate the post now." }],
     temperature: 0.9,
     maxOutputTokens: 2048,
   })
   if (!result.ok) throw new GenerationError(`Gemini error: ${result.error}`)
-  return parseAiResponse(result.text)
+  const parsed = parseAiResponse(result.text)
+  // Defense-in-depth: if Gemini ignored the forcedType instruction, override.
+  if (opts.forcedType && parsed.post_type !== opts.forcedType) {
+    parsed.post_type = opts.forcedType
+  }
+  return parsed
 }
