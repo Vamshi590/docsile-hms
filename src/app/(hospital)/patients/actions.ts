@@ -383,7 +383,7 @@ export async function createPrescriptionWithBilling(data: {
   patientId: string
   billing: z.infer<typeof BillingSchema>
 }) {
-  const user = await requireServerPermission("doctor:consult")
+  const user = await requireServerPermission("patients:create")
   const billingValidated = BillingSchema.safeParse(data.billing)
 
   if (!billingValidated.success) {
